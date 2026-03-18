@@ -51,7 +51,7 @@ class SerialReader(threading.Thread):
     def stop(self):
         self.running = False
 
-class MainWindow(QMainWindow):
+class SignalsWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Serial Data Visualizer")
@@ -137,6 +137,6 @@ class MainWindow(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = MainWindow()
+    window = SignalsWindow()
     window.show()
     sys.exit(app.exec())

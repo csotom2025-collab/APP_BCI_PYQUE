@@ -8,7 +8,7 @@ GRID = [
     ["C", "T", "M", "P", "B"],
     ["G", "V", "Y", "Q", "H"],
     ["F", "Z", "J", "Ñ", "X"],
-    ["K ", "W"]
+    ["K ", "W", "ESP", "BORR", "ENTER"]
 ]
 GrindNumbers = [
     ["1", "2", "3"],
@@ -17,9 +17,7 @@ GrindNumbers = [
     ["0"],
 ]
 CONTROLS = ["ESP", "BORR", "ENTER"]
-FLASH_ROUNDS = 1      # cuántas rondas de flash por botón
-FLASH_DURATION = 0.5 # segundos que dura cada flash
-PAUSE_BETWEEN = 0.06  # pausa entre flashes
+
 
 class OutputLine(QWidget):
     def __init__(self, text):
@@ -37,9 +35,13 @@ class OutputLine(QWidget):
         self.label.setText(current + char)
         
 
-class GridButtonWindow(QWidget):
+class KeyboardWindow(QWidget):
     def __init__(self):
         super().__init__()
+        self.setWindowTitle("Grid de botones")
+        self.setup_ui()
+
+    def setup_ui(self):
         self.grid_letters_layout = QGridLayout()
         self.grid_numbers_layout = QGridLayout()
         self.layout = QGridLayout()
@@ -51,7 +53,6 @@ class GridButtonWindow(QWidget):
         self.layout.addLayout(self.grid_letters_layout, 1, 0)
         self.layout.addLayout(self.grid_numbers_layout, 1, 1)
         self.layout.addLayout(self.grid_controls_layout, 2, 0)
-
 
     def show_grid(self):
         # Create 3x3 grid using  loops
@@ -78,12 +79,12 @@ class GridButtonWindow(QWidget):
         self.flash_button(button)
         self.add_character(button.text())
 
-    def flash_button(self, button):
+    def flash_button(self, button, duration=0.5):
         # Guardar el stylesheet original del botón
         original_style = button.styleSheet()
         button.setStyleSheet(f"{original_style} background-color: yellow;")
         # Restaurar completamente el estilo original después del flash
-        QTimer.singleShot(int(FLASH_DURATION * 1000), lambda: button.setStyleSheet(original_style))
+        QTimer.singleShot(int(duration * 1000), lambda: button.setStyleSheet(original_style))
 
     def add_character(self, char):
         if char == "ESP":
@@ -95,6 +96,6 @@ class GridButtonWindow(QWidget):
         self.output_line.add_character(char)
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = GridButtonWindow()
+    window = KeyboardWindow()
     window.show()
     sys.exit(app.exec())

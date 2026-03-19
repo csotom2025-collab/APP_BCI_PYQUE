@@ -1,14 +1,21 @@
 import sys
 from PyQt6.QtWidgets import QApplication, QComboBox, QGridLayout, QLineEdit, QMainWindow, QPushButton, QWidget, QVBoxLayout, QLabel
 
-from InterfasPyQue import SignalsWindow
-from gridWindow import GridButtonWindow
+
 
 
 
 class TrainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+
+        self.setup_ui()
+        self.data = {'user':'pathUser', 'MVP':'pathMVP', 'anodaUser':'pathAnodaUser'}
+        self.show_users()
+        self.models= ['lstm', 'cnn', 'svm', 'random_forest', 'xgboost']
+        self.show_models()
+        
+    def setup_ui(self):
         self.setWindowTitle("Ventana de Entrenamiento")
         layout = QVBoxLayout()
         self.grid_layout = QGridLayout()
@@ -16,14 +23,8 @@ class TrainWindow(QMainWindow):
         self.pathLine = QLineEdit("path")
         self.combo_box_users = QComboBox()
         self.combo_box_users.currentIndexChanged.connect(self.show_path)
-        self.data = {'user':'pathUser', 'MVP':'pathMVP', 'anodaUser':'pathAnodaUser'}
-        self.show_users()
-
 
         self.combo_box_models = QComboBox()
-        self.models= ['lstm', 'cnn', 'svm', 'random_forest', 'xgboost']
-        self.show_models()
-
         self.button_start_training = QPushButton("Iniciar entrenamiento")
         self.button_start_training.clicked.connect(self.start_training)
 
@@ -68,19 +69,15 @@ class TrainWindow(QMainWindow):
         path = self.data.get(user)
         return path
     
-    def start_training(self):
-        # self.window_signals = SignalsWindow()
-        # self.window_signals.show()
-        # self.gridButtonWindow = GridButtonWindow()
-        # self.gridButtonWindow.show()    
+    def start_training(self):    
         user = self.get_user()
         path = self.get_path()
         model = self.get_model()
         print(f"Entrenando modelo {model} con los datos de {user} que se encuentran en la ruta: {path}")
 
 
-# if __name__ == "__main__":
-#     app = QApplication(sys.argv)
-#     window = TrainWindow()
-#     window.show()
-#     sys.exit(app.exec())
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = TrainWindow()
+    window.show()
+    sys.exit(app.exec())

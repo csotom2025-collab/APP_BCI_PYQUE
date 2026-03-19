@@ -20,6 +20,7 @@ class ControllerKeyboardCapture:
                 break
         
     def save_capture(self, user, path, character_type, character):
+        ### Aquí iría la lógica para guardar la captura, llamar a el modulo encargado de guardar 
         print(f"Guardando  para {user} en la ruta: {path} Caracter: {character}, Tipo: {character_type}")
 
     def start_simulation(self):
@@ -29,12 +30,14 @@ class ControllerKeyboardCapture:
         print(lista_simbolos)
         self.flash_idx=0
         self.flash_list = lista_simbolos * FLASH_ROUNDS
-        self._flash_step(FLASH_DURATION)        
+        self._flash_step(FLASH_DURATION)
+                
 
     def _flash_step(self, flash_time):
         if self.flash_idx >= len(self.flash_list):
             return
         target = self.flash_list[self.flash_idx]
         self.flash_character(target, flash_time)
+        ##SAVE_CAPTURE
         self.flash_idx += 1
         QTimer.singleShot(int(PAUSE_BETWEEN * 1000), lambda: self._flash_step(flash_time))

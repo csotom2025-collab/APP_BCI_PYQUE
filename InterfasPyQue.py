@@ -61,10 +61,9 @@ class SignalsWindow(QMainWindow):
         self.df = pd.DataFrame(columns=["Tm","ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8"])
         self.channels = ["ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8"]
         self.serial_thread = None
-
+        self.port = 'COM1'
+        self.baudrate = 230400
         # UI Elements
-        self.port_combo = QComboBox()
-        self.port_combo.addItems([f'COM{i}' for i in range(1, 10)])  # Example ports
         self.start_button = QPushButton("Start")
         self.start_button.clicked.connect(self.start_serial)
         self.stop_button = QPushButton("Stop")
@@ -83,7 +82,11 @@ class SignalsWindow(QMainWindow):
         # Layout
         control_layout = QHBoxLayout()
         control_layout.addWidget(QLabel("Port:"))
-        control_layout.addWidget(self.port_combo)
+        self.label_port = QLabel(self.port)
+        control_layout.addWidget(self.label_port)
+        control_layout.addWidget(QLabel("Baudrate:"))
+        self.label_baudrate = QLabel(str(self.baudrate))
+        control_layout.addWidget(self.label_baudrate)
         control_layout.addWidget(self.start_button)
         control_layout.addWidget(self.stop_button)
 
@@ -101,9 +104,10 @@ class SignalsWindow(QMainWindow):
         self.timer.start(1000)  # Update every second
 
     def start_serial(self):
-        port = self.port_combo.currentText()
-        baudrate = 230400  # Fixed for now
-        self.serial_thread = SerialReader(port, baudrate, self.data_queue)
+        self.port = self.port
+        self.baudrate = self.baudrate
+        print(f"Starting serial on {self.port} at {self.baudrate} baud."   )
+        self.serial_thread = SerialReader(self.port, self.baudrate, self.data_queue)
         ini = 'x'
         self.serial_thread.ser.write(ini.encode('utf-8'))
         self.serial_thread.start()
@@ -130,6 +134,15 @@ class SignalsWindow(QMainWindow):
                 channel = self.channels[idx]
                 plot.clear()
                 plot.plot(df_plot['Tm'].values, df_plot[channel].values, pen='b')
+
+    def update_serial_config(self, port, baudrate):
+        self.port = port
+        self.baudrate = baudrate
+        self.label_port.setText(self.port)
+        self.label_baudrate.setText(str(self.baudrate))
+        if self.serial_thread and self.serial_thread.is_alive():
+            self.stop_serial()
+            self.start_serial()
 
     def closeEvent(self, event):
         self.stop_serial()

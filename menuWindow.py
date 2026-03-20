@@ -1,4 +1,5 @@
-from PyQt6.QtWidgets import QApplication, QMainWindow, QPushButton, QLabel, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox, QPushButton, QLabel, QVBoxLayout, QWidget
+from PyQt6.QtGui import QCloseEvent
 from InterfasPyQue import SignalsWindow
 from KeyboardCaptureController import ControllerKeyboardCapture
 from captureWindow import CaptureWindow
@@ -6,7 +7,6 @@ from serialWindow import SerialWindow
 from gridWindow import KeyboardWindow
 from trainWindow import TrainWindow
 from serialConfigSingnalsController import ControllerSerialConfig
-
 class Menu(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -14,11 +14,10 @@ class Menu(QWidget):
         self.keyboard_window = KeyboardWindow()
         self.train_window = TrainWindow()
         self.capture_window = CaptureWindow()
-        self.controller_serial_config = ControllerSerialConfig(self)
+        self.controller_serial_config = ControllerSerialConfig(self.signals_window)
         self.serial_window = SerialWindow(self.controller_serial_config)
         self.controller_keyboard = ControllerKeyboardCapture(self.keyboard_window)  # Inicializa el controlador sin ventanas por ahora
         self.capture_window.controller_keyboard = self.controller_keyboard
-
         self.port =2222
         self.baudioRate = 9600
 
@@ -30,7 +29,7 @@ class Menu(QWidget):
         self.label = QLabel("Menú Principal")
         button_signals = QPushButton("Visualizar Señales EEG")
         button_signals.clicked.connect(self.open_signals_window)
-        button_grid = QPushButton("Mostrar Grid")
+        button_grid = QPushButton("Mostrar Teclado")
         button_grid.clicked.connect(self.open_grid_window)
         button_train = QPushButton("Entrenamiento")
         button_train.clicked.connect(self.open_train_window)
@@ -40,9 +39,6 @@ class Menu(QWidget):
         button_serial_config.clicked.connect(self.open_config_serial_window)
 
 
-        self.label_port = QLabel(f"Puerto: {self.port}")
-        self.label_baudrate = QLabel(f"Baudrate: {self.baudioRate}")
-
         self.setLayout(self.layout)
         self.layout.addWidget(self.label)
         self.layout.addWidget(button_signals)
@@ -50,11 +46,22 @@ class Menu(QWidget):
         self.layout.addWidget(button_train)
         self.layout.addWidget(button_capture)
         self.layout.addWidget(button_serial_config)
-        self.layout.addWidget(self.label_port)
-        self.layout.addWidget(self.label_baudrate)
-        
-        self.move(0,0)
 
+        
+        self.move(100, 150)
+    def closeEvent(self, event: QCloseEvent):
+        """Handler to confirm close or perform cleanup."""
+        reply = QMessageBox.question(self, 'Message', 
+                                    "Are you sure you want to quit?",
+                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+
+        if reply == QMessageBox.StandardButton.Yes:
+            event.accept()  # Close the window
+        else:
+            event.ignore()  # Keep the window open
+
+    def quit_application(self):
+        QApplication.quit()
     def open_signals_window(self):
         self.signals_window.show()
     def open_grid_window(self):
@@ -65,18 +72,24 @@ class Menu(QWidget):
         self.capture_window.show()
     def open_config_serial_window(self):
         self.serial_window.show()
-    def update_serial_config(self, port, baudrate):
-        self.port = port
-        self.baudioRate = baudrate
-        self.label_port.setText(f"Puerto: {self.port}")
-        self.label_baudrate.setText(f"Baudrate: {self.baudioRate}")
+    
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Menú Principal")
         self.menu = Menu(self)
+
         self.setCentralWidget(self.menu)
+    
+    def closeEvent(self, event: QCloseEvent):
+        """Cierra todas las ventanas secundarias y la aplicación."""
+        #Acepta el evento de cierre de la ventana principal
+        event.accept()
+        QApplication.quit()
+    
+    def close_application(self):
+        self.close()
 
 if __name__ == "__main__":
     app = QApplication([])

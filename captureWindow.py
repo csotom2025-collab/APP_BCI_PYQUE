@@ -17,16 +17,16 @@ NUMBERS = ["1", "2", "3",
 
 CONTROLS = ["ESP", "BORR", "ENTER"]
 class CaptureWindow(QWidget):
-    def __init__(self,ControllerKeyboard=None):
+    def __init__(self,ControllerKeyboard=None,ControllerSaveCapture=None):
         super().__init__()
         self.setWindowTitle("Captura de datos")        
         self.setup_ui()
         self.data = {'user':'pathUser/', 'MVP':'pathMVP', 'anodaUser':'pathAnodaUser'}
         self.show_users()
         self.update_character_options()
-
         self.controller_keyboard = ControllerKeyboard
-        
+        self.controller_save_capture = ControllerSaveCapture
+
     def setup_ui(self):
         self.layout = QGridLayout()
         self.combo_box_users = QComboBox()
@@ -82,13 +82,13 @@ class CaptureWindow(QWidget):
 
     def start_capture(self):
         user = self.combo_box_users.currentText()
-        path = self.path_edit_line.text()
+        #path = self.path_edit_line.text()
         character = self.combo_box_character.currentText()
         character_type = self.combo_box_character_type.currentText()
         self.controller_keyboard.flash_character(character)
 
         ###salvar captura
-        self.controller_keyboard.save_capture(user, path, character_type, character)
+        self.controller_save_capture.start_capture(user,character_type,character)
 
     def start_simulation(self):
         self.controller_keyboard.start_simulation()

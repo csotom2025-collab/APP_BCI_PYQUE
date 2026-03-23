@@ -1,9 +1,10 @@
 from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox, QPushButton, QLabel, QVBoxLayout, QWidget
 from PyQt6.QtGui import QCloseEvent
-from InterfasPyQue import SignalsWindow
+from SaveCaptureController import controllerSaveCapture
+from SerialMonitor import SignalsWindow
 from KeyboardCaptureController import ControllerKeyboardCapture
 from captureWindow import CaptureWindow
-from serialWindow import SerialWindow
+from serialWindow import SerialConfiguration
 from gridWindow import KeyboardWindow
 from trainWindow import TrainWindow
 from serialConfigSingnalsController import ControllerSerialConfig
@@ -13,13 +14,13 @@ class Menu(QWidget):
         self.signals_window = SignalsWindow()
         self.keyboard_window = KeyboardWindow()
         self.train_window = TrainWindow()
-        self.capture_window = CaptureWindow()
         self.controller_serial_config = ControllerSerialConfig(self.signals_window)
-        self.serial_window = SerialWindow(self.controller_serial_config)
+        self.serial_window = SerialConfiguration(self.controller_serial_config)
         self.controller_keyboard = ControllerKeyboardCapture(self.keyboard_window)  # Inicializa el controlador sin ventanas por ahora
-        self.capture_window.controller_keyboard = self.controller_keyboard
-        self.port =2222
-        self.baudioRate = 9600
+        self.controller_save_capture = controllerSaveCapture(self.signals_window)  # Inicializa el controlador de guardado con la ventana de señales
+        self.capture_window = CaptureWindow(self.controller_keyboard, self.controller_save_capture)  # Pasa ambos controladores a la ventana de captura
+        self.capture_window.controller_save_capture = self.controller_save_capture  # Asigna el controlador de
+        
 
         self.setup_ui()
 

@@ -13,7 +13,7 @@ datos.write("Tm,ch1,ch2,ch3,ch4,ch5,ch6,ch7,ch8\n")
 df = pd.DataFrame(columns=["Tm","ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8"])
 
 # Configuración del puerto serial
-ser = serial.Serial('COM3', 230400, timeout=1)
+ser = serial.Serial('COM3', 230400, timeout=1)  # Ajusta el puerto y baudrate según tu configuración
 time.sleep(2)  # Espera a que el puerto se estabilice
 ser.flush()
 # Limpiar buffers de entrada/salida para evitar datos residuales

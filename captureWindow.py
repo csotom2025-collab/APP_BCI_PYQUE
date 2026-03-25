@@ -21,7 +21,7 @@ class CaptureWindow(QWidget):
         super().__init__()
         self.setWindowTitle("Captura de datos")        
         self.setup_ui()
-        self.data = {'user':'pathUser/', 'MVP':'pathMVP', 'anodaUser':'pathAnodaUser'}
+        self.data = [f"User{i}"for i in range(20)]
         self.show_users()
         self.update_character_options()
         self.controller_keyboard = ControllerKeyboard
@@ -45,24 +45,26 @@ class CaptureWindow(QWidget):
 
         self.button_simulation = QPushButton("Iniciar simulación")
         self.button_simulation.clicked.connect(self.start_simulation)
-
+        self.duration_recording_edit_line = QLineEdit()
+        self.duration_recording_edit_line.setText("2")
         self.layout.addWidget(QLabel("Seleccionar usuario:"), 0, 0)
         self.layout.addWidget(self.combo_box_users, 0, 1)
-        self.layout.addWidget(QLabel("Ruta de guardado:"), 1, 0)
-        self.layout.addWidget(self.path_edit_line, 1, 1)
+        # self.layout.addWidget(QLabel("Ruta de guardado:"), 1, 0)
+        # self.layout.addWidget(self.path_edit_line, 1, 1)
         self.layout.addWidget(QLabel("Tipo de caracter:"), 2, 0)
         self.layout.addWidget(self.combo_box_character_type, 2, 1)
         self.layout.addWidget(QLabel("Caracter :"), 3, 0)
         self.layout.addWidget(self.combo_box_character, 3, 1)
-        self.layout.addWidget(self.button_start_capture, 4, 0, 1, 2)
-        self.layout.addWidget(self.button_simulation, 5, 0, 1, 2)
-
+        self.layout.addWidget(QLabel("Duracion grabacion"), 4, 0)
+        self.layout.addWidget(self.duration_recording_edit_line,4,1)
+        self.layout.addWidget(self.button_start_capture, 5, 0, 1, 2)
+        self.layout.addWidget(self.button_simulation, 6, 0, 1, 2)
         self.setLayout(self.layout)
         self.move(300, 350)
 
     def show_users(self):
         self.combo_box_users.clear()
-        self.combo_box_users.addItems(self.data.keys())
+        self.combo_box_users.addItems(self.data)
 
     def update_character_options(self):
         self.combo_box_character.clear()
@@ -76,19 +78,18 @@ class CaptureWindow(QWidget):
 
     def show_path(self):
         user = self.combo_box_users.currentText()
-        path = self.data.get(user, "No path found")
-        print(f"Ruta del usuario seleccionado: {path}")
-        self.path_edit_line.setText(path)
-
+        
+        
     def start_capture(self):
         user = self.combo_box_users.currentText()
         #path = self.path_edit_line.text()
         character = self.combo_box_character.currentText()
         character_type = self.combo_box_character_type.currentText()
-        self.controller_keyboard.flash_character(character)
-
+        #self.controller_keyboard.flash_character(character)
+        duration = self.duration_recording_edit_line.text()
         ###salvar captura
-        self.controller_save_capture.start_capture(user,character_type,character)
+        duration= int(duration)
+        self.controller_save_capture.start_capture(user,character_type,character,duration)
 
     def start_simulation(self):
         self.controller_keyboard.start_simulation()

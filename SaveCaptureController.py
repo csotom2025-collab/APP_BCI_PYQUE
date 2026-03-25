@@ -1,5 +1,6 @@
 import pandas as pd
 import os
+import re
 
 from SerialMonitor import SignalsWindow
 
@@ -24,10 +25,25 @@ class controllerSaveCapture:
         except Exception as e:
             print(f"Error al guardar la captura: {e}")
 
-    def start_capture(self, user, character_type, character):
-        recording_duration = 5 
-        path = 'captures/'  
-        filename = f"{path}/{user}/{user}_{character_type}_{character}.csv"
+    def start_capture(self, user, character_type, character,duration):
+        path = 'captures'
+        path_user= f"{path}/{user}/{character_type}/"
+        filename = f"{user}_{character}_"
+        numero ="0"
+        ext = ".csv"
+
+        full_path=  path_user+filename+ numero + ext
+        print("fulpath: ",full_path)
+        if os.path.exists(full_path):
+            print("YA existe")
+            lita = os.listdir(path_user)
+            ultf=lita[-1]
+            sub=ultf.split('_')
+            lastnum=sub[-1]
+            nuevoNum = str(int(lastnum[0]) + 1)
+            full_path=  path_user+filename+ nuevoNum + ext
+            
+
         print("Iniciando captura...")
-        data = self.serial_monitor.start_recording(recording_duration)
-        self.save_capture(filename,data)
+        data = self.serial_monitor.start_recording(duration)
+        self.save_capture(full_path,data)

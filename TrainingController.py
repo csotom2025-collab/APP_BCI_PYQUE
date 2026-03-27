@@ -46,7 +46,7 @@ class controllerTraining():
         """
         crear 3 datasets por cada clasificacion y uno general
         """
-        directories = os.listdir(path)+
+        directories = os.listdir(path)
         letters_path = path + "/Letters"
         numbers_path =path + "/Numbers"
         controls_path =path + "/Controls"

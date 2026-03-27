@@ -6,10 +6,10 @@ import queue
 import pandas as pd
 import numpy as np
 from PyQt6.QtWidgets import QApplication, QMainWindow, QPushButton, QLabel, QVBoxLayout, QWidget, QHBoxLayout, QComboBox, QCheckBox,QScrollArea
-from PyQt6.QtCore import QTimer,Qt
+from PyQt6.QtCore import QTimer,Qt,QThread,pyqtSignal
 import pyqtgraph as pg
 from testDataReader import CSVReader  # Import for test mode
-
+from collections import deque
 class SerialReader(threading.Thread):
     def __init__(self, port, baudrate, data_queue,sixteen_mode):
         super().__init__()
@@ -44,7 +44,7 @@ class SerialReader(threading.Thread):
                     values = line.split(",")
                     if len(values) == (9 if not self.sixteen_mode else 17):
                         self.data_queue.put(values)
-                    #print(f"Received: {line}")
+                    print(f"Received: {line}")
                     
         except Exception as e:
             print(f"Serial error: {e}")
@@ -52,10 +52,96 @@ class SerialReader(threading.Thread):
             if self.ser:
                 self.ser.close()
 
+
+                
+
     def stop(self):
         self.ser.write(b's')
         self.running = False
 
+class RecordingThread(QThread):
+    def __init__(self,data_buffer,buffer_lock):
+        super().__init__()
+        self.data_buffer=data_buffer
+        self.buffer_lock=buffer_lock
+        self.running=False
+        self.recording=False
+        self.recording_df=None
+        self.daemon=True
+        self.finished_record = pyqtSignal(list)
+
+    def start_recording(self,columns_df,duration):
+        self.columns_df=columns_df
+        self.duration=duration
+        self.recording=True
+        self.start_time = time.time()
+        self.recording_df=pd.DataFrame(columns=columns_df)
+        print("Empezando grabacion hilo recording columnas",columns_df)
+        self.start()
+
+    def stop_recording(self):
+        self.recording=False
+        self.running=False
+        
+    def run(self):
+        self.running=True
+        print(self.running)
+
+        while self.running:
+
+            if time.time() - self.start_time >= self.duration:
+                self.stop_recording()
+                break
+            if self.recording:
+                with self.buffer_lock:
+                    if len(self.data_buffer)>0:
+                        last_data = self.data_buffer[-1]
+                        try:
+                            row = [float(v.strip()) if isinstance(v,str) else float(v) for v in last_data]
+                            if len(row) == len(self.columns_df) :
+                                self.recording_df.loc[len(self.recording_df)] = row
+                        except (ValueError,TypeError):
+                            pass
+            time.sleep(.01)
+    def stop(self):
+        self.running=False
+class PlottingThread(QThread):
+    def __init__(self,data_buffer,buffer_lock,plots ,channels):
+        super().__init__()
+        self.data_buffer=data_buffer
+        self.buffer_lock =  buffer_lock
+        self.plots=plots
+        self.channels=channels    
+        self.running=False
+        self.daemon=True
+        self.treshold_red = -40000
+        self.treshold_blue=40000
+        self.treshold=0
+        
+    def run(self):
+        self.running=True
+        while self.running :
+            try:
+                with self.buffer_lock:
+                    if len(self.data_buffer)>0:
+                        buffer_copy = list(self.data_buffer)
+
+
+                if len(buffer_copy) >0:
+                    data_tuples = buffer_copy
+                    times = [float (d[0]) for d in data_tuples if d]
+                    for idx,plot in enumerate(self.plots):
+                        plot.clear()
+                        values = [float(d[idx+1]) if d[idx+1].strip() else np.nan for d in data_tuples if d]
+                        if len(times) > 0 and len(values) >0:
+                            colores = ['b' if i > self.treshold else 'r' for i in values ]
+                            plot.plot(times,values,pen='r')
+            except Exception as e:
+                pass
+                print(f"Error plottinh thread {e}")
+            time.sleep(1.55)
+    def stop(self):
+        self.running=False
 class SignalsWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -68,13 +154,18 @@ class SignalsWindow(QMainWindow):
         self.sixteen_channels = ["ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8","ch9","ch10","ch11","ch12","ch13","ch14","ch15","ch16"]
         self.df_sixteen= pd.DataFrame(columns=["Tm","ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8","ch9","ch10","ch11","ch12","ch13","ch14","ch15","ch16"])
         self.serial_thread = None
-        self.port = 'COM5'
+        self.port = 'COM6'
         self.baudrate = 112500
-        self.test_mode = True  # Flag for test mode
+        self.test_mode = False  # Flag for test mode
         self.sixteen_channels_mode=True
         self.channels = self.sixteen_channels if self.sixteen_channels_mode else self.eight_channels
         self.df = self.df_sixteen if self.sixteen_channels_mode else self.df_eight
         self.setup_ui()
+        self.data_buffer =deque(maxlen=500)
+        self.buffer_lock = threading.Lock()
+        self.recording_thread = RecordingThread(self.data_buffer,self.buffer_lock)
+        #self.recording_thread.finished_record.connect(self.on_recording_finished)
+        self.plotting_thread = None
 
     def setup_ui(self):
         # UI Elements
@@ -98,7 +189,7 @@ class SignalsWindow(QMainWindow):
             plot.setLabel('left', 'Amplitud')
             plot.setLabel('bottom', 'Tiempo')
             self.plots.append(plot)
-        self.plot_widget.setFixedHeight(2500 if not self.sixteen_channels_mode else 3200)
+        self.plot_widget.setFixedHeight(2200 if not self.sixteen_channels_mode else 3200)
         #Scrolling setup
         self.scrolling_area = QScrollArea()
         self.scrolling_area.setWidgetResizable(True)
@@ -112,7 +203,7 @@ class SignalsWindow(QMainWindow):
         control_layout.addWidget(QLabel("Baudrate:"))
         self.label_baudrate = QLabel(str(self.baudrate))
         control_layout.addWidget(self.label_baudrate)
-        control_layout.addWidget(self.channels_checkbox)
+        #control_layout.addWidget(self.channels_checkbox)
         control_layout.addWidget(self.test_checkbox)
         control_layout.addWidget(self.start_button)
         control_layout.addWidget(self.stop_button)
@@ -126,9 +217,9 @@ class SignalsWindow(QMainWindow):
         self.setCentralWidget(container)
 
         # Timer for updating plots
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.update_plot)
-        self.timer.start(1200)  # Update every second
+        # self.timer = QTimer()
+        # self.timer.timeout.connect(self.update_plot)
+        # self.timer.start(1000)  # Update every second
 
     def toggle_test_mode(self, state):
         self.test_mode = state == 2  # Checked
@@ -138,23 +229,45 @@ class SignalsWindow(QMainWindow):
     def start_serial(self):
         if self.test_mode:
             print("Starting test mode with CSV data.")
-            self.serial_thread = CSVReader('datosLectura.csv', self.data_queue,self.sixteen_channels_mode)
+            self.serial_thread = CSVReader('datosLectura16.csv', self.data_queue,self.sixteen_channels_mode)
         else:
             self.port = self.port
             self.baudrate = self.baudrate
             print(f"Starting serial on {self.port} at {self.baudrate} baud.")
             self.serial_thread = SerialReader(self.port, self.baudrate, self.data_queue,self.sixteen_channels_mode)
         
-        self.serial_thread.start()  # Start the thread properly to avoid blocking the GUI
+        self.serial_thread.start()
+        self.plotting_thread = PlottingThread(self.data_buffer,self.buffer_lock,self.plots,self.channels)
+        self.plotting_thread.start()
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(True)
+
+        self.timer =QTimer()
+        self.timer.timeout.connect(self.process_queue_to_buffer)
+        self.timer.start(10)
+
 
     def stop_serial(self):
         if self.serial_thread:
             self.serial_thread.stop()
             self.serial_thread.join()
+        if self.plotting_thread:    
+            self.plotting_thread.stop()
+        if hasattr(self,'timer'):
+            self.timer.stop()
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
+
+    def process_queue_to_buffer(self):
+        
+        while not self.data_queue.empty():
+            #print("Actualizando BUFFER")
+            try:
+                values =self.data_queue.get_nowait()
+                with self.buffer_lock:
+                    self.data_buffer.append(values)
+            except queue.Empty:
+                break
 
     def update_plot(self,row=None):
         #print("Updating plot")
@@ -173,9 +286,8 @@ class SignalsWindow(QMainWindow):
             
         if not self.df.empty:
             df_plot = self.df.tail(500)
-            print(df_plot['ch1'].iloc[-1])
+            #print(df_plot['ch1'].iloc[-1])
             for idx, plot in enumerate(self.plots):
-
                 channel = self.channels[idx]
                 plot.clear()
                 plot.plot(df_plot['Tm'].values, df_plot[channel].values, pen='b')
@@ -193,45 +305,23 @@ class SignalsWindow(QMainWindow):
     def closeEvent(self, event):
         self.stop_serial()
         event.accept()
-
+    def stop_recording(self):
+        df = self.recording_thread.stop_recording()
+        return df
     def start_recording(self, duration=2):
         """
         Captura datos que se lean sin afectar visualizacion retorna el df .
         """
         print(f"Empezando a grabar por {duration} segundos...")
-        
-        # Cola TEMPORAL solo para esta grabación (NO toca la cola principal)
-        self.recording = True
         sixteen_columns = ["Tm","ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8","ch9","ch10","ch11","ch12","ch13","ch14","ch15","ch16"]
         eigth_columns = ["Tm","ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8"]
-        recording_df = pd.DataFrame( columns = (sixteen_columns if self.sixteen_channels_mode else eigth_columns))
-        sample_count = 0
-        start_time = time.time()
-        self.recording =True        
-        while time.time() - start_time < duration:
-            try:
-                # COPIA los datos de la cola principal SIN consumirla
-                #print("AVER AQUU",self.data_queue.qsize())
-                if not self.data_queue.empty():
-                    values = self.data_queue.get_nowait()  
-                    #print("otravezzz",self.data_queue.qsize())
-                    # Procesa para grabación
-                    row = [float(v.strip()) if v.strip() else np.nan for v in values]
-                    if len(row) == (9 if not self.sixteen_channels_mode else 17):
-                        recording_df.loc[len(recording_df)] = row
-                        self.df.loc[len(self.df)] = row
-                        sample_count += 1
-                self.update_plot()
+        self.recording_thread.start_recording(columns_df = (sixteen_columns if self.sixteen_channels_mode else eigth_columns),duration=duration)   
 
-                time.sleep(0.001)
-                
-            except queue.Empty:
-                continue
-        
-        print(f"Grabación completada. {sample_count} muestras.")
-        return recording_df
-
-
+    def return_recorded_data(self):
+        print("AVERAS")
+        df =self.recording_thread.recording_df
+        print("DF", df)
+        return df
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

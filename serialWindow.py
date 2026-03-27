@@ -1,8 +1,8 @@
 from PyQt6.QtWidgets import QComboBox, QWidget, QHBoxLayout, QGridLayout, QPushButton, QLabel, QLineEdit
-from InterfasPyQue import SignalsWindow
+from SerialMonitor import SignalsWindow
 from gridWindow import KeyboardWindow
 
-class SerialWindow(QWidget):
+class SerialConfiguration(QWidget):
     def __init__(self,controller_serial_config):
         super().__init__()
         self.controller_serial_config = controller_serial_config

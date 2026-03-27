@@ -1,1 +1,5 @@
 **/__pycache__/**
+/captures
+datosLectura.csv
+/venv
+/__pycache__

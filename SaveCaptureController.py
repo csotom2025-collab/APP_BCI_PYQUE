@@ -18,9 +18,25 @@ class controllerSaveCapture:
     def __init__(self, serial_monitor: SignalsWindow):
         self.serial_monitor = serial_monitor
 
+    def _normalize_dataframe_for_csv(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Convierte columnas numericas enteras para evitar '.0' al exportar."""
+        if df is None or df.empty:
+            return df
+
+        normalized = df.copy()
+        for col in normalized.columns:
+            numeric_col = pd.to_numeric(normalized[col], errors="coerce")
+            if numeric_col.notna().all():
+                if (numeric_col % 1 == 0).all():
+                    normalized[col] = numeric_col.astype("Int64")
+                else:
+                    normalized[col] = numeric_col
+        return normalized
+
     def save_capture(self):
         filename=self.full_path
         df = self.serial_monitor.return_recorded_data()
+        df = self._normalize_dataframe_for_csv(df)
         print(f"Guardando captura en: {filename}")
         # Crear la ruta si no existe
         directory = os.path.dirname(filename)

@@ -46,7 +46,6 @@ class SerialReader(threading.Thread):
                     if len(values) == (9 if not self.sixteen_mode else 17):
                         self.data_queue.put(values)
                     print(f"Received: {line}")
-                    #time.sleep(.001)
                     
         except Exception as e:
             print(f"Serial error: {e}")

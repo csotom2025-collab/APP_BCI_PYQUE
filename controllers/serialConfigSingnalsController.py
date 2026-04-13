@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import QComboBox, QMessageBox, QWidget, QHBoxLayout, QGridLayout, QPushButton, QLabel, QLineEdit
-from SerialMonitor import SignalsWindow
+from windows.SerialMonitorWindow import SignalsWindow
 class ControllerSerialConfig:
     def __init__(self, signals_window):
         self.signals_window = signals_window

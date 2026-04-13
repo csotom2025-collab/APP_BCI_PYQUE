@@ -1,15 +1,29 @@
 import pandas as pd
 import os
 import re
-
-from SerialMonitor import SignalsWindow
+import time
+import numpy as np
+import mne
+from windows.SerialMonitorWindow import SignalsWindow
+from PyQt6.QtCore import QTimer,Qt,QThread,pyqtSignal
+# import matplotlib.plt as plt
+# def guardar_grafica(df):
+#     plt.plot(df)
+#     pass
 
 
 class controllerSaveCapture:
     def __init__(self, serial_monitor: SignalsWindow):
         self.serial_monitor = serial_monitor
+        self.edf_full_path = None
 
-    def save_capture(self, filename, df):
+    def save_capture(self):
+        filename = self.full_path
+        df = self.serial_monitor.return_recorded_data()
+        
+        # Limpiar el DataFrame eliminando .0 innecesarios
+        df = self.clean_df_file(df)
+        self.save_capture_edf()
         print(f"Guardando captura en: {filename}")
         # Crear la ruta si no existe
         directory = os.path.dirname(filename)
@@ -109,7 +123,7 @@ class controllerSaveCapture:
             # IMPORTANTE: MNE espera VOLTIOS. 
             # Si tu BCI da valores grandes (como 200,000), divídelos.
             # Esto asegura que el texto en la cabecera EDF sea corto (ej. "0.0001")
-            data = data #* 1e-6  # Convertir de microvoltios a voltios
+            data = data * 1e-6  # Convertir de microvoltios a voltios
             
             # --- PASO 3: Crear Info de MNE ---
             ch_names = list(df_signals.columns)
@@ -134,18 +148,24 @@ class controllerSaveCapture:
         numero ="0"
         ext = ".csv"
 
-        full_path=  path_user+filename+ numero + ext
-        print("fulpath: ",full_path)
-        if os.path.exists(full_path):
-            print("YA existe")
+        self.full_path = path_user + filename + numero + ext
+        # Generar también la ruta EDF
+        self.edf_full_path = path_user + filename + numero + ".edf"
+        
+        #print("fulpath: ",full_path)
+        if os.path.exists(self.full_path):
             lita = os.listdir(path_user)
-            ultf=lita[-1]
-            sub=ultf.split('_')
-            lastnum=sub[-1]
-            nuevoNum = str(int(lastnum[0]) + 1)
-            full_path=  path_user+filename+ nuevoNum + ext
+            lista_separada = [file.split('_') for file in lita]
+            lista_label = [f for f in lista_separada if f[1] == character]
+            nums = [int(file[-1][:-4]) for file in lista_label]
+            sorted_nums = sorted(nums)
+            ultimo_numero = sorted_nums[-1]
+            nuevoNum = str(ultimo_numero + 1)
+            self.full_path = path_user + filename + nuevoNum + ext
+            self.edf_full_path = path_user + filename + nuevoNum + ".edf"
             
-
-        print("Iniciando captura...")
-        data = self.serial_monitor.start_recording(duration)
-        self.save_capture(full_path,data)
+        self.serial_monitor.start_recording(duration)
+        qtime = QTimer()
+        qtime.singleShot(duration*1000+600, self.save_capture)
+        #qtime.singleShot(duration*1000+600, self.save_capture_edf)
+        

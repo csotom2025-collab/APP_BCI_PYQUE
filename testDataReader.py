@@ -4,7 +4,7 @@ import threading
 import queue
 
 class CSVReader(threading.Thread):
-    def __init__(self, csv_file, data_queue:queue.Queue, sixteen_mode, delay=0.001):
+    def __init__(self, csv_file, data_queue:queue.Queue, sixteen_mode, delay=0.01):
         super().__init__()
         self.csv_file = csv_file
         self.data_queue = data_queue

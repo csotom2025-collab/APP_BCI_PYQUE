@@ -85,7 +85,7 @@ class CaptureWindow(QWidget):
         #path = self.path_edit_line.text()
         character = self.combo_box_character.currentText()
         character_type = self.combo_box_character_type.currentText()
-        #self.controller_keyboard.flash_character(character)
+        self.controller_keyboard.flash_character(character)
         duration = self.duration_recording_edit_line.text()
         ###salvar captura
         duration= int(duration)

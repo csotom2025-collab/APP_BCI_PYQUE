@@ -19,10 +19,6 @@ class ControllerKeyboardCapture:
                 self.keyboard_window.flash_button(button, duration)
                 break
         
-    def save_capture(self, user, path, character_type, character):
-        ### Aquí iría la lógica para guardar la captura, llamar a el modulo encargado de guardar 
-        print(f"Guardando  para {user} en la ruta: {path} Caracter: {character}, Tipo: {character_type}")
-
     def start_simulation(self):
         LETTERS = ["A", "E", "I", "O", "U", "S", "R", "N", "L", "D", "C", "T", "M", "P", "B", "G", "V", "Y", "Q", "H", "F", "Z", "J", "Ñ", "X","K ", "W"]   
         hello_world = "HELLO WORLD"

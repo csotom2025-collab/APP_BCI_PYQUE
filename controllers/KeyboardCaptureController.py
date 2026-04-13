@@ -2,7 +2,7 @@ import time
 
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QComboBox, QPushButton, QLabel, QLineEdit,QMainWindow, QApplication, QGridLayout
 from PyQt6.QtCore import QTimer
-from gridWindow import KeyboardWindow
+from windows.gridWindow import KeyboardWindow
 
 
 FLASH_ROUNDS = 2      # cuántas rondas de flash por botón

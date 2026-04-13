@@ -1078,11 +1078,11 @@ def main():
         else:
             print("No se encontraron archivos EDF con el sufijo especificado.")
 
-def main_2():
-    data_path = "captures"  # Cambia si hace falta
-    eeg_reader = EEGEDFReader(data_path)
-    info =  eeg_reader.read_edf_file("User9/Letters/User9_A_4.edf")
-    print(info)
+# def main_2():
+#     data_path = "captures"  # Cambia si hace falta
+#     eeg_reader = EEGEDFReader(data_path)
+#     info =  eeg_reader.read_edf_file("User9/Letters/User9_A_4.edf")
+#     print(info)
 
-if __name__ == "__main__":
-    main_2()
+# if __name__ == "__main__":
+#     main_2()

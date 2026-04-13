@@ -8,7 +8,7 @@ import numpy as np
 from PyQt6.QtWidgets import QApplication, QMainWindow, QPushButton, QLabel, QVBoxLayout, QWidget, QHBoxLayout, QComboBox, QCheckBox,QScrollArea
 from PyQt6.QtCore import QTimer,Qt,QThread,pyqtSignal
 import pyqtgraph as pg
-from testDataReader import CSVReader  # Import for test mode
+from utils.testDataReader import CSVReader  # Import for test mode
 from collections import deque
 class SerialReader(threading.Thread):
     def __init__(self, port, baudrate, data_queue,sixteen_mode):
@@ -248,7 +248,7 @@ class SignalsWindow(QMainWindow):
     def start_serial(self):
         if self.test_mode:
             print("Starting test mode with CSV data.")
-            self.serial_thread = CSVReader('datosLectura16.csv', self.data_queue,self.sixteen_channels_mode)
+            self.serial_thread = CSVReader('datosLectura.csv', self.data_queue,self.sixteen_channels_mode)
         else:
             self.port = self.port
             self.baudrate = self.baudrate

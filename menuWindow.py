@@ -1,13 +1,13 @@
 from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox, QPushButton, QLabel, QVBoxLayout, QWidget
 from PyQt6.QtGui import QCloseEvent
-from SaveCaptureController import controllerSaveCapture
-from SerialMonitor import SignalsWindow
-from KeyboardCaptureController import ControllerKeyboardCapture
-from captureWindow import CaptureWindow
-from serialWindow import SerialConfiguration
-from gridWindow import KeyboardWindow
-from trainWindow import TrainWindow
-from serialConfigSingnalsController import ControllerSerialConfig
+from controllers.SaveCaptureController import controllerSaveCapture
+from windows.SerialMonitorWindow import SignalsWindow
+from controllers.KeyboardCaptureController import ControllerKeyboardCapture
+from windows.captureWindow import CaptureWindow
+from windows.serialConfigurationWindow import SerialConfiguration
+from windows.gridWindow import KeyboardWindow
+from windows.trainWindow import TrainWindow
+from controllers.serialConfigSingnalsController import ControllerSerialConfig
 class Menu(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)

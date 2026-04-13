@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QComboBox, QPushButton, QLabel, QLineEdit,QMainWindow, QApplication, QGridLayout
 import sys
-from KeyboardCaptureController import ControllerKeyboardCapture
+from controllers.KeyboardCaptureController import ControllerKeyboardCapture
 
 
 

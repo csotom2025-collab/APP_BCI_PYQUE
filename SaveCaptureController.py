@@ -1,29 +1,15 @@
 import pandas as pd
 import os
 import re
-import time
-import numpy as np
-import mne
+
 from SerialMonitor import SignalsWindow
-from PyQt6.QtCore import QTimer,Qt,QThread,pyqtSignal
-# import matplotlib.plt as plt
-# def guardar_grafica(df):
-#     plt.plot(df)
-#     pass
 
 
 class controllerSaveCapture:
     def __init__(self, serial_monitor: SignalsWindow):
         self.serial_monitor = serial_monitor
-        self.edf_full_path = None
 
-    def save_capture(self):
-        filename = self.full_path
-        df = self.serial_monitor.return_recorded_data()
-        
-        # Limpiar el DataFrame eliminando .0 innecesarios
-        df = self.clean_df_file(df)
-        self.save_capture_edf()
+    def save_capture(self, filename, df):
         print(f"Guardando captura en: {filename}")
         # Crear la ruta si no existe
         directory = os.path.dirname(filename)
@@ -148,24 +134,18 @@ class controllerSaveCapture:
         numero ="0"
         ext = ".csv"
 
-        self.full_path = path_user + filename + numero + ext
-        # Generar también la ruta EDF
-        self.edf_full_path = path_user + filename + numero + ".edf"
-        
-        #print("fulpath: ",full_path)
-        if os.path.exists(self.full_path):
+        full_path=  path_user+filename+ numero + ext
+        print("fulpath: ",full_path)
+        if os.path.exists(full_path):
+            print("YA existe")
             lita = os.listdir(path_user)
-            lista_separada = [file.split('_') for file in lita]
-            lista_label = [f for f in lista_separada if f[1] == character]
-            nums = [int(file[-1][:-4]) for file in lista_label]
-            sorted_nums = sorted(nums)
-            ultimo_numero = sorted_nums[-1]
-            nuevoNum = str(ultimo_numero + 1)
-            self.full_path = path_user + filename + nuevoNum + ext
-            self.edf_full_path = path_user + filename + nuevoNum + ".edf"
+            ultf=lita[-1]
+            sub=ultf.split('_')
+            lastnum=sub[-1]
+            nuevoNum = str(int(lastnum[0]) + 1)
+            full_path=  path_user+filename+ nuevoNum + ext
             
-        self.serial_monitor.start_recording(duration)
-        qtime = QTimer()
-        qtime.singleShot(duration*1000+600, self.save_capture)
-        #qtime.singleShot(duration*1000+600, self.save_capture_edf)
-        
+
+        print("Iniciando captura...")
+        data = self.serial_monitor.start_recording(duration)
+        self.save_capture(full_path,data)

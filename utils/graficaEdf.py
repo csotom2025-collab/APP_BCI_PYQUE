@@ -1,14 +1,14 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from utils.EEdfReader import EEGEDFReader
+from EEdfReader import EEGEDFReader
 
 def main():
     data_path = "captures"
     eeg_reader = EEGEDFReader(data_path)
     
-    user = "User9"
+    user = "User0"
     letter = "A"
-    info = eeg_reader.read_edf_file(f'{user}/Letters/{user}_{letter}_5.edf')
+    info = eeg_reader.read_edf_file(f'{user}/Letters/{user}_{letter}_1.edf')
     
     # 2. Extraer datos y etiquetas
     signals = info['signals']  # Es una matriz (17, 250)

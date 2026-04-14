@@ -87,86 +87,84 @@ fig.canvas.mpl_connect('close_event', on_close)
 # Activar modo interactivo
 plt.ion()
 plt.show()
+
+update_count = 0
+# --- NUEVAS VARIABLES PARA FRECUENCIA ---
+sample_counter = 0
+start_time_fs = time.time()
+fs_real = 0
+# ----------------------------------------
+
 print(f"Abriendo gráfico - Modo {NUM_CHANNELS} canales")
 print(f"Archivo de salida: {filename}")
 print("Presiona Ctrl+C para detener...")
 
-update_count = 0
 try:
     while running:
         if ser.in_waiting > 0:
             raw = ser.readline()
             line = raw.decode('utf-8', errors='replace').strip()
-            # eliminar coma final extra si existe
             if line.endswith(','):
                 line = line[:-1]
             values = line.split(",")
-            expected_values = NUM_CHANNELS + 1  # Tm + canales
+            expected_values = NUM_CHANNELS + 1 
             
             if len(values) == expected_values:
-                print(f"Datos recibidos ({NUM_CHANNELS} canales): {line}")
+                # 1. Guardar en archivo
                 datos.write(f"{line}\n")
-                datos.flush()
+                
+                # 2. CONTADOR DE FRECUENCIA
+                sample_counter += 1
+                current_time = time.time()
+                elapsed = current_time - start_time_fs
+                
+                if elapsed >= 1.0:  # Cada segundo calculamos los Hz
+                    fs_real = sample_counter / elapsed
+                    print(f">>> Frecuencia de Muestreo Real: {fs_real:.2f} Hz")
+                    sample_counter = 0
+                    start_time_fs = current_time
 
-            # append the new row to a growing DataFrame instead of re-reading the file every loop
-            try:
-                if len(values) == expected_values:
-                    # convert every value to float, fallback to NaN
-                    row = []
-                    for v in values:
-                        try:
-                            row.append(float(v))
-                        except Exception:
-                            row.append(np.nan)
-                    # ensure correct length and append
-                    if len(row) == len(df.columns):
-                        df.loc[len(df)] = row
-                    else:
-                        continue
-                else:
-                    # skip malformed line
+                # 3. Procesar para el DataFrame
+                try:
+                    row = [float(v) if v.strip() else np.nan for v in values]
+                    df.loc[len(df)] = row
+                except Exception:
                     continue
-            except Exception:
-                # if conversion fails, ignore the row
-                continue
 
-            # Actualizar gráficos con Matplotlib - mostrar últimos N samples para mejor rendimiento
+            # Actualizar gráficos cada N muestras
             update_count += 1
-            if update_count % UPDATE_INTERVAL == 0:  # Actualizar según configuración
-                df_plot = df.tail(PLOT_HISTORY)  # Usar configuración para número de puntos
+            if update_count % UPDATE_INTERVAL == 0:
+                # Opcional: Flush al archivo solo al actualizar gráfico para no saturar el disco
+                datos.flush()
+                
+                df_plot = df.tail(PLOT_HISTORY)
                 for idx, channel in enumerate(channels):
                     axes[idx].clear()
+                    # Agregamos el FS al título del primer gráfico para verlo en la ventana
+                    title_extra = f" ({fs_real:.1f} Hz)" if idx == 0 else ""
                     axes[idx].plot(df_plot['Tm'].values, df_plot[channel].values, 'b-', linewidth=1)
-                    axes[idx].set_title(f'Canal: {channel}')
-                    axes[idx].set_xlabel('Tiempo')
-                    axes[idx].set_ylabel('Amplitud')
+                    axes[idx].set_title(f'{channel}{title_extra}')
+                    # ... (resto de tu configuración de ejes y grid)
                     axes[idx].grid(True, alpha=0.3)
-                    # establish y limits with a small margin so constant values are still visible
-                    # convert to float in case dtype is object
-                    ymin = float(df_plot[channel].min())
-                    ymax = float(df_plot[channel].max())
-                    if ymax - ymin < 1e-6:  # nearly constant
-                        mid = (ymin + ymax) / 2
-                        axes[idx].set_ylim(mid - 0.5, mid + 0.5)
+                    
+                    # Límites de ejes (tu lógica original)
+                    ymin, ymax = float(df_plot[channel].min()), float(df_plot[channel].max())
+                    if ymax - ymin < 1e-6:
+                        axes[idx].set_ylim(ymin - 0.5, ymax + 0.5)
                     else:
-                        margin = (ymax - ymin) * 0.1  # 10% margin
+                        margin = (ymax - ymin) * 0.1
                         axes[idx].set_ylim(ymin - margin, ymax + margin)
-                    # x limits
-                    xmin = float(df_plot['Tm'].min())
-                    xmax = float(df_plot['Tm'].max())
-                    if xmax > xmin:
-                        axes[idx].set_xlim(xmin, xmax)
-                
+
                 plt.tight_layout()
-                plt.pause(0.01)  # Pequeña pausa para actualizar la ventana
+                plt.pause(0.001) # Pausa mínima para no bloquear la CPU
 
 except KeyboardInterrupt:
-    print("Interrupción del usuario. Cerrando el puerto serial.")
-finally:
+    print("\nInterrupción del usuario.")
+# ... (resto del finally)finally:
     datos.close()
     ser.close()
     print("Conexión cerrada.")
-
+    
 # Función de utilidad para mostrar configuración
 def print_config_info():
     """Muestra información sobre la configuración actual"""

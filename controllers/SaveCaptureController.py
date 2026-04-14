@@ -61,57 +61,13 @@ class controllerSaveCapture:
         
         return df_clean
 
-    def clean_existing_file(self, file_path):
-        """Limpia un archivo CSV existente eliminando .0 innecesarios"""
-        try:
-            # Leer el archivo
-            df = pd.read_csv(file_path)
-            
-            # Limpiar el DataFrame
-            df_clean = self.clean_df_file(df)
-            
-            # Guardar el archivo limpio
-            df_clean.to_csv(file_path, index=False)
-            
-            print(f"Archivo limpiado exitosamente: {file_path}")
-            return True
-            
-        except Exception as e:
-            print(f"Error al limpiar archivo {file_path}: {e}")
-            return False
-
-    def clean_all_captures(self, user=None):
-        """Limpia todos los archivos de captura eliminando .0 innecesarios"""
-        import glob
-        
-        path = 'captures'
-        cleaned_count = 0
-        
-        if user:
-            # Limpiar solo archivos de un usuario específico
-            pattern = f"{path}/{user}/**/*.csv"
-        else:
-            # Limpiar todos los archivos CSV
-            pattern = f"{path}/**/*.csv"
-        
-        for file_path in glob.glob(pattern, recursive=True):
-            if self.clean_existing_file(file_path):
-                cleaned_count += 1
-        
-        print(f"Archivos limpiados: {cleaned_count}")
-        return cleaned_count
     def save_capture_edf(self):
         filename = self.edf_full_path
         df = self.serial_monitor.return_recorded_data()
         
         # Limpiar el DataFrame eliminando .0 innecesarios
         df = self.clean_df_file(df)
-        
-        # --- PASO 1: Quitar la columna de tiempo si existe ---
-        # if 'Tm' in df.columns:
-        #     df_signals = df.drop(columns=['Tm'])
-        # else:
-        #     df_signals = df
+
         df_signals = df
         try:
             # Extraer datos (canales, muestras)
@@ -130,9 +86,16 @@ class controllerSaveCapture:
             sfreq = 250  # Ajusta a la frecuencia real de tu dispositivo
             ch_types = ['eeg'] * len(ch_names)
             
+
+
+
             info = mne.create_info(ch_names=ch_names, sfreq=sfreq, ch_types=ch_types)
             raw = mne.io.RawArray(data, info)
             
+            # data = tu_array.shape (n_ch, n_times)
+            print("Data min:", data.min())
+            print("Data max:", data.max())
+            print("Data range (min · sfreq):", data.min() * info["sfreq"])
             # Exportar
             raw.export(filename, fmt='edf', overwrite=True)
             print(f"Éxito: {filename}")

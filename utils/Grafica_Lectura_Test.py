@@ -4,9 +4,9 @@ import numpy as np
 
 # Leer el archivo CSV
 
-user = "User8"
-letter = "I"
-df = pd.read_csv(f'captures/{user}/Letters/{user}_{letter}_5.csv')
+user = "User0"
+letter = "A"
+df = pd.read_csv(f'captures/{user}/Letters/{user}_{letter}_1.csv')
 #df = pd.read_csv('EEGTestClean.csv')
 # Mostrar las primeras filas para verificar
 print(df.head())

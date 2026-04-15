@@ -1,9 +1,10 @@
 from PyQt6.QtWidgets import QComboBox, QWidget, QHBoxLayout, QGridLayout, QPushButton, QLabel, QLineEdit
+from controllers.serialConfigSingnalsController import ControllerSerialConfig
 from windows.SerialMonitorWindow import SignalsWindow
 from windows.gridWindow import KeyboardWindow
 
 class SerialConfiguration(QWidget):
-    def __init__(self,controller_serial_config):
+    def __init__(self,controller_serial_config:ControllerSerialConfig):
         super().__init__()
         self.controller_serial_config = controller_serial_config
         self.setWindowTitle("Serial Data Capture")
@@ -11,6 +12,7 @@ class SerialConfiguration(QWidget):
         self.port = QComboBox()
         self.port.addItems([f"COM{i}" for i in range(10)])
         self.baudrate = QLineEdit()
+        self.baudrate.setText("330400")
 
 
         self.layout.addWidget(QLabel("Puerto:"), 0, 0)

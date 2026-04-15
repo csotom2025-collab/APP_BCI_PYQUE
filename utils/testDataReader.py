@@ -2,8 +2,9 @@ import pandas as pd
 import time
 import threading
 import queue
+from PyQt6.QtCore import QThread
 
-class CSVReader(threading.Thread):
+class CSVReader(QThread):
     def __init__(self, csv_file, data_queue:queue.Queue, sixteen_mode, delay=0.01):
         super().__init__()
         self.csv_file = csv_file
@@ -31,3 +32,4 @@ class CSVReader(threading.Thread):
 
     def stop(self):
         self.running = False
+        self.quit()

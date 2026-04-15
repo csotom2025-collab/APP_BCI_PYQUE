@@ -10,8 +10,8 @@ class TrainWindow(QMainWindow):
         super().__init__()
 
         self.setup_ui()
-        self.data = {'user':'pathUser', 'MVP':'pathMVP', 'anodaUser':'pathAnodaUser'}
-        self.show_users()
+        # self.data = {'user':'pathUser', 'MVP':'pathMVP', 'anodaUser':'pathAnodaUser'}
+        # self.show_users()
         self.models= ['lstm', 'cnn', 'svm', 'random_forest', 'xgboost']
         self.show_models()
         
@@ -24,13 +24,14 @@ class TrainWindow(QMainWindow):
         self.combo_box_users = QComboBox()
         self.combo_box_users.currentIndexChanged.connect(self.show_path)
 
+        self.id_user_line = QLineEdit()
         self.combo_box_models = QComboBox()
         self.button_start_training = QPushButton("Iniciar entrenamiento")
         self.button_start_training.clicked.connect(self.start_training)
 
         layout.addWidget(QLabel("Ventana de Entrenamiento"))
-        self.grid_layout.addWidget(QLabel("Selecciona un usuario:"), 0, 0)
-        self.grid_layout.addWidget(self.combo_box_users, 0, 1)
+        self.grid_layout.addWidget(QLabel("Id del usuario:"), 0, 0)
+        self.grid_layout.addWidget(self.id_user_line, 0, 1)
         self.grid_layout.addWidget(QLabel("Ruta del usuario seleccionado:"), 1, 0)
         self.grid_layout.addWidget(self.pathLine, 1, 1)
         self.grid_layout.addWidget(QLabel("Selecciona un modelo:"), 2, 0)
@@ -39,7 +40,6 @@ class TrainWindow(QMainWindow):
 
 
         layout.addLayout(self.grid_layout)
-        self.setLayout(layout)
         self.central_widget = QWidget()
         self.central_widget.setLayout(layout)
         self.setCentralWidget(self.central_widget)
@@ -51,7 +51,7 @@ class TrainWindow(QMainWindow):
     
     def show_path(self):
         user = self.combo_box_users.currentText()
-        path = self.data.get(user, "No path found")
+        path = f"capturas/{user}"
         self.pathLine.setText(path)
     def show_models(self):
         self.combo_box_models.clear()

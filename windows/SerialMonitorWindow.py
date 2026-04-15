@@ -5,12 +5,13 @@ import threading
 import queue
 import pandas as pd
 import numpy as np
-from PyQt6.QtWidgets import QApplication, QMainWindow, QPushButton, QLabel, QVBoxLayout, QWidget, QHBoxLayout, QComboBox, QCheckBox,QScrollArea
+from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox, QPushButton, QLabel, QVBoxLayout, QWidget, QHBoxLayout, QComboBox, QCheckBox,QScrollArea
 from PyQt6.QtCore import QTimer,Qt,QThread,pyqtSignal
 import pyqtgraph as pg
 from utils.testDataReader import CSVReader  # Import for test mode
 from collections import deque
-class SerialReader(threading.Thread):
+class SerialReader(QThread):
+    error_signal = pyqtSignal(str)
     def __init__(self, port, baudrate, data_queue,sixteen_mode):
         super().__init__()
         self.port = port
@@ -45,10 +46,11 @@ class SerialReader(threading.Thread):
                     values = line.split(",")
                     if len(values) == (9 if not self.sixteen_mode else 17):
                         self.data_queue.put(values)
-                    print(f"Received: {line}")
+                    #print(f"Received: {line}")
                     
         except Exception as e:
             print(f"Serial error: {e}")
+            self.error_signal.emit(f"No se pudo abrir el puerto {self.port}. Verifique la conexión y la configuración.")
         finally:
             if self.ser:
                 self.ser.close()
@@ -57,8 +59,13 @@ class SerialReader(threading.Thread):
                 
 
     def stop(self):
-        self.ser.write(b's')
+        if self.ser is not None:
+            try:
+                self.ser.write(b's')
+            except Exception:
+                pass
         self.running = False
+        self.quit()
 
 class RecordingThread(QThread):
     def __init__(self):
@@ -86,6 +93,7 @@ class RecordingThread(QThread):
     def stop_recording(self):
         self.recording=False
         self.running=False
+        self.quit()
         
     def run(self):
         self.running=True
@@ -149,6 +157,7 @@ class PlottingThread(QThread):
             time.sleep(.7)
     def stop(self):
         self.running=False
+        self.quit()
 class SignalsWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -161,7 +170,7 @@ class SignalsWindow(QMainWindow):
         self.sixteen_channels = ["ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8","ch9","ch10","ch11","ch12","ch13","ch14","ch15","ch16"]
         self.df_sixteen= pd.DataFrame(columns=["Tm","ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8","ch9","ch10","ch11","ch12","ch13","ch14","ch15","ch16"])
         self.serial_thread = None
-        self.port = 'COM6'
+        self.port = 'COM5'
         self.baudrate = 330400
         self.test_mode = False  # Flag for test mode
         self.sixteen_channels_mode=True
@@ -254,7 +263,7 @@ class SignalsWindow(QMainWindow):
             self.baudrate = self.baudrate
             print(f"Starting serial on {self.port} at {self.baudrate} baud.")
             self.serial_thread = SerialReader(self.port, self.baudrate, self.data_queue,self.sixteen_channels_mode)
-        
+            self.serial_thread.error_signal.connect(self.on_serial_error)
         self.serial_thread.start()
         self.plotting_thread = PlottingThread(self.data_buffer,self.buffer_lock,self.plots,self.channels)
         self.plotting_thread.update_plots.connect(self.on_plot_update)
@@ -266,13 +275,21 @@ class SignalsWindow(QMainWindow):
         self.timer.timeout.connect(self.process_queue_to_buffer)
         self.timer.start(10)
 
+    def on_serial_error(self, msg):
+        QMessageBox.critical(self, "Error de Puerto Serial", msg)
 
+
+        self.start_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
+        if self.serial_thread:
+            self.serial_thread = None
     def stop_serial(self):
         if self.serial_thread:
             self.serial_thread.stop()
-            self.serial_thread.join()
+            self.serial_thread.wait()
         if self.plotting_thread:    
             self.plotting_thread.stop()
+            self.plotting_thread.wait()
         if hasattr(self,'timer'):
             self.timer.stop()
         self.start_button.setEnabled(True)

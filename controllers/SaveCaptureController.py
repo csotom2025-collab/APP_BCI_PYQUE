@@ -23,7 +23,6 @@ class controllerSaveCapture:
         
         # Limpiar el DataFrame eliminando .0 innecesarios
         df = self.clean_df_file(df)
-        self.save_capture_edf()
         print(f"Guardando captura en: {filename}")
         # Crear la ruta si no existe
         directory = os.path.dirname(filename)
@@ -31,6 +30,7 @@ class controllerSaveCapture:
             os.makedirs(directory, exist_ok=True)
             #print(f"Directorio creado: {os.path.abspath(directory)}")
         
+        self.save_capture_edf()
         # Guardar el DataFrame actual en un archivo CSV
         try:
             df.to_csv(filename, index=False)

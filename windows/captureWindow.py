@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QComboBox, QPushButton, QLabel, QLineEdit,QMainWindow, QApplication, QGridLayout
 import sys
 from controllers.KeyboardCaptureController import ControllerKeyboardCapture
-
+from controllers.SaveCaptureController import controllerSaveCapture
 
 
 
@@ -17,21 +17,21 @@ NUMBERS = ["1", "2", "3",
 
 CONTROLS = ["ESP", "BORR", "ENTER"]
 class CaptureWindow(QWidget):
-    def __init__(self,ControllerKeyboard=None,ControllerSaveCapture=None):
+    def __init__(self,ControllerKeyboard:ControllerKeyboardCapture=None,ControllerSaveCapture:controllerSaveCapture=None):
         super().__init__()
         self.setWindowTitle("Captura de datos")        
         self.setup_ui()
         self.data = [f"User{i}"for i in range(20)]
-        self.show_users()
+        #self.show_users()
         self.update_character_options()
         self.controller_keyboard = ControllerKeyboard
         self.controller_save_capture = ControllerSaveCapture
 
     def setup_ui(self):
         self.layout = QGridLayout()
-        self.combo_box_users = QComboBox()
-        self.combo_box_users.currentIndexChanged.connect(self.show_path)
-
+        # self.combo_box_users = QComboBox()
+        # self.combo_box_users.currentIndexChanged.connect(self.show_path)
+        self.user_edit_line = QLineEdit()
         self.combo_box_character_type = QComboBox()
         self.combo_box_character_type.addItems(["Letters", "Numbers", "Controls"])
         self.combo_box_character_type.currentIndexChanged.connect(self.update_character_options)
@@ -43,12 +43,18 @@ class CaptureWindow(QWidget):
         self.button_start_capture = QPushButton("Iniciar captura")
         self.button_start_capture.clicked.connect(self.start_capture)
 
-        self.button_simulation = QPushButton("Iniciar simulación")
+        self.button_simulation = QPushButton("Iniciar Captura N veces")
         self.button_simulation.clicked.connect(self.start_simulation)
         self.duration_recording_edit_line = QLineEdit()
         self.duration_recording_edit_line.setText("2")
-        self.layout.addWidget(QLabel("Seleccionar usuario:"), 0, 0)
-        self.layout.addWidget(self.combo_box_users, 0, 1)
+        self.n_times_edit_line = QLineEdit()
+        self.n_times_edit_line.setText("1")
+
+
+        # self.layout.addWidget(QLabel("Seleccionar usuario:"), 0, 0)
+        # self.layout.addWidget(self.combo_box_users, 0, 1)
+        self.layout.addWidget(QLabel("Numero de Usuario User:"), 0, 0)
+        self.layout.addWidget(self.user_edit_line, 0, 1)
         # self.layout.addWidget(QLabel("Ruta de guardado:"), 1, 0)
         # self.layout.addWidget(self.path_edit_line, 1, 1)
         self.layout.addWidget(QLabel("Tipo de caracter:"), 2, 0)
@@ -59,12 +65,14 @@ class CaptureWindow(QWidget):
         self.layout.addWidget(self.duration_recording_edit_line,4,1)
         self.layout.addWidget(self.button_start_capture, 5, 0, 1, 2)
         self.layout.addWidget(self.button_simulation, 6, 0, 1, 2)
+        # self.layout.addWidget(QLabel("Veces:"), 7, 0, 1, 1)
+        # self.layout.addWidget(self.n_times_edit_line, 7, 1, 1, 1)
         self.setLayout(self.layout)
         self.move(300, 350)
 
-    def show_users(self):
-        self.combo_box_users.clear()
-        self.combo_box_users.addItems(self.data)
+    # def show_users(self):
+    #     self.combo_box_users.clear()
+    #     self.combo_box_users.addItems(self.data)
 
     def update_character_options(self):
         self.combo_box_character.clear()
@@ -81,7 +89,8 @@ class CaptureWindow(QWidget):
         
         
     def start_capture(self):
-        user = self.combo_box_users.currentText()
+        # user = self.combo_box_users.currentText()
+        user = "User" + self.user_edit_line.text()
         #path = self.path_edit_line.text()
         character = self.combo_box_character.currentText()
         character_type = self.combo_box_character_type.currentText()

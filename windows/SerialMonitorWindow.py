@@ -37,6 +37,11 @@ class SerialReader(QThread):
                 _ = self.ser.readline()
             self.ser.write(b'x')
             self.running = True
+             # --- Variables para medir muestras por segundo ---
+            sample_count = 0
+            start_time = time.time()
+            # ------------------------------------------------
+
             while self.running:
                 if self.ser.in_waiting > 0:
                     raw = self.ser.readline()
@@ -46,7 +51,13 @@ class SerialReader(QThread):
                     values = line.split(",")
                     if len(values) == (9 if not self.sixteen_mode else 17):
                         self.data_queue.put(values)
+                        sample_count += 1
                     #print(f"Received: {line}")
+                    current_time = time.time()
+                    if current_time - start_time >= 1.0:
+                        print(f"Muestras por segundo: {sample_count}")
+                        sample_count = 0
+                        start_time = current_time
                     
         except Exception as e:
             print(f"Serial error: {e}")
@@ -171,7 +182,7 @@ class SignalsWindow(QMainWindow):
         self.df_sixteen= pd.DataFrame(columns=["Tm","ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8","ch9","ch10","ch11","ch12","ch13","ch14","ch15","ch16"])
         self.serial_thread = None
         self.port = 'COM5'
-        self.baudrate = 330400
+        self.baudrate = 330400 
         self.test_mode = False  # Flag for test mode
         self.sixteen_channels_mode=True
         self.channels = self.sixteen_channels if self.sixteen_channels_mode else self.eight_channels

@@ -7,3 +7,4 @@ datosLectura.csv
 .venv/
 venv/
 __pycache__/
+*.md

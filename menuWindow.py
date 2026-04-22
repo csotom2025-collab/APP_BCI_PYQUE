@@ -41,7 +41,7 @@ class Menu(QWidget):
 
 
         self.setLayout(self.layout)
-        self.layout.addWidget(self.label)
+        self.layout.addWidget(self.label)   
         self.layout.addWidget(button_signals)
         self.layout.addWidget(button_grid)
         self.layout.addWidget(button_train)

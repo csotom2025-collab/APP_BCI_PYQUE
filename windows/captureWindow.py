@@ -2,7 +2,8 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QComboBox, QPushButton, QLabel
 import sys
 from controllers.KeyboardCaptureController import ControllerKeyboardCapture
 from controllers.SaveCaptureController import controllerSaveCapture
-
+from windows.gridWindow import BlackScreen, KeyboardWindow
+from PyQt6.QtGui import QCloseEvent
 
 
 LETTERS = ["A", "E", "I", "O", "U",
@@ -50,6 +51,9 @@ class CaptureWindow(QWidget):
         self.n_times_edit_line = QLineEdit()
         self.n_times_edit_line.setText("1")
 
+        self.grid_button = QPushButton("Mostrar Grid")
+        self.grid_button.clicked.connect(self.show_grid)
+
 
         # self.layout.addWidget(QLabel("Seleccionar usuario:"), 0, 0)
         # self.layout.addWidget(self.combo_box_users, 0, 1)
@@ -65,6 +69,7 @@ class CaptureWindow(QWidget):
         self.layout.addWidget(self.duration_recording_edit_line,4,1)
         self.layout.addWidget(self.button_start_capture, 5, 0, 1, 2)
         self.layout.addWidget(self.button_simulation, 6, 0, 1, 2)
+        self.layout.addWidget(self.grid_button, 7, 0, 1, 2)
         # self.layout.addWidget(QLabel("Veces:"), 7, 0, 1, 1)
         # self.layout.addWidget(self.n_times_edit_line, 7, 1, 1, 1)
         self.setLayout(self.layout)
@@ -102,7 +107,18 @@ class CaptureWindow(QWidget):
 
     def start_simulation(self):
         self.controller_keyboard.start_simulation()
-
+    def show_grid(self):
+        self.keyboard_window = KeyboardWindow(training_mode=True)
+        self.keyboard_window.show()
+        self.controller_keyboard.keyboard_window = self.keyboard_window  # Actualiza la referencia en el controlador
+        self.black_screen = BlackScreen()
+        self.black_screen.show()
+    def closeEvent(self, event: QCloseEvent):
+        """Cierra todas las ventanas secundarias y la aplicación."""
+        #Acepta el evento de cierre de la ventana principal
+        event.accept()
+        self.keyboard_window.close()
+        self.black_screen.close()
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = CaptureWindow()

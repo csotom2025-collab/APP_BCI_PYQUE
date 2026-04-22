@@ -52,7 +52,47 @@ class SerialReader(QThread):
                     if len(values) == (9 if not self.sixteen_mode else 17):
                         self.data_queue.put(values)
                         sample_count += 1
-                    #print(f"Received: {line}")
+
+
+                # # if self.ser.in_waiting:
+                # #         buffer += self.ser.read(self.ser.in_waiting)
+
+                # #     # Procesar frames completos
+                # #     while len(buffer) >= frame_size:
+                # #         # Buscar header
+                # #         if buffer[0] != 0xA5:
+                # #             buffer.pop(0)
+                # #             continue
+
+                # #         # Verificar footer
+                # #         if buffer[frame_size - 1] != 0x5A:
+                # #             buffer.pop(0)
+                # #             continue
+
+                # #         frame = buffer[:frame_size]
+                # #         buffer = buffer[frame_size:]
+
+                # #         # -------- Decodificación --------
+                # #         sample = int.from_bytes(frame[1:5], 'little')
+
+                # #         channels = []
+                # #         idx = 5
+                # #         for _ in range(N):
+                # #             raw = frame[idx:idx+3]
+
+                # #             # convertir 24-bit signed
+                # #             val = int.from_bytes(raw, byteorder='big', signed=True)
+                # #             channels.append(val)
+
+                # #             idx += 3
+
+                # #         # Enviar a tu queue
+                # #         # Convertir a strings como antes (igual que readline)
+                # #         values = [str(sample)] + [str(ch) for ch in channels]
+
+                # #         self.data_queue.put(values)
+    
+                    print(f"Received: {line}")
                     current_time = time.time()
                     if current_time - start_time >= 1.0:
                         print(f"Muestras por segundo: {sample_count}")
@@ -182,7 +222,7 @@ class SignalsWindow(QMainWindow):
         self.df_sixteen= pd.DataFrame(columns=["Tm","ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8","ch9","ch10","ch11","ch12","ch13","ch14","ch15","ch16"])
         self.serial_thread = None
         self.port = 'COM5'
-        self.baudrate = 330400 
+        self.baudrate = 330400 *6
         self.test_mode = False  # Flag for test mode
         self.sixteen_channels_mode=True
         self.channels = self.sixteen_channels if self.sixteen_channels_mode else self.eight_channels

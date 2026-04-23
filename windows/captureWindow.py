@@ -16,7 +16,7 @@ NUMBERS = ["1", "2", "3",
     "4", "5", "6",
     "7", "8", "9", "0"]
 
-CONTROLS = ["ESP", "BORR", "ENTER"]
+CONTROLS = ["───", "⟵", "↩"]
 class CaptureWindow(QWidget):
     def __init__(self,ControllerKeyboard:ControllerKeyboardCapture=None,ControllerSaveCapture:controllerSaveCapture=None):
         super().__init__()

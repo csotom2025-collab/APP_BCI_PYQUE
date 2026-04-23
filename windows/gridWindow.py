@@ -15,12 +15,7 @@ GRID = [
     ["F", "Z", "J", "Ñ", "X","K ", "W","↩"]
     
 ]
-GrindNumbers = [
-    ["1", "2", "3"],
-    ["4", "5", "6"],
-    ["7", "8", "9"],
-    ["0", "↩"],
-]
+
 
 # Estilos para los temas
 LIGHT_THEME = {
@@ -338,16 +333,6 @@ class KeyboardWindow(QWidget):
                 self.grid_letters_layout.addWidget(button, row, col)
                 self.buttons_list.append(button)
         
-        # for row, numbers in enumerate(GrindNumbers):
-        #     for col, number in enumerate(numbers):
-        #         button = QPushButton(f"{number}")
-        #         button.setFont(font)
-        #         # Usar política de tamaño en lugar de tamaño fijo
-        #         button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        #         button.setMinimumSize(40, 40)
-        #         button.clicked.connect(lambda checked, b=button: self.button_clicked(b))
-        #         self.grid_numbers_layout.addWidget(button, row, col)
-        #         self.buttons_list.append(button)
         
         # Configurar stretch para los layouts internos
         for i in range(len(GRID)):
@@ -355,15 +340,21 @@ class KeyboardWindow(QWidget):
         for j in range(len(GRID[0])):
             self.grid_letters_layout.setColumnStretch(j, 1)
         
-        # for i in range(len(GrindNumbers)):
-        #     self.grid_numbers_layout.setRowStretch(i, 1)
-        # for j in range(max(len(row) for row in GrindNumbers)):
-        #     self.grid_numbers_layout.setColumnStretch(j, 1)
+       
 
     def button_clicked(self, button):
         print("Boton seleccionado :" + button.text())
         self.flash_button(button)
-        self.add_character(button.text())
+        if button.text() == "───":
+            self.add_character(" ")
+        elif button.text() == "⟵":
+            #quitar el último carácter en la salida
+            current = self.output_line.label.text()
+            self.output_line.set_text(current[:-1])
+        elif button.text() == "↩":
+            self.add_character("\n")
+        else:
+            self.add_character(button.text())
 
     def flash_button(self, button, duration=1.0):
         # Aplicar efecto de flash amarillo

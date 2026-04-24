@@ -222,7 +222,7 @@ class SignalsWindow(QMainWindow):
         self.df_sixteen= pd.DataFrame(columns=["Tm","ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8","ch9","ch10","ch11","ch12","ch13","ch14","ch15","ch16"])
         self.serial_thread = None
         self.port = 'COM5'
-        self.baudrate = 330400 *6
+        self.baudrate = 330400 *2
         self.test_mode = False  # Flag for test mode
         self.sixteen_channels_mode=True
         self.channels = self.sixteen_channels if self.sixteen_channels_mode else self.eight_channels
@@ -244,20 +244,15 @@ class SignalsWindow(QMainWindow):
         self.test_checkbox = QCheckBox("Modo Prueba (CSV)")
         self.test_checkbox.stateChanged.connect(self.toggle_test_mode)
         self.channels_checkbox = QCheckBox("16 canales")
+        self.channels_checkbox.setChecked(self.sixteen_channels_mode)
         self.channels_checkbox.stateChanged.connect(self.toggle_channels)
         self.recording = False
 
         # Plot setup
         self.plot_widget = pg.GraphicsLayoutWidget()
         self.plots = []
-        for i, channel in enumerate(self.channels):
-            #plot = self.plot_widget.addPlot(row=i//2, col=i%2, title=f'Canal: {channel}',)
-            plot = self.plot_widget.addPlot(row=i, col=0,rowspan=1, colspan=1, title=f'Canal: {channel}')
-            plot.setLabel('left', 'Amplitud')
-            plot.setLabel('bottom', 'Tiempo')
-            self.plots.append(plot)
-        self.plot_widget.setFixedHeight(2200 if not self.sixteen_channels_mode else 3200)
-        #Scrolling setup
+        self._rebuild_plots()
+        # Scrolling setup
         self.scrolling_area = QScrollArea()
         self.scrolling_area.setWidgetResizable(True)
         self.scrolling_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
@@ -270,7 +265,7 @@ class SignalsWindow(QMainWindow):
         control_layout.addWidget(QLabel("Baudrate:"))
         self.label_baudrate = QLabel(str(self.baudrate))
         control_layout.addWidget(self.label_baudrate)
-        #control_layout.addWidget(self.channels_checkbox)
+        control_layout.addWidget(self.channels_checkbox)
         control_layout.addWidget(self.test_checkbox)
         control_layout.addWidget(self.start_button)
         control_layout.addWidget(self.stop_button)
@@ -290,10 +285,33 @@ class SignalsWindow(QMainWindow):
 
     def toggle_test_mode(self, state):
         self.test_mode = state == 2  # Checked
-    def toggle_channels(self,state):
-        print("16 canales")
-        self.sixteen_channels_mode = state== 2
 
+    def toggle_channels(self, state):
+        sixteen_mode = state == 2
+        if sixteen_mode == self.sixteen_channels_mode:
+            return
+        was_running = self.serial_thread is not None and self.serial_thread.isRunning()
+        if was_running:
+            self.stop_serial()
+        self.set_channel_mode(sixteen_mode)
+        if was_running:
+            self.start_serial()
+
+    def set_channel_mode(self, sixteen_mode: bool):
+        self.sixteen_channels_mode = sixteen_mode
+        self.channels = self.sixteen_channels if self.sixteen_channels_mode else self.eight_channels
+        self.df = self.df_sixteen if self.sixteen_channels_mode else self.df_eight
+        self._rebuild_plots()
+
+    def _rebuild_plots(self):
+        self.plots = []
+        self.plot_widget.clear()
+        for i, channel in enumerate(self.channels):
+            plot = self.plot_widget.addPlot(row=i, col=0, rowspan=1, colspan=1, title=f'Canal: {channel}')
+            plot.setLabel('left', 'Amplitud')
+            plot.setLabel('bottom', 'Tiempo')
+            self.plots.append(plot)
+        self.plot_widget.setFixedHeight(2200 if not self.sixteen_channels_mode else 3200)
 
     def on_plot_update(self,times,all_values,channels):
         try:

@@ -4,8 +4,11 @@ import os
 from PyQt6.QtWidgets import QApplication, QHBoxLayout, QLabel, QWidget, QPushButton, QGridLayout, QVBoxLayout, QLineEdit
 from PyQt6.QtCore import QTimer, Qt, QRect
 from PyQt6.QtWidgets import QSizePolicy
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QCloseEvent, QFont
 from PyQt6.QtCore import QPoint
+
+from controllers.TextFieldController import TextFieldController
+from windows.TextFieldWindow import TextField
 
 GRID = [
     ["A", "E", "I", "O", "U","1","2","3"],
@@ -249,6 +252,9 @@ class KeyboardWindow(QWidget):
         super().__init__()
         if  training_mode:
             self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+        self.text_field_window  = TextField("")
+        self.text_field_controller = TextFieldController(self.text_field_window)
+        self.text_field_window.set_controller(self.text_field_controller)
         self.setWindowTitle("Grid de botones")
         dpi = self.screen().physicalDotsPerInch()
         pixels_per_cm = dpi / 2.54
@@ -262,6 +268,7 @@ class KeyboardWindow(QWidget):
         self.buttons_list = []
         self.setup_ui()
         self.apply_theme(self.current_theme)
+
 
     def load_theme(self):
         """Carga el tema guardado o usa el tema claro por defecto"""
@@ -454,6 +461,15 @@ class KeyboardWindow(QWidget):
             self.output_line.set_text(current[:-1])  # Eliminar el último carácter
             return
         self.output_line.add_character(char)
+    def closeEvent(self, event: QCloseEvent):
+        """Cierra todas las ventanas secundarias y la aplicación."""
+        #Acepta el evento de cierre de la ventana principal
+        event.accept()
+        self.quit()
+    def quit(self):
+        if not self.training_mode:
+            self.text_field_window.close()
+        self.close()
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = KeyboardWindow()

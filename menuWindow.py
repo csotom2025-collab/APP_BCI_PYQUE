@@ -63,10 +63,24 @@ class Menu(QWidget):
 
     def quit_application(self):
         QApplication.quit()
+        if self.keyboard_window:
+            self.keyboard_window.quit()
+        if self.signals_window:
+            self.signals_window.close()
+        if self.train_window:
+            self.train_window.close()
+        if self.capture_window:
+            self.capture_window.close()
+            self.capture_window.quit()
+        if self.serial_window:
+            self.serial_window.close()
+
     def open_signals_window(self):
         self.signals_window.show()
     def open_grid_window(self):
         self.keyboard_window.show()
+        if not self.keyboard_window.training_mode:
+            self.keyboard_window.text_field_window.show()
     def open_train_window(self):
         self.train_window.show()
     def open_capture_window(self):

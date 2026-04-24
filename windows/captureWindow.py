@@ -119,6 +119,13 @@ class CaptureWindow(QWidget):
         event.accept()
         self.keyboard_window.close()
         self.black_screen.close()
+    def quit(self):
+        self.close()
+        if self.keyboard_window:
+            self.keyboard_window.close()
+        if self.black_screen:
+            self.black_screen.close()
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = CaptureWindow()

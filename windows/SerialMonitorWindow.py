@@ -114,10 +114,10 @@ class SerialReader(QThread):
 
                 # #         self.data_queue.put(values)
     
-                    print(f"Received: {line}")
+                    #print(f"Received: {line}")
                     current_time = time.time()
                     if current_time - start_time >= 1.0:
-                        print(f"Muestras por segundo: {sample_count}")
+                        #print(f"Muestras por segundo: {sample_count}")
                         sample_count = 0
                         start_time = current_time
                     
@@ -161,14 +161,33 @@ class RecordingThread(QThread):
                 self.recording_queue.get_nowait()
             except queue.Empty:
                 break
-        print("Empezando grabacion hilo recording columnas",columns_df)
+        #print("Empezando grabacion hilo recording columnas",columns_df)
         self.start()
 
     def stop_recording(self):
         self.recording=False
         self.running=False
         self.quit()
-        
+
+    def get_filtered_recording_df(self):
+        if self.recording_df is None:
+            return None
+        if self.recording_df.empty:
+            return self.recording_df
+
+        df_filtered = self.recording_df.copy()
+        channel_columns = [c for c in df_filtered.columns if c.lower() != 'tm']
+
+        for ch in channel_columns:
+            try:
+                values = df_filtered[ch].astype(np.float32).values
+                filtered_values = self.filter.apply(values)
+                df_filtered[ch] = filtered_values
+            except Exception:
+                pass
+
+        return df_filtered
+
     def run(self):
         self.running=True
         while self.running:
@@ -177,19 +196,12 @@ class RecordingThread(QThread):
                 break
             try:
                 values = self.recording_queue.get(timeout=0.1)
-
-
-                values = np.array(values, dtype=np.float32)
-                values = self.filter.apply(values)
-                values = values.tolist()
-
-                        
                 if self.recording:
                     try:
                         row = [float(v.strip()) if isinstance(v,str) else float(v) for v in values]
-                        if len(row) == len(self.columns_df) :
+                        if len(row) == len(self.columns_df):
                             self.recording_df.loc[len(self.recording_df)] = row
-                    except (ValueError,TypeError):
+                    except (ValueError, TypeError):
                         pass
             except queue.Empty:
                 continue
@@ -226,15 +238,34 @@ class PlottingThread(QThread):
                     times = [float (d[0]) for d in data_tuples if d]
                     all_values =[]
                     
-                    for idx  in range(len((self.channels))):
-                        values = [float(d[idx+1]) if d[idx+1].strip() else np.nan for d in data_tuples if d]
+                    # for idx  in range(len((self.channels))):
+                    #     values = [float(d[idx+1]) if d[idx+1].strip() else np.nan for d in data_tuples if d]
                        
-                        values = np.array(values, dtype=np.float32)
-                        values = self.filter.apply(values)
-                        all_values.append(values.tolist())
+                    #     values = np.array(values, dtype=np.float32)
+                    #     values = self.filter.apply(values)
+                    #     all_values.append(values.tolist())
 
                         
                         #all_values.append(values)
+
+                    # Definir constantes antes del bucle o en el __init__
+                    V_REF = 4.5
+                    GAIN = 24  # Ajusta esto si usas otra ganancia en el ADS1299
+                    LSB_UNIT = V_REF / (GAIN * (2**23 - 1))
+
+                    # ... dentro de tu hilo ...
+                    for idx in range(len(self.channels)):
+                        # 1. Obtener valores crudos
+                        raw_values = [float(d[idx+1]) if d[idx+1].strip() else np.nan for d in data_tuples if d]
+                        values = np.array(raw_values, dtype=np.float32)
+
+                        # 2. Convertir a Microvoltios (uV) antes de filtrar
+                        # Aplicamos la fórmula: count * LSB_UNIT * 1e6
+                        values = values * LSB_UNIT * 1000000 
+
+                        # 3. Aplicar filtros (ahora sobre valores reales)
+                        values = self.filter.apply(values)
+                        all_values.append(values.tolist())
 
                     if len(times) > 0 and len(all_values) >0:
                         self.update_plots.emit(times,all_values,self.channels)
@@ -272,7 +303,7 @@ class SignalsWindow(QMainWindow):
         self.channels = self.sixteen_channels if self.sixteen_channels_mode else self.eight_channels
         self.df = self.df_sixteen if self.sixteen_channels_mode else self.df_eight
         self.setup_ui()
-        self.data_buffer =deque(maxlen=1000)
+        self.data_buffer =deque(maxlen=500)
         self.buffer_lock = threading.Lock()
         self.recording_thread = RecordingThread()
         #self.recording_thread.finished_record.connect(self.on_recording_finished)
@@ -370,7 +401,7 @@ class SignalsWindow(QMainWindow):
     def start_serial(self):
         if self.test_mode:
             print("Starting test mode with CSV data.")
-            self.serial_thread = CSVReader('datosLectura.csv', self.data_queue,self.sixteen_channels_mode)
+            self.serial_thread = CSVReader('datosLectura16.csv', self.data_queue,self.sixteen_channels_mode)
         else:
             self.port = self.port
             self.baudrate = self.baudrate
@@ -456,8 +487,9 @@ class SignalsWindow(QMainWindow):
         self.stop_serial()
         event.accept()
     def stop_recording(self):
-        df = self.recording_thread.stop_recording()
-        return df
+        self.recording_thread.stop_recording()
+        return self.recording_thread.get_filtered_recording_df()
+
     def start_recording(self, duration=2):
         """
         Captura datos que se lean sin afectar visualizacion retorna el df .
@@ -466,11 +498,11 @@ class SignalsWindow(QMainWindow):
         #sixteen_columns = ["Tm","ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8","ch9","ch10","ch11","ch12","ch13","ch14","ch15","ch16"]
         sixteen_columns = self.columns
         eigth_columns = ["Tm","ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8"]
+        self.recording_thread = RecordingThread()
         self.recording_thread.start_recording(columns_df = (sixteen_columns if self.sixteen_channels_mode else eigth_columns),duration=duration)   
 
     def return_recorded_data(self):
-        df =self.recording_thread.recording_df
-        return df
+        return self.recording_thread.get_filtered_recording_df()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

@@ -1,9 +1,10 @@
 **/__pycache__/**
-/captures
+/captures/User3
+/captures/User12
+/captures/4682
 datosLectura.csv
 *.pyc
 *.pyo
-*.csv
 .venv/
 venv/
 __pycache__/

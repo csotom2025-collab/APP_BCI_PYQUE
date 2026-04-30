@@ -6,7 +6,7 @@ from PyQt6.QtCore import QTimer, Qt, QRect
 from PyQt6.QtWidgets import QSizePolicy
 from PyQt6.QtGui import QCloseEvent, QFont
 from PyQt6.QtCore import QPoint
-
+import random
 from controllers.TextFieldController import TextFieldController
 from windows.TextFieldWindow import TextField
 
@@ -15,9 +15,12 @@ GRID = [
     ["S", "R", "N", "L", "D","4","5","6"],
     ["C", "T", "M", "P", "B","7","8","9"],
     ["G", "V", "Y", "Q", "H","0","───", "⟵"],
-    ["F", "Z", "J", "Ñ", "X","K ", "W","↩"]
+    ["F", "Z", "J", "Ñ", "X","K", "W","↩"]
     
 ]
+
+greenComd = ["A", "C", "F", "R", "V","I","M","J","L","Q","U",'B',"X","4", "0","2","8","W","6","⟵"]
+blueComd  = ["S","G","E","T","Z","N","Y","O","P","Ñ","D","H","1","7","K","5","───","3","9","↩"]
 
 
 # Estilos para los temas
@@ -297,7 +300,7 @@ class KeyboardWindow(QWidget):
         # Layout para el botón de tema
         theme_layout = QHBoxLayout()
         self.theme_button = QPushButton("🌙 Dark Mode")
-        self.theme_button.clicked.connect(self.toggle_theme)
+        self.theme_button.clicked.connect(self.start_paradigm)
         theme_layout.addStretch()
         theme_layout.addWidget(self.theme_button)
         theme_layout.addStretch()
@@ -346,12 +349,20 @@ class KeyboardWindow(QWidget):
             self.grid_letters_layout.setRowStretch(i, 1)
         for j in range(len(GRID[0])):
             self.grid_letters_layout.setColumnStretch(j, 1)
-        
+    def hide_grid(self):
+        for button in self.buttons_list:
+            button.hide()
+    def show_grid_after_rest(self):
+        for button in self.buttons_list:
+            button.show()
        
 
     def button_clicked(self, button):
         print("Boton seleccionado :" + button.text())
-        self.flash_button(button)
+        if button.text() in greenComd:
+            self.flash_button(button, COLOR="#00FF00")  # Flash verde
+        if button.text() in blueComd:
+            self.flash_button(button, COLOR="#0096FF")  # Flash azul
         if button.text() == "───":
             self.add_character(" ")
         elif button.text() == "⟵":
@@ -363,10 +374,12 @@ class KeyboardWindow(QWidget):
         else:
             self.add_character(button.text())
 
-    def flash_button(self, button, duration=1.0):
+    def flash_button(self, button, duration=1.0, COLOR="#00FF00"):
+        if button.text() in blueComd:
+           COLOR="#0096FF"
         # Aplicar efecto de flash amarillo
         button.setStyleSheet(
-            f"QPushButton {{ background-color: #00FF00; "
+            f"QPushButton {{ background-color: {COLOR}; "
             f"color: black; border: 2px solid #cccccc; "
             f"border-radius: 5px; font-weight: bold; }}"
         )
@@ -461,6 +474,78 @@ class KeyboardWindow(QWidget):
             self.output_line.set_text(current[:-1])  # Eliminar el último carácter
             return
         self.output_line.add_character(char)
+
+    def start_paradigm(self):
+        """Inicia el ciclo de épocas con el paradigma de ajedrez"""
+        self.theme_button.setEnabled(False) # Bloquear botón mientras corre
+        self.current_epoca = 0
+        self.num_epocas = 6      # Configurable
+        self.flash_duration = 150 # ms encendido
+        self.isi_duration = 100   # ms apagado (Inter-Stimulus Interval)
+        self.prepare_epoca()
+
+    def prepare_epoca(self):
+        """Crea la secuencia para una época: Grupo 0 y Grupo 1 en orden aleatorio"""
+        if self.current_epoca < self.num_epocas:
+            print(f"Iniciando Época {self.current_epoca + 1}")
+            
+            # El paradigma de ajedrez consiste en dos grupos de estímulos
+            self.sequence = [0, 1] 
+            random.shuffle(self.sequence) # Mezclar para que no siempre empiece el mismo grupo
+            
+            self.run_next_flash()
+        else:
+            print("Paradigma Finalizado")
+            self.theme_button.setEnabled(True)
+            self.apply_theme(self.current_theme) # Restaurar visualmente al terminar
+
+    def run_next_flash(self):
+        """Ejecuta el flash del siguiente grupo en la secuencia"""
+        if not self.sequence:
+            self.current_epoca += 1
+            # Pequeña pausa entre épocas
+            QTimer.singleShot(500, self.prepare_epoca)
+            return
+
+        group_id = self.sequence.pop(0)
+        self.set_checkerboard_state(group_id, active=True)
+        
+        # Programar el apagado
+        QTimer.singleShot(self.flash_duration, lambda: self.end_flash(group_id))
+
+    def end_flash(self, group_id):
+        """Apaga el grupo actual y espera el intervalo para el siguiente flash"""
+        self.set_checkerboard_state(group_id, active=False)
+        QTimer.singleShot(self.isi_duration, self.run_next_flash)
+
+    def set_checkerboard_state(self, group_id, active):
+        """
+        Ilumina u oscurece los botones según el patrón de ajedrez.
+        Grupo 0: celdas donde (fila + columna) es par.
+        Grupo 1: celdas donde (fila + columna) es impar.
+        """
+        for r in range(len(GRID)):
+            for c in range(len(GRID[0])):
+                # Lógica de tablero de ajedrez
+                if (r + c) % 2 == group_id:
+                    button = self.grid_letters_layout.itemAtPosition(r, c).widget()
+                    
+                    if active:
+                        # Usar tus listas de comandos para decidir el color del flash
+                        color = "#00FF00" if button.text() in greenComd else "#0096FF"
+                        
+                        button.setStyleSheet(
+                            f"QPushButton {{ background-color: {color}; "
+                            f"color: black; border: 3px solid white; "
+                            f"border-radius: 5px; font-weight: bold; }}"
+                        )
+                        # Aumento de fuente visual
+                        font = button.font()
+                        font.setPointSize(22)
+                        button.setFont(font)
+                    else:
+                        # Volver al estilo del tema actual (Oscuro/Claro)
+                        self.reapply_button_theme(button)
     def closeEvent(self, event: QCloseEvent):
         """Cierra todas las ventanas secundarias y la aplicación."""
         #Acepta el evento de cierre de la ventana principal

@@ -3,10 +3,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Leer el archivo CSV
-
-user = "User3"
-letter = "N"
-df = pd.read_csv(f'captures/{user}/Letters/{user}_{letter}_0.csv')
+numvber = input("Ingrese el número de usuraio: ")
+user = "User" + numvber
+letra = input("Ingrese la letra a graficar: ")
+letter = "A"
+letter= letra.upper()
+capture_number = int(input("Ingrese el número de captura: "))
+filename = f'captures/{user}/Letters/{user}_{letter}_{capture_number}.csv'
+df = pd.read_csv(filename)
 #df = pd.read_csv('EEGTestClean.csv')
 # Mostrar las primeras filas para verificar
 print(df.head())

@@ -1,5 +1,6 @@
+import os
 import sys
-from PyQt6.QtWidgets import QApplication, QComboBox, QGridLayout, QLineEdit, QMainWindow, QPushButton, QWidget, QVBoxLayout, QLabel
+from PyQt6.QtWidgets import QApplication, QComboBox, QGridLayout, QLineEdit, QMainWindow, QPushButton, QWidget, QVBoxLayout, QLabel, QMessageBox
 
 
 
@@ -21,22 +22,23 @@ class TrainWindow(QMainWindow):
         self.grid_layout = QGridLayout()
 
         self.pathLine = QLineEdit("path")
-        self.combo_box_users = QComboBox()
-        self.combo_box_users.currentIndexChanged.connect(self.show_path)
-
         self.id_user_line = QLineEdit()
+
         self.combo_box_models = QComboBox()
         self.button_start_training = QPushButton("Iniciar entrenamiento")
         self.button_start_training.clicked.connect(self.start_training)
+        self.button_verify_path = QPushButton("Verificar path")
+        self.button_verify_path.clicked.connect(self.verify_path)
 
         layout.addWidget(QLabel("Ventana de Entrenamiento"))
         self.grid_layout.addWidget(QLabel("Id del usuario:"), 0, 0)
         self.grid_layout.addWidget(self.id_user_line, 0, 1)
+        self.grid_layout.addWidget(self.button_verify_path, 0, 2)
         self.grid_layout.addWidget(QLabel("Ruta del usuario seleccionado:"), 1, 0)
-        self.grid_layout.addWidget(self.pathLine, 1, 1)
+        self.grid_layout.addWidget(self.pathLine, 1, 1, 1, 2)
         self.grid_layout.addWidget(QLabel("Selecciona un modelo:"), 2, 0)
         self.grid_layout.addWidget(self.combo_box_models, 2, 1)
-        self.grid_layout.addWidget(self.button_start_training, 3, 0, 1, 2)
+        self.grid_layout.addWidget(self.button_start_training, 3, 0, 1, 3)
 
 
         layout.addLayout(self.grid_layout)
@@ -45,29 +47,43 @@ class TrainWindow(QMainWindow):
         self.setCentralWidget(self.central_widget)
         self.move(200, 200)
 
-    def show_users(self):
-        self.combo_box_users.clear()
-        self.combo_box_users.addItems(self.data.keys())
     
     def show_path(self):
-        user = self.combo_box_users.currentText()
-        path = f"capturas/{user}"
+        user = self.get_user()
+        path = os.path.join("captures", f"User{user}")
         self.pathLine.setText(path)
+
+    def verify_path(self):
+        user = self.get_user().strip()
+        if not user:
+            QMessageBox.warning(self, "Usuario requerido", "Ingrese el ID del usuario antes de verificar.")
+            return
+
+        path = os.path.join("captures", f"User{user}")
+        if os.path.isdir(path):
+            self.pathLine.setText(path)
+            QMessageBox.information(self, "Ruta encontrada", f"La carpeta del usuario existe:\n{path}")
+        else:
+            self.pathLine.setText("")
+            QMessageBox.warning(self, "Ruta no existe", f"No existe la carpeta del usuario:\n{path}")
+
     def show_models(self):
         self.combo_box_models.clear()
         self.combo_box_models.addItems(self.models)
+
     def get_model(self):
         model = self.combo_box_models.currentText()
         return model
     
     def get_user(self):
-        user = self.combo_box_users.currentText()
-        return user
+        user_id = self.id_user_line.text()
+        return user_id
     
     def get_path(self):
-        user = self.get_user()
-        path = self.data.get(user)
-        return path
+        user = self.get_user().strip()
+        if not user:
+            return ""
+        return os.path.join("captures", f"User{user}")
     
     def start_training(self):    
         user = self.get_user()

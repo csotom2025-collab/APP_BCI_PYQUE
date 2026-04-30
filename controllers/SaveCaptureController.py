@@ -17,10 +17,10 @@ class controllerSaveCapture:
         self.serial_monitor = serial_monitor
         self.edf_full_path = None
 
-    def save_capture(self):
+    def save_capture(self, callback=None):
         filename = self.full_path
         df = self.serial_monitor.return_recorded_data()
-        
+
         # Limpiar el DataFrame eliminando .0 innecesarios
         df = self.clean_df_file(df)
         print(f"Guardando captura en: {filename}")
@@ -29,7 +29,7 @@ class controllerSaveCapture:
         if directory and not os.path.exists(directory):
             os.makedirs(directory, exist_ok=True)
             #print(f"Directorio creado: {os.path.abspath(directory)}")
-        
+
         self.save_capture_edf()
         # Guardar el DataFrame actual en un archivo CSV
         try:
@@ -37,6 +37,10 @@ class controllerSaveCapture:
             print("Captura guardada exitosamente.")
         except Exception as e:
             print(f"Error al guardar la captura: {e}")
+
+        # Ejecutar callback si existe (para múltiples grabaciones)
+        if callback:
+            callback()
     def clean_df_file(self, df):
         """Limpia el DataFrame eliminando decimales innecesarios (.0)"""
         df_clean = df.copy()
@@ -104,17 +108,19 @@ class controllerSaveCapture:
             print(f"Error al guardar EDF: {e}")
             # Tu respaldo en CSV...
 
-    def start_capture(self, user, character_type, character, duration):
+    def start_capture(self, user, character_type, character, duration, callback=None):
         path = 'captures'
         path_user= f"{path}/{user}/{character_type}/"
         filename = f"{user}_{character}_"
         numero ="0"
         ext = ".csv"
 
+        self.serial_monitor.start_recording(duration)
+        
         self.full_path = path_user + filename + numero + ext
         # Generar también la ruta EDF
         self.edf_full_path = path_user + filename + numero + ".edf"
-        
+
         #print("fulpath: ",full_path)
         if os.path.exists(self.full_path):
             lita = os.listdir(path_user)
@@ -126,9 +132,48 @@ class controllerSaveCapture:
             nuevoNum = str(ultimo_numero + 1)
             self.full_path = path_user + filename + nuevoNum + ext
             self.edf_full_path = path_user + filename + nuevoNum + ".edf"
-            
-        self.serial_monitor.start_recording(duration)
+
         qtime = QTimer()
-        qtime.singleShot(duration*1000+600, self.save_capture)
+        qtime.singleShot(duration*1000+600, lambda: self.save_capture(callback))
         #qtime.singleShot(duration*1000+600, self.save_capture_edf)
+    
+    def start_capture_n_times(self, user, character_type, character, duration, times,controller_keyboard):
+        """
+        Inicia múltiples grabaciones secuenciales sin bloquear la interfaz
+        """
+        self.capture_count = 0
+        self.times = times
+        self.user = user
+        self.character_type = character_type
+        self.character = character
+        self.duration = duration
+
+        print(f"Empezando captura de {character} unas {times} veces...")
+
+        def on_capture_completed():
+            """Callback que se ejecuta después de cada guardado"""
+            self.capture_count += 1
+            print(f"✅ Grabación {self.capture_count}/{self.times} completada")
+
+            if self.capture_count < self.times:
+                # Programar la siguiente grabación con un pequeño delay
+                QTimer.singleShot(1000, start_next_capture)  # 1 segundo de pausa entre grabaciones
+            else:
+                # Todas las grabaciones completadas
+                print(f"\n🎉 Todas las {self.times} grabaciones de '{self.character}' completadas!")
+
+        def start_next_capture():
+            """Inicia la siguiente grabación"""
+            print(f"\n--- Iniciando grabación {self.capture_count + 1}/{self.times} ---")
+            controller_keyboard.flash_character(self.character)
+            self.start_capture(
+                user=self.user,
+                character_type=self.character_type,
+                character=self.character,
+                duration=self.duration,
+                callback=on_capture_completed
+            )
+
+        # Iniciar la primera grabación
+        start_next_capture()
         

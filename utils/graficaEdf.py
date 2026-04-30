@@ -6,9 +6,9 @@ def main():
     data_path = "captures"
     eeg_reader = EEGEDFReader(data_path)
     
-    user = "User2"
-    letter = "N"
-    info = eeg_reader.read_edf_file(f'{user}/Letters/{user}_{letter}_1.edf')
+    user = "User22"
+    letter = "A"
+    info = eeg_reader.read_edf_file(f'{user}/Letters/{user}_{letter}_0.edf')
     
     # 2. Extraer datos y etiquetas
     signals = info['signals']  # Es una matriz (17, 250)

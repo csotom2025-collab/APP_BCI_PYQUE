@@ -8,3 +8,4 @@ datosLectura.csv
 venv/
 __pycache__/
 *.md
+/results

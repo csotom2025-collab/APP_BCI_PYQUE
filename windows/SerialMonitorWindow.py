@@ -10,6 +10,28 @@ from PyQt6.QtCore import QTimer,Qt,QThread,pyqtSignal
 import pyqtgraph as pg
 from utils.testDataReader import CSVReader  # Import for test mode
 from collections import deque
+from scipy.signal import butter, filtfilt, iirnotch
+
+class EEGFilter:
+    def __init__(self, fs=250, low=0.5, high=40, notch_freq=50):
+        self.fs = fs
+        
+        # Bandpass
+        self.b, self.a = butter(4, [low/(fs/2), high/(fs/2)], btype='band')
+        
+        # Notch
+        self.bn, self.an = iirnotch(notch_freq, 30, fs)
+
+    def apply(self, signal):
+        if len(signal) < 10:
+            return signal
+        
+        try:
+            filtered = filtfilt(self.b, self.a, signal)
+            filtered = filtfilt(self.bn, self.an, filtered)
+            return filtered
+        except:
+            return signal
 class SerialReader(QThread):
     error_signal = pyqtSignal(str)
     def __init__(self, port, baudrate, data_queue,sixteen_mode):
@@ -126,6 +148,7 @@ class RecordingThread(QThread):
         self.recording=False
         self.recording_df=None
         self.daemon=True
+        self.filter = EEGFilter(fs=250, low=0.5, high=40, notch_freq=50)
 
     def start_recording(self,columns_df,duration):
         self.columns_df=columns_df
@@ -154,6 +177,13 @@ class RecordingThread(QThread):
                 break
             try:
                 values = self.recording_queue.get(timeout=0.1)
+
+
+                values = np.array(values, dtype=np.float32)
+                values = self.filter.apply(values)
+                values = values.tolist()
+
+                        
                 if self.recording:
                     try:
                         row = [float(v.strip()) if isinstance(v,str) else float(v) for v in values]
@@ -178,6 +208,7 @@ class PlottingThread(QThread):
         self.treshold_red = -40000
         self.treshold_blue=40000
         self.treshold=0
+        self.filter = EEGFilter(fs=250, low=0.5, high=40, notch_freq=50)
         
     def run(self):
         self.running=True
@@ -197,7 +228,13 @@ class PlottingThread(QThread):
                     
                     for idx  in range(len((self.channels))):
                         values = [float(d[idx+1]) if d[idx+1].strip() else np.nan for d in data_tuples if d]
-                        all_values.append(values)
+                       
+                        values = np.array(values, dtype=np.float32)
+                        values = self.filter.apply(values)
+                        all_values.append(values.tolist())
+
+                        
+                        #all_values.append(values)
 
                     if len(times) > 0 and len(all_values) >0:
                         self.update_plots.emit(times,all_values,self.channels)
@@ -205,7 +242,7 @@ class PlottingThread(QThread):
             except Exception as e:
                 pass
                 #print(f"Error plottinh thread {e}")
-            time.sleep(.7)
+            time.sleep(.5)
     def stop(self):
         self.running=False
         self.quit()
@@ -216,10 +253,17 @@ class SignalsWindow(QMainWindow):
         self.setGeometry(100, 100, 1200, 800)
 
         self.data_queue = queue.Queue()
+        self.columnasTest = ["Tm","ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8","ch9","ch10","ch11","ch12","ch13","ch14","ch15","ch16"]
+        self.columnasReal = ["Tm","Oz","Po7","Po4","Po3","P4","P3","Po8","Pz","Fz","F2","F3","F4","AF3","Cz","AF4","F1"]
         self.df_eight = pd.DataFrame(columns=["Tm","ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8"])
+
+
+        self.columns = self.columnasReal if True else self.columnasTests
         self.eight_channels =["ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8"]
-        self.sixteen_channels = ["ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8","ch9","ch10","ch11","ch12","ch13","ch14","ch15","ch16"]
-        self.df_sixteen= pd.DataFrame(columns=["Tm","ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8","ch9","ch10","ch11","ch12","ch13","ch14","ch15","ch16"])
+        self.sixteen_channels = self.columns[1:]
+        self.df_sixteen= pd.DataFrame(columns=self.columns)
+
+        #  ["Oz","Po7","Po4","Po3","P4","P3","Po","Pz","Fz","F2","F3","F4,"AF3","Cz","AF4","F1"]
         self.serial_thread = None
         self.port = 'COM5'
         self.baudrate = 330400 *2
@@ -228,7 +272,7 @@ class SignalsWindow(QMainWindow):
         self.channels = self.sixteen_channels if self.sixteen_channels_mode else self.eight_channels
         self.df = self.df_sixteen if self.sixteen_channels_mode else self.df_eight
         self.setup_ui()
-        self.data_buffer =deque(maxlen=800)
+        self.data_buffer =deque(maxlen=1000)
         self.buffer_lock = threading.Lock()
         self.recording_thread = RecordingThread()
         #self.recording_thread.finished_record.connect(self.on_recording_finished)
@@ -419,7 +463,8 @@ class SignalsWindow(QMainWindow):
         Captura datos que se lean sin afectar visualizacion retorna el df .
         """
         print(f"Empezando a grabar por {duration} segundos...")
-        sixteen_columns = ["Tm","ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8","ch9","ch10","ch11","ch12","ch13","ch14","ch15","ch16"]
+        #sixteen_columns = ["Tm","ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8","ch9","ch10","ch11","ch12","ch13","ch14","ch15","ch16"]
+        sixteen_columns = self.columns
         eigth_columns = ["Tm","ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8"]
         self.recording_thread.start_recording(columns_df = (sixteen_columns if self.sixteen_channels_mode else eigth_columns),duration=duration)   
 

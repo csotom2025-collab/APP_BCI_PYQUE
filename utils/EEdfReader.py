@@ -4,13 +4,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 from scipy import signal,stats
+from scipy.integrate import trapezoid
 from pathlib import Path
 import re
 import re
-try:
-    import pywt
-except Exception:
-    pywt = None
+import pywt
+
 
 class EEGEDFReader:
     def __init__(self, data_path):
@@ -20,7 +19,7 @@ class EEGEDFReader:
             data_path (str or Path): Ruta donde se encuentran los archivos EDF
         """
         self.data_path = str(data_path)
-        self.sampling_rate = 160  # valor por defecto; se reemplaza si el archivo contiene info
+        self.sampling_rate = 250  # valor por defecto; se reemplaza si el archivo contiene info
     
     def list_edf_files(self, data_path=None, num=None,user=None):
         """Devuelve lista de archivos .edf en data_path (subdirectorios incluidos).
@@ -226,6 +225,43 @@ class EEGEDFReader:
                 window_features[f'{cname}_alpha_Abs'] = float(np.sum(power_vals[alpha_mask])) if alpha_mask.any() else 0.0
                 window_features[f'{cname}_beta_Abs'] = float(np.sum(power_vals[beta_mask])) if beta_mask.any() else 0.0
                 window_features[f'{cname}_gamma_Abs'] = float(np.sum(power_vals[gamma_mask])) if gamma_mask.any() else 0.0
+                # valores estadisticos en la frecuancias de las bandas
+                #medias
+                window_features[f'{cname}_delta_mean'] = float(np.mean(fft_vals[delta_mask])) if delta_mask.any() else np.nan
+                window_features[f'{cname}_theta_mean'] = float(np.mean(fft_vals[theta_mask])) if theta_mask.any() else np.nan
+                window_features[f'{cname}_alpha_mean'] = float(np.mean(fft_vals[alpha_mask])) if alpha_mask.any() else np.nan
+                window_features[f'{cname}_beta_mean'] = float(np.mean(fft_vals[beta_mask])) if beta_mask.any() else np.nan
+                window_features[f'{cname}_gamma_mean'] = float(np.mean(fft_vals[gamma_mask])) if gamma_mask.any() else np.nan
+                #desviasion estandar
+                window_features[f'{cname}_delta_std']=float(np.std(fft_vals[delta_mask])) if delta_mask.any() else np.nan
+                window_features[f'{cname}_theta_std']=float(np.std(fft_vals[theta_mask])) if theta_mask.any() else np.nan
+                window_features[f'{cname}_alpha_std']=float(np.std(fft_vals[alpha_mask])) if alpha_mask.any() else np.nan
+                window_features[f'{cname}_beta_std']=float(np.std(fft_vals[beta_mask])) if beta_mask.any() else np.nan
+                window_features[f'{cname}_gamma_std']=float(np.std(fft_vals[gamma_mask])) if gamma_mask.any() else np.nan
+                # Varianza
+                window_features[f'{cname}_delta_var']=float(np.var(fft_vals[delta_mask])) if delta_mask.any() else np.nan
+                window_features[f'{cname}_theta_var']=float(np.var(fft_vals[theta_mask])) if theta_mask.any() else np.nan
+                window_features[f'{cname}_alpha_var']=float(np.var(fft_vals[alpha_mask])) if alpha_mask.any() else np.nan
+                window_features[f'{cname}_beta_var']=float(np.var(fft_vals[beta_mask])) if beta_mask.any() else np.nan
+                window_features[f'{cname}_gamma_var']=float(np.var(fft_vals[gamma_mask])) if gamma_mask.any() else np.nan
+                # RMS
+                window_features[f'{cname}_delta_rms']=float(np.sqrt(np.mean(fft_vals[delta_mask]**2))) if delta_mask.any() else np.nan
+                window_features[f'{cname}_theta_rms']=float(np.sqrt(np.mean(fft_vals[theta_mask]**2))) if theta_mask.any() else np.nan
+                window_features[f'{cname}_alpha_rms']=float(np.sqrt(np.mean(fft_vals[alpha_mask]**2))) if alpha_mask.any() else np.nan
+                window_features[f'{cname}_beta_rms']=float(np.sqrt(np.mean(fft_vals[beta_mask]**2))) if beta_mask.any() else np.nan
+                window_features[f'{cname}_gamma_rms']=float(np.sqrt(np.mean(fft_vals[gamma_mask]**2))) if gamma_mask.any() else np.nan
+                # Skewness
+                window_features[f'{cname}_delta_skewness']=float(stats.skew(fft_vals[delta_mask])) if delta_mask.any() else np.nan
+                window_features[f'{cname}_theta_skewness']=float(stats.skew(fft_vals[theta_mask])) if theta_mask.any() else np.nan
+                window_features[f'{cname}_alpha_skewness']=float(stats.skew(fft_vals[alpha_mask])) if alpha_mask.any() else np.nan
+                window_features[f'{cname}_beta_skewness']=float(stats.skew(fft_vals[beta_mask])) if beta_mask.any() else np.nan
+                window_features[f'{cname}_gamma_skewness']=float(stats.skew(fft_vals[gamma_mask])) if gamma_mask.any() else np.nan
+                # Kurtosis
+                window_features[f'{cname}_delta_kurtosis']=float(stats.kurtosis(fft_vals[delta_mask])) if delta_mask.any() else np.nan
+                window_features[f'{cname}_theta_kurtosis']=float(stats.kurtosis(fft_vals[theta_mask])) if theta_mask.any() else np.nan
+                window_features[f'{cname}_alpha_kurtosis']=float(stats.kurtosis(fft_vals[alpha_mask])) if alpha_mask.any() else np.nan
+                window_features[f'{cname}_beta_kurtosis']=float(stats.kurtosis(fft_vals[beta_mask])) if beta_mask.any() else np.nan
+                window_features[f'{cname}_gamma_kurtosis']=float(stats.kurtosis(fft_vals[gamma_mask])) if gamma_mask.any() else np.nan
                 # 4. Potencia Relativa de bandas (Potencia de la banda / Potencia total)
                 if total_power > 0:
                     window_features[f'{cname}_delta_rel'] = window_features[f'{cname}_delta_Abs'] / total_power
@@ -283,7 +319,7 @@ class EEGEDFReader:
     
     def plot_feactureres(self, features_df, channel_names, filename,
                         window_size=256, overlap=0.5,
-                        out_dir=Path(r"D:/SeñaelesEEGpy/results"), save=True, show=True):
+                        out_dir=Path(r"./results"), save=True, show=True):
         """
         Grafica las características extraídas para los canales indicados
         en una CUADRÍCULA DE 3 FILAS x 2 COLUMNAS por cada canal.
@@ -385,7 +421,7 @@ class EEGEDFReader:
         return last_out_path
     
     def plot_channels_and_spectra(self, data, channel_names, time_window=None,
-                                nperseg=512, out_dir=Path(r"D:/SeñaelesEEGpy/results"), save=True, show=True,
+                                nperseg=512, out_dir=Path(r"./results"), save=True, show=True,
                                 features_df=None, window_size=256, overlap=0.5):
         """
         Grafica señales y PSD. Sombrea bandas, dibuja líneas verticales en límites de banda,
@@ -472,7 +508,7 @@ class EEGEDFReader:
             ch_powers = {}
             for bname, (lo, hi) in bands.items():
                 mask = (freqs >= lo) & (freqs <= hi)
-                power = float(np.trapz(psd[mask], freqs[mask])) if mask.any() else 0.0
+                power = float(trapezoid(psd[mask], freqs[mask])) if mask.any() else 0.0
                 ch_powers[bname] = power
             psd_band_powers[available[ch_idx]] = ch_powers
         # sombreado y lineas verticales
@@ -532,7 +568,7 @@ class EEGEDFReader:
 
     def plot_band_powers(self, features_df, data, channel_names,
                         window_size=256, overlap=0.5,
-                        out_dir=Path(r"D:/SeñaelesEEGpy/results"), save=True, show=True):
+                        out_dir=Path(r"./results"), save=True, show=True):
         """
         Grafica las potencias de banda para los canales indicados.
         Busca columnas del tipo <safe_channel_name>_<band>.
@@ -579,7 +615,7 @@ class EEGEDFReader:
     
     def plot_power_relative_bandas(self, features_df, canales, filename,
                                 window_size=256, overlap=0.5,
-                                out_dir=Path(r"D:/SeñaelesEEGpy/results"), 
+                                out_dir=Path(r"./results"), 
                                 save=True, show=True):
         """
         Grafica las potencias relativas de banda (como áreas apiladas) para canales específicos.
@@ -665,7 +701,7 @@ class EEGEDFReader:
     
     def plot_espectrograma_banda(self, signal_data, fs, band,bandName, channel_name,filename,
                                 nperseg=256, noverlap=128,
-                                out_dir=Path(r"D:/SeñaelesEEGpy/results"), save=True, show=True):
+                                out_dir=Path(r"./results"), save=True, show=True):
         """
         Grafica el espectrograma para una banda específica de un canal.
         Args:
@@ -732,6 +768,12 @@ class EEGEDFReader:
             raise ValueError("signal_data debe tener 2 o 3 dimensiones: (canales, muestras) o (canales, muestras, ensayos)")
         
         return data_car
+    
+    ######################################################################################
+    ####################################################################################
+    # --- NUEVOs MÉTODO: Obtener muestras por ensayo (ventana) --- Para la BD de KUMAR
+    ######################################################################################
+    ######################################################################################
     
     def obtener_muestras_por_ensayo(self, signals, window_size=32, overlap=8, 
                                     channel_names=None, available_channel_names=None):
@@ -967,16 +1009,16 @@ class EEGEDFReader:
     
 def main():
     # Configuración de rutas
-    data_path = r"D:/EEG_Python/Imagined_speech_EEG_edf/Image"  # Cambia si hace falta
+    data_path = r"./EEG_Python/Imagined_speech_EEG_edf/Image"  # Cambia si hace falta
     # Ruta de resultados
-    results_dir = Path(r"D:/EEG_Python/results/Image")
+    results_dir = Path(r"./results/Image")
     results_dir.mkdir(parents=True, exist_ok=True)
     # Inicializar lector
     eeg_reader = EEGEDFReader(data_path)
     # Listar archivos (ejemplo buscando sufijo '0')
     #'Digit':['0','1','2','3','4','5','6','7','8','9'],
     #'Char':['A','C','F','H','J','M','P','S','T','Y']
-    #'Image':['Apple','Car','Dog','Gold','Mobile','Rose','Scooter','Tiger','Wallet','Watch']         
+    #'Controls':["───", "⟵", "↩"]       
     sufijo=['Apple','Car','Dog','Gold','Mobile','Rose','Scooter','Tiger','Wallet','Watch']
     
     for rep in sufijo:  # Procesar varias veces para pruebas

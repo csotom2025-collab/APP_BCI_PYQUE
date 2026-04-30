@@ -45,7 +45,7 @@ class CaptureWindow(QWidget):
         self.button_start_capture.clicked.connect(self.start_capture)
 
         self.button_simulation = QPushButton("Iniciar Captura N veces")
-        self.button_simulation.clicked.connect(self.start_simulation)
+        self.button_simulation.clicked.connect(self.start_n_times)
         self.duration_recording_edit_line = QLineEdit()
         self.duration_recording_edit_line.setText("2")
         self.n_times_edit_line = QLineEdit()
@@ -68,10 +68,10 @@ class CaptureWindow(QWidget):
         self.layout.addWidget(QLabel("Duracion grabacion"), 4, 0)
         self.layout.addWidget(self.duration_recording_edit_line,4,1)
         self.layout.addWidget(self.button_start_capture, 5, 0, 1, 2)
-        self.layout.addWidget(self.button_simulation, 6, 0, 1, 2)
-        self.layout.addWidget(self.grid_button, 7, 0, 1, 2)
-        # self.layout.addWidget(QLabel("Veces:"), 7, 0, 1, 1)
-        # self.layout.addWidget(self.n_times_edit_line, 7, 1, 1, 1)
+        self.layout.addWidget(self.button_simulation, 7, 0, 1, 2)
+        self.layout.addWidget(self.grid_button, 8, 0, 1, 2)
+        self.layout.addWidget(QLabel("Veces:"), 6, 0, 1, 1)
+        self.layout.addWidget(self.n_times_edit_line, 6, 1, 1, 1)
         self.setLayout(self.layout)
         self.move(300, 350)
 
@@ -105,8 +105,18 @@ class CaptureWindow(QWidget):
         duration= int(duration)
         self.controller_save_capture.start_capture(user,character_type,character,duration)
 
-    def start_simulation(self):
-        self.controller_keyboard.start_simulation()
+    def start_n_times(self):
+        user = "User" + self.user_edit_line.text()
+        #path = self.path_edit_line.text()
+        character = self.combo_box_character.currentText()
+        character_type = self.combo_box_character_type.currentText()
+        
+        duration = self.duration_recording_edit_line.text()
+        ###salvar captura
+        duration= int(duration)
+        times = self.n_times_edit_line.text()
+        times = int(times)
+        self.controller_save_capture.start_capture_n_times(user, character_type, character, duration, times,self.controller_keyboard)
     def show_grid(self):
         self.keyboard_window = KeyboardWindow(training_mode=True)
         self.keyboard_window.show()

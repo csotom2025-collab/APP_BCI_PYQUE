@@ -37,3 +37,5 @@ class ControllerKeyboardCapture:
         ##SAVE_CAPTURE
         self.flash_idx += 1
         QTimer.singleShot(int(PAUSE_BETWEEN * 1000), lambda: self._flash_step(flash_time))
+    def hide_grid(self):
+        self.keyboard_window.hide_grid()

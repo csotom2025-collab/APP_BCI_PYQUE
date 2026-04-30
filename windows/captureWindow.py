@@ -4,6 +4,7 @@ from controllers.KeyboardCaptureController import ControllerKeyboardCapture
 from controllers.SaveCaptureController import controllerSaveCapture
 from windows.gridWindow import BlackScreen, KeyboardWindow
 from PyQt6.QtGui import QCloseEvent
+from PyQt6.QtCore import QTimer, QTimer
 
 
 LETTERS = ["A", "E", "I", "O", "U",
@@ -45,7 +46,7 @@ class CaptureWindow(QWidget):
         self.button_start_capture.clicked.connect(self.start_capture)
 
         self.button_simulation = QPushButton("Iniciar Captura N veces")
-        self.button_simulation.clicked.connect(self.start_n_times)
+        self.button_simulation.clicked.connect(self.start_capture_n_times_after_rest)
         self.duration_recording_edit_line = QLineEdit()
         self.duration_recording_edit_line.setText("2")
         self.n_times_edit_line = QLineEdit()
@@ -117,6 +118,12 @@ class CaptureWindow(QWidget):
         times = self.n_times_edit_line.text()
         times = int(times)
         self.controller_save_capture.start_capture_n_times(user, character_type, character, duration, times,self.controller_keyboard)
+    def start_capture_n_times_after_rest(self):
+        self.show_grid_after_rest()
+        qtime = QTimer()
+        qtime.singleShot(2000, self.start_n_times)
+    def show_grid_after_rest(self):
+        self.keyboard_window.show_grid_after_rest()
     def show_grid(self):
         self.keyboard_window = KeyboardWindow(training_mode=True)
         self.keyboard_window.show()

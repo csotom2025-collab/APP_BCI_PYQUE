@@ -154,13 +154,14 @@ class controllerSaveCapture:
             """Callback que se ejecuta después de cada guardado"""
             self.capture_count += 1
             print(f"✅ Grabación {self.capture_count}/{self.times} completada")
-
+            print("Descanso")
             if self.capture_count < self.times:
                 # Programar la siguiente grabación con un pequeño delay
                 QTimer.singleShot(1000, start_next_capture)  # 1 segundo de pausa entre grabaciones
             else:
                 # Todas las grabaciones completadas
                 print(f"\n🎉 Todas las {self.times} grabaciones de '{self.character}' completadas!")
+                controller_keyboard.hide_grid()  # Ocultar la cuadrícula al finalizar
 
         def start_next_capture():
             """Inicia la siguiente grabación"""

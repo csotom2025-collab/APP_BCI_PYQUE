@@ -17,7 +17,7 @@ class EEGFilter:
         self.fs = fs
         
         # Bandpass
-        self.b, self.a = butter(4, [low/(fs/2), high/(fs/2)], btype='band')
+        self.b, self.a = butter(2, [low/(fs/2), high/(fs/2)], btype='band')
         
         # Notch
         self.bn, self.an = iirnotch(notch_freq, 30, fs)
@@ -42,7 +42,50 @@ class SerialReader(QThread):
         self.sixteen_mode = sixteen_mode
         self.running = False
         self.ser = None
+        self.reading_registers = False
+        self.registers={}
 
+    def printRegisters(self):
+        # self.ser.write(b'r')
+        # return
+        if self.ser is not None and self.ser.is_open:
+            try:
+                self.reading_registers = True
+                print("\n--- Solicitando Registros ---")
+                
+                # PASO 1: Detener la transmisión de datos (Comando 's' o 'STOP')
+                # Esto es vital para que el ADS deje de escupir números
+                self.ser.write(b's') 
+                time.sleep(0.1)
+                
+                # PASO 2: Limpiar TODO lo que quedó en el cable
+                self.ser.reset_input_buffer()
+                
+                # PASO 3: Ahora sí, pedir registros
+                self.ser.write(b'r')
+                
+                # PASO 4: Esperar a que el Arduino termine de escribir
+                time.sleep(0.2) 
+                
+                while self.ser.in_waiting > 0:
+                    line = self.ser.readline().decode('utf-8', errors='replace').strip()
+                    registers = line.split(",")
+                    reg_name = registers[0]
+                    reg_addr = registers[1]
+                    reg_value = registers[2]
+                    binary_value = bin(int(reg_value, 16))[2:].zfill(8)
+                    self.registers[reg_name] = (reg_addr, reg_value, binary_value)
+                    #print(f"{reg_name} ({reg_addr}): {reg_value}, bin: {binary_value}")
+                    # if line:
+                    #     print(line)
+
+                # PASO 5: Volver a activar el flujo de datos ('x' o 'START')
+                self.ser.write(b'x')
+                
+                self.reading_registers = False
+            except Exception as e:
+                print(f"Error: {e}")
+                self.reading_registers = False
     def run(self):
         last_n=1
         try:
@@ -65,15 +108,27 @@ class SerialReader(QThread):
             # ------------------------------------------------
 
             while self.running:
-                if self.ser.in_waiting > 0:
-                    raw = self.ser.readline()
-                    line = raw.decode('utf-8', errors='replace').strip()
-                    if line.endswith(','):
-                        line = line[:-1]
-                    values = line.split(",")
-                    if len(values) == (9 if not self.sixteen_mode else 17):
-                        self.data_queue.put(values)
-                        sample_count += 1
+                if not self.reading_registers:
+                
+                    if self.ser.in_waiting > 0:
+                        raw = self.ser.readline()
+                        line = raw.decode('utf-8', errors='replace').strip()
+                        if line.endswith(','):
+                            line = line[:-1]
+                        values = line.split(",")
+                        if len(values) == (9 if not self.sixteen_mode else 17):
+                            self.data_queue.put(values)
+                            sample_count += 1
+                        # elif len(values) == 11:
+                        #     registers = values
+                        #     reg_name = registers[0]
+                        #     reg_addr = registers[1]
+                        #     reg_value = registers[2]
+                        #     binary_value = bin(int(reg_value, 16))[2:].zfill(8)
+                        #     self.registers[reg_name] = (reg_addr, reg_value, binary_value)
+                        #     print(f"{reg_name} ({reg_addr}): {reg_value}, bin: {binary_value}")
+                else:
+                    time.sleep(0.2)  # Evitar un bucle muy rápido mientras se leen registros
 
 
                 # # if self.ser.in_waiting:
@@ -168,7 +223,8 @@ class RecordingThread(QThread):
         self.recording=False
         self.running=False
         self.quit()
-
+    def get_recorded_data(self):
+        return self.recording_df
     def get_filtered_recording_df(self):
         if self.recording_df is None:
             return None
@@ -185,7 +241,23 @@ class RecordingThread(QThread):
                 df_filtered[ch] = filtered_values
             except Exception:
                 pass
+        # # # # V_REF = 4.5
+        # # # # GAIN = 24  # Ajusta esto si usas otra ganancia en el ADS1299
+        # # # # LSB_UNIT = V_REF / (GAIN * (2**23 - 1))
 
+        # # # # # ... dentro de tu hilo ...
+        # # # # for idx, ch in enumerate(channel_columns):
+        # # # #     # 1. Obtener valores crudos
+        # # # #     raw_values = df_filtered[ch].values
+        # # # #     values = np.array(raw_values, dtype=np.float32)
+
+        # # # #     # 2. Convertir a Microvoltios (uV) antes de filtrar
+        # # # #     # Aplicamos la fórmula: count * LSB_UNIT * 1e6
+        # # # #     values = values * LSB_UNIT * 1000000 
+
+        # # # #     # 3. Aplicar filtros (ahora sobre valores reales)
+        # # # #     values = self.filter.apply(values)
+        # # # #     df_filtered[ch] = values
         return df_filtered
 
     def run(self):
@@ -220,7 +292,9 @@ class PlottingThread(QThread):
         self.treshold_red = -40000
         self.treshold_blue=40000
         self.treshold=0
-        self.filter = EEGFilter(fs=250, low=0.5, high=40, notch_freq=50)
+        #self.filter = EEGFilter(fs=250, low=0.5, high=40, notch_freq=50)
+        self.filter = EEGFilter(fs=250, low=0.1, high=50, notch_freq=60)
+        self.applied_filter = True
         
     def run(self):
         self.running=True
@@ -238,34 +312,34 @@ class PlottingThread(QThread):
                     times = [float (d[0]) for d in data_tuples if d]
                     all_values =[]
                     
-                    # for idx  in range(len((self.channels))):
-                    #     values = [float(d[idx+1]) if d[idx+1].strip() else np.nan for d in data_tuples if d]
+                    for idx  in range(len((self.channels))):
+                        values = [float(d[idx+1]) if d[idx+1].strip() else np.nan for d in data_tuples if d]
                        
-                    #     values = np.array(values, dtype=np.float32)
-                    #     values = self.filter.apply(values)
-                    #     all_values.append(values.tolist())
-
-                        
-                        #all_values.append(values)
+                        if self.applied_filter:
+                            values = np.array(values, dtype=np.float32)
+                            values = self.filter.apply(values)
+                            all_values.append(values.tolist())
+                        else:
+                            all_values.append(values)
 
                     # Definir constantes antes del bucle o en el __init__
-                    V_REF = 4.5
-                    GAIN = 24  # Ajusta esto si usas otra ganancia en el ADS1299
-                    LSB_UNIT = V_REF / (GAIN * (2**23 - 1))
+                    # # # V_REF = 4.5
+                    # # # GAIN = 24  # Ajusta esto si usas otra ganancia en el ADS1299
+                    # # # LSB_UNIT = V_REF / (GAIN * (2**23 - 1))
 
-                    # ... dentro de tu hilo ...
-                    for idx in range(len(self.channels)):
-                        # 1. Obtener valores crudos
-                        raw_values = [float(d[idx+1]) if d[idx+1].strip() else np.nan for d in data_tuples if d]
-                        values = np.array(raw_values, dtype=np.float32)
+                    # # # # ... dentro de tu hilo ...
+                    # # # for idx in range(len(self.channels)):
+                    # # #     # 1. Obtener valores crudos
+                    # # #     raw_values = [float(d[idx+1]) if d[idx+1].strip() else np.nan for d in data_tuples if d]
+                    # # #     values = np.array(raw_values, dtype=np.float32)
 
-                        # 2. Convertir a Microvoltios (uV) antes de filtrar
-                        # Aplicamos la fórmula: count * LSB_UNIT * 1e6
-                        values = values * LSB_UNIT * 1000000 
+                    # # #     # 2. Convertir a Microvoltios (uV) antes de filtrar
+                    # # #     # Aplicamos la fórmula: count * LSB_UNIT * 1e6
+                    # # #     values = values * LSB_UNIT * 1000000 
 
-                        # 3. Aplicar filtros (ahora sobre valores reales)
-                        values = self.filter.apply(values)
-                        all_values.append(values.tolist())
+                    # # #     # 3. Aplicar filtros (ahora sobre valores reales)
+                    # # #     values = self.filter.apply(values)
+                    # # #     all_values.append(values.tolist())
 
                     if len(times) > 0 and len(all_values) >0:
                         self.update_plots.emit(times,all_values,self.channels)
@@ -277,6 +351,8 @@ class PlottingThread(QThread):
     def stop(self):
         self.running=False
         self.quit()
+    def set_apply_filter(self, apply_filter):
+        self.applied_filter = apply_filter
 class SignalsWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -293,7 +369,7 @@ class SignalsWindow(QMainWindow):
         self.eight_channels =["ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8"]
         self.sixteen_channels = self.columns[1:]
         self.df_sixteen= pd.DataFrame(columns=self.columns)
-
+        self.apply_filter = True
         #  ["Oz","Po7","Po4","Po3","P4","P3","Po","Pz","Fz","F2","F3","F4,"AF3","Cz","AF4","F1"]
         self.serial_thread = None
         self.port = 'COM5'
@@ -303,7 +379,7 @@ class SignalsWindow(QMainWindow):
         self.channels = self.sixteen_channels if self.sixteen_channels_mode else self.eight_channels
         self.df = self.df_sixteen if self.sixteen_channels_mode else self.df_eight
         self.setup_ui()
-        self.data_buffer =deque(maxlen=500)
+        self.data_buffer =deque(maxlen=1200)
         self.buffer_lock = threading.Lock()
         self.recording_thread = RecordingThread()
         #self.recording_thread.finished_record.connect(self.on_recording_finished)
@@ -322,7 +398,13 @@ class SignalsWindow(QMainWindow):
         self.channels_checkbox.setChecked(self.sixteen_channels_mode)
         self.channels_checkbox.stateChanged.connect(self.toggle_channels)
         self.recording = False
-
+        self.filter_checkbox = QCheckBox("Aplicar Filtro")
+        self.filter_checkbox.setChecked(self.apply_filter)
+        self.filter_checkbox.stateChanged.connect(self.set_apply_filter)
+        # self.button_print_registers = QPushButton("Print Registers")
+        # self.button_print_registers.clicked.connect(self.check_registers)
+        self.button_check_loff_statp = QPushButton("Check LOFF_STATP")
+        self.button_check_loff_statp.clicked.connect(self.checkRegisterLOFF_STATP)
         # Plot setup
         self.plot_widget = pg.GraphicsLayoutWidget()
         self.plots = []
@@ -342,6 +424,9 @@ class SignalsWindow(QMainWindow):
         control_layout.addWidget(self.label_baudrate)
         control_layout.addWidget(self.channels_checkbox)
         control_layout.addWidget(self.test_checkbox)
+        control_layout.addWidget(self.filter_checkbox)
+        control_layout.addWidget(self.button_print_registers)
+        control_layout.addWidget(self.button_check_loff_statp)
         control_layout.addWidget(self.start_button)
         control_layout.addWidget(self.stop_button)
 
@@ -377,6 +462,11 @@ class SignalsWindow(QMainWindow):
         self.channels = self.sixteen_channels if self.sixteen_channels_mode else self.eight_channels
         self.df = self.df_sixteen if self.sixteen_channels_mode else self.df_eight
         self._rebuild_plots()
+    def set_apply_filter(self, state):
+        self.apply_filter = state == 2
+        if self.plotting_thread:
+            self.plotting_thread.set_apply_filter(self.apply_filter)
+
 
     def _rebuild_plots(self):
         self.plots = []
@@ -488,7 +578,10 @@ class SignalsWindow(QMainWindow):
         event.accept()
     def stop_recording(self):
         self.recording_thread.stop_recording()
-        return self.recording_thread.get_filtered_recording_df()
+        if self.apply_filter:
+            return self.recording_thread.get_filtered_recording_df()
+        else:
+            return self.recording_thread.get_recorded_data()
 
     def start_recording(self, duration=2):
         """
@@ -502,8 +595,43 @@ class SignalsWindow(QMainWindow):
         self.recording_thread.start_recording(columns_df = (sixteen_columns if self.sixteen_channels_mode else eigth_columns),duration=duration)   
 
     def return_recorded_data(self):
-        return self.recording_thread.get_filtered_recording_df()
-
+        if self.apply_filter:
+            return self.recording_thread.get_filtered_recording_df()
+        else:            
+            return self.recording_thread.get_recorded_data()
+    def check_registers(self,print_output=True):
+        print("Enviando comando para imprimir registros...")
+        if self.serial_thread :
+            self.serial_thread.printRegisters()
+        if not print_output:
+            return
+        QTimer().singleShot(600, self.printRegisters)  # Esperar medio segundo antes de revisar el registro
+    def printRegisters(self):
+        self.registers = self.serial_thread.registers
+        print("\n--- Registros ADS1299 ---")
+        for reg_name, (reg_addr, reg_value, binary_value) in self.registers.items():
+            print(f"{reg_name} ({reg_addr}): {reg_value}, bin: {binary_value}")
+    def checkRegisterLOFF_STATP(self):
+        self.check_registers(print_output=False)
+        QTimer().singleShot(600, self.print_disconnected_channels)  # Esperar medio segundo antes de revisar el registro
+    def print_disconnected_channels(self):
+        self.registers = self.serial_thread.registers
+        loff_statp = self.registers.get("LOFF_STATP")
+        if loff_statp is None:
+            print("No se pudo obtener el registro LOFF_STATP.")
+            return
+        loff_statp = loff_statp[2] 
+        print(f"LOFF_STATP: {loff_statp}")
+        status = [int(bit) for bit in loff_statp]
+        status = np.array(status)
+        status = status[::-1]  # Invertir para que el bit 0 esté a la derecha
+        canales_np_8= np.array(self.channels[:8])
+        
+        disconnected_channels = canales_np_8[status == 1]
+        if len(disconnected_channels) > 0:
+            print(f"Canales desconectados: {', '.join(disconnected_channels)}")
+        else:
+            print("Todos los canales están conectados correctamente.")
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = SignalsWindow()

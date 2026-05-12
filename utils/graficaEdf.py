@@ -6,8 +6,9 @@ def main():
     data_path = "captures"
     eeg_reader = EEGEDFReader(data_path)
     
-    user = "User22"
-    letter = "A"
+    user_id = int(input("\nIngrese el número de usuario: ").strip())
+    user = f"User{user_id}"
+    letter = input("\nIngrese la letra: ").strip()
     info = eeg_reader.read_edf_file(f'{user}/Letters/{user}_{letter}_0.edf')
     
     # 2. Extraer datos y etiquetas

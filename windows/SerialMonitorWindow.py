@@ -347,7 +347,7 @@ class PlottingThread(QThread):
             except Exception as e:
                 pass
                 #print(f"Error plottinh thread {e}")
-            time.sleep(.5)
+            time.sleep(.4)
     def stop(self):
         self.running=False
         self.quit()
@@ -425,7 +425,7 @@ class SignalsWindow(QMainWindow):
         control_layout.addWidget(self.channels_checkbox)
         control_layout.addWidget(self.test_checkbox)
         control_layout.addWidget(self.filter_checkbox)
-        control_layout.addWidget(self.button_print_registers)
+        #control_layout.addWidget(self.button_print_registers)
         control_layout.addWidget(self.button_check_loff_statp)
         control_layout.addWidget(self.start_button)
         control_layout.addWidget(self.stop_button)
@@ -600,7 +600,6 @@ class SignalsWindow(QMainWindow):
         else:            
             return self.recording_thread.get_recorded_data()
     def check_registers(self,print_output=True):
-        print("Enviando comando para imprimir registros...")
         if self.serial_thread :
             self.serial_thread.printRegisters()
         if not print_output:

@@ -134,7 +134,7 @@ class controllerSaveCapture:
             self.edf_full_path = path_user + filename + nuevoNum + ".edf"
 
         qtime = QTimer()
-        qtime.singleShot(duration*1000+600, lambda: self.save_capture(callback))
+        qtime.singleShot(duration*1000+400, lambda: self.save_capture(callback))
         #qtime.singleShot(duration*1000+600, self.save_capture_edf)
     
     def start_capture_n_times(self, user, character_type, character, duration, times,controller_keyboard):

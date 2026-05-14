@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QComboBox, QPushButton, QLabel, QLineEdit,QMainWindow, QApplication, QGridLayout
+from PyQt6.QtWidgets import QMessageBox, QWidget, QVBoxLayout, QComboBox, QPushButton, QLabel, QLineEdit,QMainWindow, QApplication, QGridLayout
 import sys
 from controllers.KeyboardCaptureController import ControllerKeyboardCapture
 from controllers.SaveCaptureController import controllerSaveCapture
@@ -12,7 +12,7 @@ LETTERS = ["A", "E", "I", "O", "U",
     "C", "T", "M", "P", "B",
     "G", "V", "Y", "Q", "H",
     "F", "Z", "J", "Ñ", "X",
-    "K ", "W"]
+    "K", "W"]
 NUMBERS = ["1", "2", "3",
     "4", "5", "6",
     "7", "8", "9", "0"]
@@ -28,6 +28,8 @@ class CaptureWindow(QWidget):
         self.update_character_options()
         self.controller_keyboard = ControllerKeyboard
         self.controller_save_capture = ControllerSaveCapture
+        self.keyboard_window = None
+        self.black_screen = None
 
     def setup_ui(self):
         self.layout = QGridLayout()
@@ -98,6 +100,7 @@ class CaptureWindow(QWidget):
         # user = self.combo_box_users.currentText()
         user = "User" + self.user_edit_line.text()
         #path = self.path_edit_line.text()
+        #self.show_grid()
         character = self.combo_box_character.currentText()
         character_type = self.combo_box_character_type.currentText()
         self.controller_keyboard.flash_character(character)
@@ -105,6 +108,7 @@ class CaptureWindow(QWidget):
         ###salvar captura
         duration= int(duration)
         self.controller_save_capture.start_capture(user,character_type,character,duration)
+        
 
     def start_n_times(self):
         user = "User" + self.user_edit_line.text()
@@ -119,23 +123,40 @@ class CaptureWindow(QWidget):
         times = int(times)
         self.controller_save_capture.start_capture_n_times(user, character_type, character, duration, times,self.controller_keyboard)
     def start_capture_n_times_after_rest(self):
-        self.show_grid_after_rest()
+        if not self.show_grid_after_rest():
+            return
+        print("Mostrando Pantalla")
         qtime = QTimer()
-        qtime.singleShot(2000, self.start_n_times)
+        qtime.singleShot(1500, self.start_n_times)
     def show_grid_after_rest(self):
+        if not self.keyboard_window or not self.isBlackScreenVisible():
+            print("No hay ventana de teclado, mostrando mensaje de error")
+            QMessageBox.information(self, "Advertencia, No Hay teclado", "Primero debes mostrar el teclado para iniciar la captura de datos")
+            return False
         self.keyboard_window.show_grid_after_rest()
+        return True
     def show_grid(self):
-        self.keyboard_window = KeyboardWindow(training_mode=True)
-        self.keyboard_window.show()
-        self.controller_keyboard.keyboard_window = self.keyboard_window  # Actualiza la referencia en el controlador
-        self.black_screen = BlackScreen()
-        self.black_screen.show()
+        if not self.isBlackScreenVisible() and self.black_screen:
+                self.black_screen.close()
+                self.black_screen = None
+                self.keyboard_window = None
+        if not self.keyboard_window:
+            self.keyboard_window = KeyboardWindow(training_mode=True)
+            # self.keyboard_window.show()  # No mostrar por separado, ahora está en black_screen
+            self.controller_keyboard.keyboard_window = self.keyboard_window  # Actualiza la referencia en el controlador
+            self.black_screen = BlackScreen(self.keyboard_window)
+            self.black_screen.show()
+        else:
+            self.show_grid_after_rest()
+    def isBlackScreenVisible(self):
+        return self.black_screen and self.black_screen.isVisible()
     def closeEvent(self, event: QCloseEvent):
         """Cierra todas las ventanas secundarias y la aplicación."""
         #Acepta el evento de cierre de la ventana principal
         event.accept()
-        self.keyboard_window.close()
-        self.black_screen.close()
+        if self.keyboard_window:
+            self.keyboard_window.close()
+            self.black_screen.close()
     def quit(self):
         self.close()
         if self.keyboard_window:

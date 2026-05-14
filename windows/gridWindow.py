@@ -46,8 +46,9 @@ DARK_THEME = {
 
 
 class BlackScreen(QWidget):
-    def __init__(self):
+    def __init__(self,keyboard_window=None):
         super().__init__()
+
         self.setWindowTitle("Pantalla Negra")
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.setStyleSheet("background-color: black;")
@@ -70,6 +71,33 @@ class BlackScreen(QWidget):
         # Widget central para el contenido
         self.central_widget = QWidget()
         self.central_widget.setStyleSheet("background-color: black;")
+        
+        # Agregar el keyboard_window si se proporciona
+        if keyboard_window:
+            self.keyboard_window = keyboard_window
+            # Crear layout para central_widget y agregar keyboard_window centrado
+            central_layout = QVBoxLayout(self.central_widget)
+            central_layout.setContentsMargins(0, 0, 0, 0)
+            central_layout.addStretch()  # Espacio arriba
+            inner_layout = QHBoxLayout()
+            inner_layout.addStretch()  # Espacio izquierda
+            inner_layout.addWidget(self.keyboard_window)
+            inner_layout.addStretch()  # Espacio derecha
+            central_layout.addLayout(inner_layout)
+            central_layout.addStretch()  # Espacio abajo
+        else:
+            # Si no se proporciona, crear uno nuevo
+            self.keyboard_window = KeyboardWindow(training_mode=True)
+            central_layout = QVBoxLayout(self.central_widget)
+            central_layout.setContentsMargins(0, 0, 0, 0)
+            central_layout.addStretch()
+            inner_layout = QHBoxLayout()
+            inner_layout.addStretch()
+            inner_layout.addWidget(self.keyboard_window)
+            inner_layout.addStretch()
+            central_layout.addLayout(inner_layout)
+            central_layout.addStretch()
+        
         self.main_layout.addWidget(self.central_widget)
         
         self.setLayout(self.main_layout)
@@ -253,8 +281,7 @@ class OutputLine(QWidget):
 class KeyboardWindow(QWidget):
     def __init__(self, training_mode=False):
         super().__init__()
-        if  training_mode:
-            self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+        # No set window flags here, since it can be used as a widget or window
         self.text_field_window  = TextField("")
         self.text_field_controller = TextFieldController(self.text_field_window)
         self.text_field_window.set_controller(self.text_field_controller)
@@ -262,7 +289,8 @@ class KeyboardWindow(QWidget):
         dpi = self.screen().physicalDotsPerInch()
         pixels_per_cm = dpi / 2.54
         size_pixels = int(10  * pixels_per_cm)
-        self.setFixedSize(size_pixels, size_pixels)
+        self.setMaximumSize(size_pixels, size_pixels)  # Tamaño máximo para evitar expansión excesiva
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)  # Permitir centrado
         self.current_theme = self.load_theme()
         self.training_mode = training_mode   
         self.original_font = QFont()
@@ -375,6 +403,7 @@ class KeyboardWindow(QWidget):
             self.add_character(button.text())
 
     def flash_button(self, button, duration=1.0, COLOR="#00FF00"):
+        print(f"Botón '{button.text()}' seleccionado. Flash color: {COLOR}")
         if button.text() in blueComd:
            COLOR="#0096FF"
         # Aplicar efecto de flash amarillo

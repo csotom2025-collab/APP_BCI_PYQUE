@@ -7,7 +7,8 @@ from PyQt6.QtWidgets import QSizePolicy
 from PyQt6.QtGui import QCloseEvent, QFont
 from PyQt6.QtCore import QPoint
 import random
-from controllers.TextFieldController import TextFieldController
+import time
+#from controllers.TextFieldController import TextFieldController
 from windows.TextFieldWindow import TextField
 
 GRID = [
@@ -282,9 +283,9 @@ class KeyboardWindow(QWidget):
     def __init__(self, training_mode=False):
         super().__init__()
         # No set window flags here, since it can be used as a widget or window
-        self.text_field_window  = TextField("")
-        self.text_field_controller = TextFieldController(self.text_field_window)
-        self.text_field_window.set_controller(self.text_field_controller)
+        # self.text_field_window  = TextField("")
+        # self.text_field_controller = TextFieldController(self.text_field_window)
+        # self.text_field_window.set_controller(self.text_field_controller)
         self.setWindowTitle("Grid de botones")
         dpi = self.screen().physicalDotsPerInch()
         pixels_per_cm = dpi / 2.54
@@ -386,7 +387,7 @@ class KeyboardWindow(QWidget):
        
 
     def button_clicked(self, button):
-        print("Boton seleccionado :" + button.text())
+        #print("Boton seleccionado :" + button.text())
         if button.text() in greenComd:
             self.flash_button(button, COLOR="#00FF00")  # Flash verde
         if button.text() in blueComd:
@@ -403,7 +404,7 @@ class KeyboardWindow(QWidget):
             self.add_character(button.text())
 
     def flash_button(self, button, duration=1.0, COLOR="#00FF00"):
-        print(f"Botón '{button.text()}' seleccionado. Flash color: {COLOR}")
+        #print(f"Botón '{button.text()}' seleccionado. Flash color: {COLOR}")
         if button.text() in blueComd:
            COLOR="#0096FF"
         # Aplicar efecto de flash amarillo
@@ -504,13 +505,14 @@ class KeyboardWindow(QWidget):
             return
         self.output_line.add_character(char)
 
-    def start_paradigm(self):
+    def start_paradigm(self,times=5):
         """Inicia el ciclo de épocas con el paradigma de ajedrez"""
+        self.init_time= time.time()
         self.theme_button.setEnabled(False) # Bloquear botón mientras corre
         self.current_epoca = 0
-        self.num_epocas = 6      # Configurable
-        self.flash_duration = 150 # ms encendido
-        self.isi_duration = 100   # ms apagado (Inter-Stimulus Interval)
+        self.num_epocas = times     # Configurable
+        self.flash_duration = 125 # ms encendido
+        self.isi_duration = 75   # ms apagado (Inter-Stimulus Interval)
         self.prepare_epoca()
 
     def prepare_epoca(self):
@@ -520,10 +522,10 @@ class KeyboardWindow(QWidget):
             
             # El paradigma de ajedrez consiste en dos grupos de estímulos
             self.sequence = [0, 1] 
-            random.shuffle(self.sequence) # Mezclar para que no siempre empiece el mismo grupo
             
             self.run_next_flash()
         else:
+            print(time.time()-self.init_time)
             print("Paradigma Finalizado")
             self.theme_button.setEnabled(True)
             self.apply_theme(self.current_theme) # Restaurar visualmente al terminar
@@ -533,7 +535,7 @@ class KeyboardWindow(QWidget):
         if not self.sequence:
             self.current_epoca += 1
             # Pequeña pausa entre épocas
-            QTimer.singleShot(500, self.prepare_epoca)
+            QTimer.singleShot(0, self.prepare_epoca)
             return
 
         group_id = self.sequence.pop(0)
@@ -580,9 +582,12 @@ class KeyboardWindow(QWidget):
         #Acepta el evento de cierre de la ventana principal
         event.accept()
         self.quit()
+    def start_chess_flashes(self,times=5):
+        print("INICIALIZANDO FLASHEO DE AJEDREZ")
+        
     def quit(self):
-        if not self.training_mode:
-            self.text_field_window.close()
+        # if not self.training_mode:
+        #     self.text_field_window.close()F
         self.close()
 if __name__ == "__main__":
     app = QApplication(sys.argv)

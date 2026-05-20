@@ -3,11 +3,13 @@ from PyQt6.QtGui import QCloseEvent
 from controllers.SaveCaptureController import controllerSaveCapture
 from windows.SerialMonitorWindow import SignalsWindow
 from controllers.KeyboardCaptureController import ControllerKeyboardCapture
+from windows.spellerConfigurationWindow import SpellerConfigurationWindow
 from windows.captureWindow import CaptureWindow
 from windows.serialConfigurationWindow import SerialConfiguration
 from windows.gridWindow import KeyboardWindow
 from windows.trainWindow import TrainWindow
 from controllers.serialConfigSingnalsController import ControllerSerialConfig
+from controllers.predictorController import PredictorController
 class Menu(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -20,6 +22,8 @@ class Menu(QWidget):
         self.controller_save_capture = controllerSaveCapture(self.signals_window)  # Inicializa el controlador de guardado con la ventana de señales
         self.capture_window = CaptureWindow(self.controller_keyboard, self.controller_save_capture)  # Pasa ambos controladores a la ventana de captura
         self.capture_window.controller_save_capture = self.controller_save_capture  # Asigna el controlador de
+        self.predictor_controller = PredictorController()
+        self.speller_config_window = SpellerConfigurationWindow(predict_controller=self.predictor_controller, save_capture_controller=self.controller_save_capture,keyboard_window = self.keyboard_window)  # Pasa el controlador de guardado al speller
         
 
         self.setup_ui()
@@ -79,8 +83,7 @@ class Menu(QWidget):
         self.signals_window.show()
     def open_grid_window(self):
         self.keyboard_window.show()
-        if not self.keyboard_window.training_mode:
-            self.keyboard_window.text_field_window.show()
+        self.speller_config_window.show()  # Mostrar la ventana de configuración del speller junto con el teclado
     def open_train_window(self):
         self.train_window.show()
     def open_capture_window(self):

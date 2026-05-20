@@ -1,5 +1,5 @@
 **/__pycache__/**
-
+*.csv
 datosLectura.csv
 *.pyc
 *.pyo
@@ -8,3 +8,6 @@ venv/
 __pycache__/
 *.md
 /results
+/captures
+/onlineCaptures
+/models

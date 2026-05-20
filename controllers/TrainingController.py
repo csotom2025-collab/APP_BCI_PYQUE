@@ -77,5 +77,5 @@ class controllerTraining():
 
 
 controller =controllerTraining()
-path = "captures/User6"
+path = "captures/Usermar"
 controller.train_model(path,"lstm")

@@ -170,11 +170,11 @@ class SerialReader(QThread):
                 # #         self.data_queue.put(values)
     
                     #print(f"Received: {line}")
-                    current_time = time.time()
-                    if current_time - start_time >= 1.0:
-                        #print(f"Muestras por segundo: {sample_count}")
-                        sample_count = 0
-                        start_time = current_time
+                    # current_time = time.time()
+                    # if current_time - start_time >= 1.0:
+                    #     #print(f"Muestras por segundo: {sample_count}")
+                    #     sample_count = 0
+                    #     start_time = current_time
                     
         except Exception as e:
             print(f"Serial error: {e}")
@@ -196,6 +196,8 @@ class SerialReader(QThread):
         self.quit()
 
 class RecordingThread(QThread):
+    recording_finished = pyqtSignal()  # Emitida cuando la grabación termina
+    
     def __init__(self):
         super().__init__()
         self.recording_queue = queue.Queue()
@@ -206,6 +208,7 @@ class RecordingThread(QThread):
         self.filter = EEGFilter(fs=250, low=0.5, high=40, notch_freq=50)
 
     def start_recording(self,columns_df,duration):
+        print(f"Empezando a grabar por {duration} segundos...")
         self.columns_df=columns_df
         self.duration=duration
         self.recording=True
@@ -264,7 +267,23 @@ class RecordingThread(QThread):
         self.running=True
         while self.running:
             if time.time() - self.start_time >= self.duration:
-                self.stop_recording()
+                # Cuando se alcanza el tiempo, esperar a vaciar la cola (max 500ms)
+                deadline = time.time() + 0.4
+                while time.time() < deadline:
+                    try:
+                        values = self.recording_queue.get(timeout=0.05)
+                        if self.recording:
+                            try:
+                                row = [float(v.strip()) if isinstance(v,str) else float(v) for v in values]
+                                if len(row) == len(self.columns_df):
+                                    self.recording_df.loc[len(self.recording_df)] = row
+                            except (ValueError, TypeError):
+                                pass
+                    except queue.Empty:
+                        break
+                self.recording = False
+                self.running = False
+                self.recording_finished.emit()  # Señal de que grabación terminó
                 break
             try:
                 values = self.recording_queue.get(timeout=0.1)
@@ -587,7 +606,7 @@ class SignalsWindow(QMainWindow):
         """
         Captura datos que se lean sin afectar visualizacion retorna el df .
         """
-        print(f"Empezando a grabar por {duration} segundos...")
+        
         #sixteen_columns = ["Tm","ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8","ch9","ch10","ch11","ch12","ch13","ch14","ch15","ch16"]
         sixteen_columns = self.columns
         eigth_columns = ["Tm","ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8"]

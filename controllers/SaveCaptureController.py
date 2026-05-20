@@ -23,6 +23,11 @@ class controllerSaveCapture:
 
         # Limpiar el DataFrame eliminando .0 innecesarios
         df = self.clean_df_file(df)
+        expected_samples = 500
+        print(df.shape) #(657,17)
+        print(df.shape[0]) #657
+        if df.shape[0] > expected_samples:
+            df = df.iloc[:expected_samples, :]
         print(f"Guardando captura en: {filename}")
         # Crear la ruta si no existe
         directory = os.path.dirname(filename)
@@ -43,7 +48,7 @@ class controllerSaveCapture:
             callback()
     def clean_df_file(self, df):
         """Limpia el DataFrame eliminando decimales innecesarios (.0)"""
-        df_clean = df.copy()
+        df_clean = df.copy()    
         
         for col in df_clean.columns:
             # Verificar si la columna es numérica
@@ -85,6 +90,11 @@ class controllerSaveCapture:
             # Esto asegura que el texto en la cabecera EDF sea corto (ej. "0.0001")
             data = data * 1e-6  # Convertir de microvoltios a voltios
             
+            # Recortar a 500 muestras exactas (2 segundos a 250 Hz) para evitar warnings EDF
+            expected_samples = 500
+            if df.shape[0] > expected_samples:
+                df = df.iloc[:, :expected_samples]
+            
             # --- PASO 3: Crear Info de MNE ---
             ch_names = list(df_signals.columns)
             sfreq = 250  # Ajusta a la frecuencia real de tu dispositivo
@@ -97,9 +107,9 @@ class controllerSaveCapture:
             raw = mne.io.RawArray(data, info)
             
             # data = tu_array.shape (n_ch, n_times)
-            print("Data min:", data.min())
-            print("Data max:", data.max())
-            print("Data range (min · sfreq):", data.min() * info["sfreq"])
+            # print("Data min:", data.min())
+            # print("Data max:", data.max())
+            # print("Data range (min · sfreq):", data.min() * info["sfreq"])
             # Exportar
             raw.export(filename, fmt='edf', overwrite=True)
             print(f"Éxito: {filename}")
@@ -108,8 +118,8 @@ class controllerSaveCapture:
             print(f"Error al guardar EDF: {e}")
             # Tu respaldo en CSV...
 
-    def start_capture(self, user, character_type, character, duration, callback=None):
-        path = 'captures'
+    def start_capture(self, user, character_type, character, duration, callback=None,online=False):
+        path = 'captures' if not online else 'onlineCaptures'
         path_user= f"{path}/{user}/{character_type}/"
         filename = f"{user}_{character}_"
         numero ="0"
@@ -133,9 +143,17 @@ class controllerSaveCapture:
             self.full_path = path_user + filename + nuevoNum + ext
             self.edf_full_path = path_user + filename + nuevoNum + ".edf"
 
-        qtime = QTimer()
-        qtime.singleShot(duration*1000+400, lambda: self.save_capture(callback))
-        #qtime.singleShot(duration*1000+600, self.save_capture_edf)
+        # Conectar la signal del RecordingThread que acaba de comenzar
+        # La signal se emite cuando el hilo termina de vaciar la cola
+        if hasattr(self.serial_monitor, 'recording_thread') and self.serial_monitor.recording_thread:
+            self.serial_monitor.recording_thread.recording_finished.connect(
+                lambda: self._on_recording_finished(callback)
+            )
+        return self.full_path
+    
+    def _on_recording_finished(self, callback=None):
+        """Método llamado cuando RecordingThread termina"""
+        self.save_capture(callback)
     
     def start_capture_n_times(self, user, character_type, character, duration, times,controller_keyboard):
         """
@@ -153,14 +171,14 @@ class controllerSaveCapture:
         def on_capture_completed():
             """Callback que se ejecuta después de cada guardado"""
             self.capture_count += 1
-            print(f"✅ Grabación {self.capture_count}/{self.times} completada")
+            print(f"Grabación {self.capture_count}/{self.times} completada")
             print("Descanso")
             if self.capture_count < self.times:
                 # Programar la siguiente grabación con un pequeño delay
                 QTimer.singleShot(1000, start_next_capture)  # 1 segundo de pausa entre grabaciones
             else:
                 # Todas las grabaciones completadas
-                print(f"\n🎉 Todas las {self.times} grabaciones de '{self.character}' completadas!")
+                print(f"\nTodas las  grabaciones completadas!")
                 controller_keyboard.hide_grid()  # Ocultar la cuadrícula al finalizar
 
         def start_next_capture():

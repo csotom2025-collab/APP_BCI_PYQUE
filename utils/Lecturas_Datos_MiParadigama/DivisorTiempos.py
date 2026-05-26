@@ -274,14 +274,15 @@ if __name__ == "__main__":
     print("SEPARADOR DE TRIALS P300 - EEG")
     print("="*70 + "\n")
     
-    usuario= 'Usermar'
+    usuario= 'User94'
     tpComando = 'Letters'
-    letras=['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'Ñ', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
+    #[A-Z]
+    letras=["A","B","C","D","E","F","G","H","I","J","K","L","M","N","Ñ","O","P","Q","R","S","T","U","V","W","X","Y","Z"]
     # Ejemplo: procesar archivo User27_A_0.csv
     for trial in range(30):  # Procesar trials 0, 1 y 2
         for letra in letras:
             resultado = separador.procesar_archivo(
-                f'{usuario}/{tpComando}/{usuario}_{letra}_{trial}.csv',
+                f'captures/{usuario}/{tpComando}/{usuario}_{letra}_{trial}.csv',
                 carpeta_salida_base=f'results/{usuario}'
             )
             

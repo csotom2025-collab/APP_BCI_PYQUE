@@ -366,7 +366,7 @@ class PlottingThread(QThread):
             except Exception as e:
                 pass
                 #print(f"Error plottinh thread {e}")
-            time.sleep(.4)
+            time.sleep(.5)
     def stop(self):
         self.running=False
         self.quit()

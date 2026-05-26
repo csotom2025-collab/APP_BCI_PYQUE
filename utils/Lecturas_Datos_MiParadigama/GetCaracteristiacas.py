@@ -185,9 +185,10 @@ if __name__ == "__main__":
     print("Obtercion de caracteristicas")
     print("="*70 + "\n")
     
-    usuario= 'Usermar'
+    usuario= 'User94'
     tpComando = 'Char'
-    letras=['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'Ñ', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
+    letras=["A","B","C","D","E","F","G","H","I","J","K","L","M","N","Ñ","O","P","Q","R","S","T","U","V","W","X","Y","Z"]
+    #letras=["0","1","2","3","4","5","6","7","8","9"]
     path=f'results/{usuario}/{tpComando}/'
     # Ejemplo: procesar archivo User27_A_0.csv
     for trial in range(30):  # Procesar trials 0, 1 y 6
@@ -199,10 +200,13 @@ if __name__ == "__main__":
                 data = pd.read_csv(path+filename)
                 channel_names = ["Oz", "Po7", "Po4", "Po3", "P4", "P3", "Po8", "Pz", "Fz", "F2", "F3", "F4", "AF3", "Cz", "AF4", "F1" ]
                 signals = data.values.T  # Transponer para tener shape (n_channels, n_samples)
-                features_df = extractor.extract_features(signals, channel_names=channel_names, available_channel_names=channel_names,window_size=100,overlap=0)
+                features_df = extractor.extract_features(signals, channel_names=channel_names, available_channel_names=channel_names,window_size=200,overlap=0)
                 print(f"Caracteristicas extraidas para {filename}:")
                 print(features_df.head())
                 # Guardar las caracteristicas en un nuevo archivo CSV
+                #checa si existe la carpeta de salida, si no existe la crea
+                output_dir = Path(path) / 'features'
+                output_dir.mkdir(parents=True, exist_ok=True)
                 output_path = Path(path) / f'features/{usuario}_{letra}_{trial}_features.csv'
                 features_df.to_csv(output_path, index=False)
             except Exception as e:

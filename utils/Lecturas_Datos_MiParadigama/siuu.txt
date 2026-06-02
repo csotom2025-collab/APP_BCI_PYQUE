@@ -1,0 +1,3 @@
+
+LDA_BASE   = r'C:/Users/usuario\Desktop\APP_BCI_PYQUE/results/Usermar/Char/Resultados_LDA'
+OUTPUT_DIR = r'C:/Users/usuario\Desktop\APP_BCI_PYQUE/results/Usermar/Char/Resultados_Clasificadores'

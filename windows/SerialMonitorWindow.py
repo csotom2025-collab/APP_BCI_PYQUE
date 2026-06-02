@@ -27,8 +27,8 @@ class EEGFilter:
             return signal
         
         try:
-            filtered = filtfilt(self.b, self.a, signal)
-            filtered = filtfilt(self.bn, self.an, filtered)
+            #filtered = filtfilt(self.b, self.a, signal)
+            filtered = filtfilt(self.bn, self.an, signal)
             return filtered
         except:
             return signal
@@ -128,6 +128,7 @@ class SerialReader(QThread):
                         #     self.registers[reg_name] = (reg_addr, reg_value, binary_value)
                         #     print(f"{reg_name} ({reg_addr}): {reg_value}, bin: {binary_value}")
                 else:
+                    #time.sleep(0.2)  # Evitar un bucle muy rápido mientras se leen registros
                     time.sleep(0.2)  # Evitar un bucle muy rápido mientras se leen registros
 
 
@@ -227,7 +228,21 @@ class RecordingThread(QThread):
         self.running=False
         self.quit()
     def get_recorded_data(self):
-        return self.recording_df
+        V_REF = 4.5
+        GAIN = 24  # Ajusta esto si usas otra ganancia en el ADS1299
+        LSB_UNIT = V_REF / (GAIN * (2**23 - 1))
+        df_microvolts = pd.DataFrame(columns=self.recording_df.columns)
+        # ... dentro de tu hilo ...
+        for idx, ch in enumerate(self.recording_df.columns):
+            # 1. Obtener valores crudos
+            raw_values = self.recording_df[ch].values
+            values = np.array(raw_values, dtype=np.float32)
+
+            # 2. Convertir a Microvoltios (uV) antes de filtrar
+            # Aplicamos la fórmula: count * LSB_UNIT * 1e6
+            values = values * LSB_UNIT * 1000000 
+            df_microvolts[ch] = values
+        return df_microvolts
     def get_filtered_recording_df(self):
         if self.recording_df is None:
             return None
@@ -237,30 +252,31 @@ class RecordingThread(QThread):
         df_filtered = self.recording_df.copy()
         channel_columns = [c for c in df_filtered.columns if c.lower() != 'tm']
 
-        for ch in channel_columns:
-            try:
-                values = df_filtered[ch].astype(np.float32).values
-                filtered_values = self.filter.apply(values)
-                df_filtered[ch] = filtered_values
-            except Exception:
-                pass
-        # # # # V_REF = 4.5
-        # # # # GAIN = 24  # Ajusta esto si usas otra ganancia en el ADS1299
-        # # # # LSB_UNIT = V_REF / (GAIN * (2**23 - 1))
+        # # # for ch in channel_columns:
+        # # #     try:
+        # # #         values = df_filtered[ch].astype(np.float32).values
+        # # #         filtered_values = self.filter.apply(values)
+        # # #         df_filtered[ch] = filtered_values
+        # # #     except Exception:
+        # # #         pass
+        V_REF = 4.5
+        GAIN = 24  # Ajusta esto si usas otra ganancia en el ADS1299
+        LSB_UNIT = V_REF / (GAIN * (2**23 - 1))
 
-        # # # # # ... dentro de tu hilo ...
-        # # # # for idx, ch in enumerate(channel_columns):
-        # # # #     # 1. Obtener valores crudos
-        # # # #     raw_values = df_filtered[ch].values
-        # # # #     values = np.array(raw_values, dtype=np.float32)
+        # ... dentro de tu hilo ...
+        for idx, ch in enumerate(channel_columns):
+            # 1. Obtener valores crudos
+            raw_values = df_filtered[ch].values
+            values = np.array(raw_values, dtype=np.float32)
 
-        # # # #     # 2. Convertir a Microvoltios (uV) antes de filtrar
-        # # # #     # Aplicamos la fórmula: count * LSB_UNIT * 1e6
-        # # # #     values = values * LSB_UNIT * 1000000 
+            # 2. Convertir a Microvoltios (uV) antes de filtrar
+            # Aplicamos la fórmula: count * LSB_UNIT * 1e6
+            values = values * LSB_UNIT * 1000000 
 
-        # # # #     # 3. Aplicar filtros (ahora sobre valores reales)
-        # # # #     values = self.filter.apply(values)
-        # # # #     df_filtered[ch] = values
+            # 3. Aplicar filtros (ahora sobre valores reales)
+            if self.filter is not None:
+                values = self.filter.apply(values)
+            df_filtered[ch] = values
         return df_filtered
 
     def run(self):
@@ -300,7 +316,7 @@ class RecordingThread(QThread):
         self.running=False
 class PlottingThread(QThread):
     update_plots = pyqtSignal(list,list,list)
-    def __init__(self,data_buffer,buffer_lock,plots ,channels):
+    def __init__(self,data_buffer,buffer_lock,plots ,channels,apply_filter):
         super().__init__()
         self.data_buffer=data_buffer
         self.buffer_lock =  buffer_lock
@@ -313,7 +329,7 @@ class PlottingThread(QThread):
         self.treshold=0
         #self.filter = EEGFilter(fs=250, low=0.5, high=40, notch_freq=50)
         self.filter = EEGFilter(fs=250, low=0.1, high=50, notch_freq=60)
-        self.applied_filter = True
+        self.applied_filter = apply_filter
         
     def run(self):
         self.running=True
@@ -331,34 +347,37 @@ class PlottingThread(QThread):
                     times = [float (d[0]) for d in data_tuples if d]
                     all_values =[]
                     
-                    for idx  in range(len((self.channels))):
-                        values = [float(d[idx+1]) if d[idx+1].strip() else np.nan for d in data_tuples if d]
+                    # # for idx  in range(len((self.channels))):
+                    # #     values = [float(d[idx+1]) if d[idx+1].strip() else np.nan for d in data_tuples if d]
                        
+                    # #     if self.applied_filter:
+                    # #         values = np.array(values, dtype=np.float32)
+                    # #         values = self.filter.apply(values)
+                    # #         all_values.append(values.tolist())
+                    # #     else:
+                    # #         all_values.append(values)
+
+                    # Definir constantes antes del bucle o en el __init__
+                    V_REF = 4.5
+                    GAIN = 24  # Ajusta esto si usas otra ganancia en el ADS1299
+                    LSB_UNIT = V_REF / (GAIN * (2**23 - 1))
+
+                    ### con conversion a microvoltios y filtrado aplicado sobre valores reales
+                    for idx in range(len(self.channels)):
+                        # 1. Obtener valores crudos
+                        raw_values = [float(d[idx+1]) if d[idx+1].strip() else np.nan for d in data_tuples if d]
+                        values = np.array(raw_values, dtype=np.float32)
+
+                        # 2. Convertir a Microvoltios (uV) antes de filtrar
+                        # Aplicamos la fórmula: count * LSB_UNIT * 1e6
+                        values = values * LSB_UNIT * 1000000
+
+                        # 3. Aplicar filtros (ahora sobre valores reales)
                         if self.applied_filter:
-                            values = np.array(values, dtype=np.float32)
                             values = self.filter.apply(values)
                             all_values.append(values.tolist())
                         else:
-                            all_values.append(values)
-
-                    # Definir constantes antes del bucle o en el __init__
-                    # # # V_REF = 4.5
-                    # # # GAIN = 24  # Ajusta esto si usas otra ganancia en el ADS1299
-                    # # # LSB_UNIT = V_REF / (GAIN * (2**23 - 1))
-
-                    # # # # ... dentro de tu hilo ...
-                    # # # for idx in range(len(self.channels)):
-                    # # #     # 1. Obtener valores crudos
-                    # # #     raw_values = [float(d[idx+1]) if d[idx+1].strip() else np.nan for d in data_tuples if d]
-                    # # #     values = np.array(raw_values, dtype=np.float32)
-
-                    # # #     # 2. Convertir a Microvoltios (uV) antes de filtrar
-                    # # #     # Aplicamos la fórmula: count * LSB_UNIT * 1e6
-                    # # #     values = values * LSB_UNIT * 1000000 
-
-                    # # #     # 3. Aplicar filtros (ahora sobre valores reales)
-                    # # #     values = self.filter.apply(values)
-                    # # #     all_values.append(values.tolist())
+                            all_values.append(values.tolist())
 
                     if len(times) > 0 and len(all_values) >0:
                         self.update_plots.emit(times,all_values,self.channels)
@@ -388,21 +407,24 @@ class SignalsWindow(QMainWindow):
         self.eight_channels =["ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8"]
         self.sixteen_channels = self.columns[1:]
         self.df_sixteen= pd.DataFrame(columns=self.columns)
-        self.apply_filter = True
+        self.apply_filter = False
+        self.overlay_mode = False
         #  ["Oz","Po7","Po4","Po3","P4","P3","Po","Pz","Fz","F2","F3","F4,"AF3","Cz","AF4","F1"]
         self.serial_thread = None
         self.port = 'COM5'
         self.baudrate = 330400 *2
         self.test_mode = False  # Flag for test mode
-        self.sixteen_channels_mode=True
+        self.sixteen_channels_mode=False
         self.channels = self.sixteen_channels if self.sixteen_channels_mode else self.eight_channels
         self.df = self.df_sixteen if self.sixteen_channels_mode else self.df_eight
         self.setup_ui()
         self.data_buffer =deque(maxlen=1200)
         self.buffer_lock = threading.Lock()
         self.recording_thread = RecordingThread()
+        self.legend = None
         #self.recording_thread.finished_record.connect(self.on_recording_finished)
         self.plotting_thread = None
+        self.colores_canales = ['brown','orange','yellow','g','b','purple','gray','white','brown','orange','yellow','g','b','purple','gray','white']
 
     def setup_ui(self):
         # UI Elements
@@ -416,6 +438,9 @@ class SignalsWindow(QMainWindow):
         self.channels_checkbox = QCheckBox("16 canales")
         self.channels_checkbox.setChecked(self.sixteen_channels_mode)
         self.channels_checkbox.stateChanged.connect(self.toggle_channels)
+        self.overlay_checkbox = QCheckBox("Superponer canales")
+        self.overlay_checkbox.setChecked(self.overlay_mode)
+        self.overlay_checkbox.stateChanged.connect(self.toggle_overlay)
         self.recording = False
         self.filter_checkbox = QCheckBox("Aplicar Filtro")
         self.filter_checkbox.setChecked(self.apply_filter)
@@ -442,6 +467,7 @@ class SignalsWindow(QMainWindow):
         self.label_baudrate = QLabel(str(self.baudrate))
         control_layout.addWidget(self.label_baudrate)
         control_layout.addWidget(self.channels_checkbox)
+        control_layout.addWidget(self.overlay_checkbox)
         control_layout.addWidget(self.test_checkbox)
         control_layout.addWidget(self.filter_checkbox)
         #control_layout.addWidget(self.button_print_registers)
@@ -481,6 +507,9 @@ class SignalsWindow(QMainWindow):
         self.channels = self.sixteen_channels if self.sixteen_channels_mode else self.eight_channels
         self.df = self.df_sixteen if self.sixteen_channels_mode else self.df_eight
         self._rebuild_plots()
+    def toggle_overlay(self, state):
+        self.overlay_mode = state == 2
+        self._rebuild_plots()
     def set_apply_filter(self, state):
         self.apply_filter = state == 2
         if self.plotting_thread:
@@ -489,7 +518,18 @@ class SignalsWindow(QMainWindow):
 
     def _rebuild_plots(self):
         self.plots = []
+        self.legend = None
         self.plot_widget.clear()
+        if self.overlay_mode:
+            plot = self.plot_widget.addPlot(row=0, col=0, rowspan=1, colspan=1, title='Canales superpuestos')
+            plot.setLabel('left', 'Amplitud')
+            plot.setLabel('bottom', 'Tiempo')
+            plot.showGrid(x=True, y=True, alpha=0.3)
+            self.legend = plot.addLegend(offset=(10, 10))
+            self.plots.append(plot)
+            self.plot_widget.setFixedHeight(600)
+            return
+
         for i, channel in enumerate(self.channels):
             plot = self.plot_widget.addPlot(row=i, col=0, rowspan=1, colspan=1, title=f'Canal: {channel}')
             plot.setLabel('left', 'Amplitud')
@@ -499,12 +539,23 @@ class SignalsWindow(QMainWindow):
 
     def on_plot_update(self,times,all_values,channels):
         try:
-            for idx,plot in enumerate(self.plots):
+            if self.overlay_mode and len(self.plots) > 0:
+                plot = self.plots[0]
+                plot.clear()
+                if self.legend is not None:
+                    self.legend.clear()
+                for idx, values in enumerate(all_values):
+                    if len(times) > 0 and len(values) > 0:
+                        pen = pg.mkPen(color=pg.intColor(idx, hues=max(3, len(all_values))), width=1)
+                        plot.plot(times, values, pen=self.colores_canales[idx], name=str(channels[idx]))
+                return
+
+            for idx, plot in enumerate(self.plots):
                 plot.clear()
                 if idx < len(all_values):
                     values = all_values[idx]
-                    if len(times)>0 and len(values) >0:
-                        plot.plot(times,values,pen='b')
+                    if len(times) > 0 and len(values) > 0:
+                        plot.plot(times, values, pen='b')
         except Exception as e:
             print(f"Erorr updating plot {e}")
     def start_serial(self):
@@ -518,7 +569,7 @@ class SignalsWindow(QMainWindow):
             self.serial_thread = SerialReader(self.port, self.baudrate, self.data_queue,self.sixteen_channels_mode)
             self.serial_thread.error_signal.connect(self.on_serial_error)
         self.serial_thread.start()
-        self.plotting_thread = PlottingThread(self.data_buffer,self.buffer_lock,self.plots,self.channels)
+        self.plotting_thread = PlottingThread(self.data_buffer,self.buffer_lock,self.plots,self.channels,self.apply_filter)
         self.plotting_thread.update_plots.connect(self.on_plot_update)
         self.plotting_thread.start()
         self.start_button.setEnabled(False)

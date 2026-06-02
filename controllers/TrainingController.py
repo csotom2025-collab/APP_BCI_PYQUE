@@ -1,15 +1,30 @@
 import os
 import pandas as pd
 import numpy as np
+from models.pipeline_completo_lda import PipelineCompletoLDA
 class controllerTraining():
     def __init__(self):
         pass
 
-    def train_model(self,dataPath,modelType):
+    def train_model(self,user,dataPath,modelType):
         if not os.path.exists(dataPath):
             print("no existe la ruta")
             return
-
+        if modelType== "LDA":
+            self.pipeline_lda = PipelineCompletoLDA(base_output_dir="resultsALL/")
+            self.pipeline_lda.separar_archivos_csv(usuario=user)
+            print("SE SEPARARON LOS ARCHIVOS ")
+            print("Obteniendo caracteristicas")
+            self.pipeline_lda.obtener_caracteristicas_usuario(usuario=user)
+            print("EXTRAIDAS TODAS LAS CARACTERISTICAS")
+            print("Optimizando LDA")
+            self.pipeline_lda.optimizacion_lda(user=user)
+            print("Entrenado Modelo")
+            #pipeline.entrenar_modelo(user, tipo='LDA_General', grupo='TODAS', modelo='ALL')
+            self.pipeline_lda.entrenar_todos_los_modelos(usuario=user, save_plots=True, show_plots=True)
+            print("LDA")
+        if modelType == "CNN":
+            print("cnn")
         df = self.create_df(dataPath)
 
 
@@ -77,5 +92,6 @@ class controllerTraining():
 
 
 controller =controllerTraining()
-path = "captures/Usermar"
-controller.train_model(path,"lstm")
+user="Usermar"
+path = "captures/" + user
+controller.train_model(user,path,"lstm")

@@ -185,10 +185,10 @@ if __name__ == "__main__":
     print("Obtercion de caracteristicas")
     print("="*70 + "\n")
     
-    usuario= 'User94'
-    tpComando = 'Char'
-    letras=["A","B","C","D","E","F","G","H","I","J","K","L","M","N","Ñ","O","P","Q","R","S","T","U","V","W","X","Y","Z"]
-    #letras=["0","1","2","3","4","5","6","7","8","9"]
+    usuario= 'UserArcane'
+    tpComando = 'Digit'
+    #letras=["A","B","C","D","E","F","G","H","I","J","K","L","M","N","Ñ","O","P","Q","R","S","T","U","V","W","X","Y","Z"]
+    letras=["0","1","2","3","4","5","6","7","8","9"]
     path=f'results/{usuario}/{tpComando}/'
     # Ejemplo: procesar archivo User27_A_0.csv
     for trial in range(30):  # Procesar trials 0, 1 y 6

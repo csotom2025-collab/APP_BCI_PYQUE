@@ -91,8 +91,8 @@ class SeparacionTiempos:
         for i in range(signals.shape[0]):
             filtered_signals[i, :] = signal.filtfilt(b, a, signals[i, :])
 
-        # Notch filter de 40 Hz para remover ruido de línea
-        F_notch = 40.0
+        # Notch filter de 60 Hz para remover ruido de línea
+        F_notch = 60.0
         Q = 30.0
         b_notch, a_notch = signal.iirnotch(F_notch, Q, fs)
         for i in range(signals.shape[0]):
@@ -274,10 +274,10 @@ if __name__ == "__main__":
     print("SEPARADOR DE TRIALS P300 - EEG")
     print("="*70 + "\n")
     
-    usuario= 'User94'
-    tpComando = 'Letters'
-    #[A-Z]
-    letras=["A","B","C","D","E","F","G","H","I","J","K","L","M","N","Ñ","O","P","Q","R","S","T","U","V","W","X","Y","Z"]
+    usuario= 'UserArcane'
+    tpComando = 'Numbers'  # 'Letters' o 'Numbers'
+    #["A","B","C","D","E","F","G","H","I","J","K","L","M","N","Ñ","O","P","Q","R","S","T","U","V","W","X","Y","Z"]
+    letras=["0","1","2","3","4","5","6","7","8","9"]
     # Ejemplo: procesar archivo User27_A_0.csv
     for trial in range(30):  # Procesar trials 0, 1 y 2
         for letra in letras:

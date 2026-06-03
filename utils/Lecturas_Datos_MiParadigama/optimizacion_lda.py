@@ -53,13 +53,14 @@ import matplotlib.gridspec as gridspec
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
-from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import cross_val_score, cross_val_predict
+from sklearn.metrics import accuracy_score, confusion_matrix, ConfusionMatrixDisplay, f1_score
 
 
 # ─────────────────────────────────────────────────────────────
 #  Configuración de rutas
 # ─────────────────────────────────────────────────────────────
-BASE_RESULTS     = r"D:/EEG_Python/results"
+BASE_RESULTS     = r"C:/Users/crist/OneDrive/Escritorio/APP_BCI_PYQUE/results"
 TIPOS_VALIDOS    = ["Digit", "Char", "Comando"]
 CARPETA_FEATURES = "features"
 CARPETA_LDA      = "Resultados_LDA"
@@ -354,6 +355,34 @@ def plot_lda_results(X_lda, y_enc, var_ratio, importancias, idx_ord,
     print(f"    📊 Gráfica: lda_{nombre_set}.png")
 
 
+def plot_confusion_matrix(y_true, y_pred, label_encoder, output_path, nombre_set, tipo_clase, usuario):
+    clases = label_encoder.classes_
+    cm = confusion_matrix(y_true, y_pred)
+    acc = accuracy_score(y_true, y_pred)
+    f1 = f1_score(y_true, y_pred, average="macro")
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=clases)
+    disp.plot(ax=ax, cmap="Blues", colorbar=True)
+
+    ax.set_title(f"Matriz de Confusión — {usuario} | {tipo_clase} | {nombre_set}")
+    ax.text(0.02, -0.18,
+            f"Accuracy: {acc:.4f}   |   F1 macro: {f1:.4f}",
+            transform=ax.transAxes,
+            fontsize=11,
+            ha="left",
+            va="center")
+
+    plt.xticks(rotation=45, ha="right")
+    plt.tight_layout()
+    out_png = os.path.join(output_path, f"confusion_matrix_best_{nombre_set}.png")
+    plt.savefig(out_png, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"    📉 Matriz de confusión guardada: confusion_matrix_best_{nombre_set}.png")
+    print(f"    Accuracy: {acc:.4f}   F1 macro: {f1:.4f}")
+    print(cm)
+
+
 def plot_resumen_cv(resumen, output_path, tipo_clase, usuario):
     grupos = [r["grupo"] for r in resumen if not np.isnan(r["cv_acc"])]
     accs   = [r["cv_acc"] for r in resumen if not np.isnan(r["cv_acc"])]
@@ -441,6 +470,7 @@ def procesar_trabajo(trabajo, grupos_filter=None):
 
     # Loop por grupo de features
     resumen = []
+    best_info = None
     for nombre_set, features in all_feature_sets.items():
         print(f"\n    {'·'*52}")
         print(f"    GRUPO: {nombre_set}  ({len(features)} features)")
@@ -462,6 +492,7 @@ def procesar_trabajo(trabajo, grupos_filter=None):
 
         # CV accuracy
         cv_acc, cv_std = np.nan, np.nan
+        n_splits = 0
         if len(X_sub) >= max(5, n_cls * 2):
             n_splits = min(5, len(X_sub) // n_cls)
             if n_splits >= 2:
@@ -473,6 +504,14 @@ def procesar_trabajo(trabajo, grupos_filter=None):
                     print(f"\n    ✅ CV Accuracy LDA: {cv_acc:.4f} ± {cv_std:.4f}\n")
                 except Exception as e:
                     print(f"    ⚠️  CV falló: {e}")
+
+        if not np.isnan(cv_acc) and (best_info is None or cv_acc > best_info["cv_acc"]):
+            best_info = {
+                "nombre_set": nombre_set,
+                "features": features,
+                "n_splits": n_splits,
+                "cv_acc": cv_acc,
+            }
 
         resumen.append({
             "grupo":      nombre_set,
@@ -505,6 +544,19 @@ def procesar_trabajo(trabajo, grupos_filter=None):
             mejor = max(validos, key=lambda r: r["cv_acc"])
             print(f"\n    🏆 Mejor grupo: {mejor['grupo']}  "
                   f"(CV Acc = {mejor['cv_acc']:.4f} ± {mejor['cv_std']:.4f})")
+
+            if best_info and best_info["nombre_set"] == mejor["grupo"]:
+                X_best = data_total[best_info["features"]].values.astype(float)
+                X_best = np.nan_to_num(X_best, nan=0.0, posinf=0.0, neginf=0.0)
+                if best_info["n_splits"] >= 2:
+                    y_pred = cross_val_predict(LinearDiscriminantAnalysis(),
+                                               X_best, y_enc,
+                                               cv=best_info["n_splits"])
+                else:
+                    lda = LinearDiscriminantAnalysis()
+                    y_pred = lda.fit(X_best, y_enc).predict(X_best)
+                plot_confusion_matrix(y_enc, y_pred, le,
+                                      output_path, mejor["grupo"], tipo, usuario)
 
     print(f"\n    ✅ Guardado en: {output_path}\n")
     return resumen
@@ -606,6 +658,7 @@ def procesar_lda_general(usuario, trabajos_usuario, base_results, grupos_filter=
 
     # ── 4. Loop por grupo de features ──────────────────────
     resumen = []
+    best_info = None
     for nombre_set, features in all_feature_sets.items():
         print(f"\n  {'·'*56}")
         print(f"  GRUPO: {nombre_set}  ({len(features)} features)")
@@ -627,6 +680,7 @@ def procesar_lda_general(usuario, trabajos_usuario, base_results, grupos_filter=
 
         # CV accuracy
         cv_acc, cv_std = np.nan, np.nan
+        n_splits = 0
         if len(X_sub) >= max(5, n_cls * 2):
             n_splits = min(5, len(X_sub) // n_cls)
             if n_splits >= 2:
@@ -638,6 +692,14 @@ def procesar_lda_general(usuario, trabajos_usuario, base_results, grupos_filter=
                     print(f"\n  ✅ CV Accuracy LDA General: {cv_acc:.4f} ± {cv_std:.4f}\n")
                 except Exception as e:
                     print(f"  ⚠️  CV falló: {e}")
+
+        if not np.isnan(cv_acc) and (best_info is None or cv_acc > best_info["cv_acc"]):
+            best_info = {
+                "nombre_set": nombre_set,
+                "features": features,
+                "n_splits": n_splits,
+                "cv_acc": cv_acc,
+            }
 
         resumen.append({
             "grupo":      nombre_set,
@@ -674,6 +736,19 @@ def procesar_lda_general(usuario, trabajos_usuario, base_results, grupos_filter=
             mejor = max(validos, key=lambda r: r["cv_acc"])
             print(f"\n  🏆 Mejor grupo (LDA General): {mejor['grupo']}  "
                   f"(CV Acc = {mejor['cv_acc']:.4f} ± {mejor['cv_std']:.4f})")
+
+            if best_info and best_info["nombre_set"] == mejor["grupo"]:
+                X_best = data_total[best_info["features"]].values.astype(float)
+                X_best = np.nan_to_num(X_best, nan=0.0, posinf=0.0, neginf=0.0)
+                if best_info["n_splits"] >= 2:
+                    y_pred = cross_val_predict(LinearDiscriminantAnalysis(),
+                                               X_best, y_enc,
+                                               cv=best_info["n_splits"])
+                else:
+                    lda = LinearDiscriminantAnalysis()
+                    y_pred = lda.fit(X_best, y_enc).predict(X_best)
+                plot_confusion_matrix(y_enc, y_pred, le,
+                                      output_path, mejor["grupo"], "General", usuario)
 
     print(f"\n  ✅ LDA General guardado en: {output_path}\n")
     return resumen
@@ -774,4 +849,4 @@ if __name__ == "__main__":
 # Solo algunos grupos de features
 #python optimizacion_lda.py --base "D:/EEG_Python/results" --grupos Estadisticas Wavelets TODAS
 
-# d:\EEG_Python\.venv\Scripts\python.exe d:/EEG_Python/Lecturas_Datos_MiParadigama/optimizacion_lda.py --usuarios UserOmar
+#  c:/Users/crist/OneDrive/Escritorio/APP_BCI_PYQUE/utils/Lecturas_Datos_MiParadigama/optimizacion_lda.py --usuarios UserOmar

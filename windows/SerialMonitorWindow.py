@@ -12,40 +12,57 @@ from utils.testDataReader import CSVReader  # Import for test mode
 from collections import deque
 from scipy.signal import butter, filtfilt, iirnotch
 
+import numpy as np
+from scipy.signal import butter, iirnotch, filtfilt
+
 class EEGFilter:
-    def __init__(self, fs=250, low=0.5, high=40, notch_freq=50, use_bandpass=False, use_notch=True):
+    def __init__(self, fs=250, low=0.5, high=40, notch_freq=60, use_bandpass=False, use_notch=True):
         self.fs = fs
-        self.use_bandpass = use_bandpass
         self.use_notch = use_notch
+        self.use_bandpass = use_bandpass
         
-        # Bandpass (si se quiere usar)
+        # Filtro Notch (Eliminación de línea de potencia)
+        if self.use_notch:
+            self.bn, self.an = iirnotch(notch_freq, Q=15, fs=fs)
+        
+        # Filtro Bandpass (Pasa-bandas)
         if self.use_bandpass:
             self.b, self.a = butter(4, [low/(fs/2), high/(fs/2)], btype='band')
-        
-        # Notch (por defecto siempre se aplica para eliminar línea de potencia)
-        if self.use_notch:
-            # Q=15 es más tolerante que Q=30
-            self.bn, self.an = iirnotch(notch_freq, Q=15, fs=fs)
 
     def apply(self, signal):
+        """
+        Aplica el filtro a un arreglo 1D completo (historial del canal).
+        Compatible con PlottingThread y RecordingThread.
+        """
         if len(signal) < 10:
             return signal
         
+        # Asegurar que es un array de numpy listo para operar
+        filtered = np.array(signal, dtype=np.float32)
+        
+        # EVITAR BUG DE NaNs: Si hay cables sueltos o errores de lectura, filtfilt se rompe.
+        # Reemplazamos temporalmente los NaNs con 0.0 para proteger el filtro.
+        nans = np.isnan(filtered)
+        if np.any(nans):
+            filtered[nans] = 0.0
+        
         try:
-            filtered = signal.copy() if isinstance(signal, np.ndarray) else np.array(signal)
+            # 1. Aplicar bandpass primero (si está habilitado)
+            if self.use_bandpass:
+                filtered = filtfilt(self.b, self.a, filtered)
             
-            # # Aplicar bandpass primero si está habilitado
-            # if self.use_bandpass:
-            #     filtered = filtfilt(self.b, self.a, filtered)
-            
-            # Aplicar notch después (elimina línea de potencia)
+            # 2. Aplicar notch (Elimina los 50/60 Hz de la red eléctrica)
             if self.use_notch:
                 filtered = filtfilt(self.bn, self.an, filtered)
-            
-            return filtered
+                
         except Exception as e:
-            print(f"Filter error: {e}")
-            return signal
+            print(f"Error interno en el filtro: {e}")
+            
+        # Restauramos los NaNs originales para que pyqtgraph sepa que ahí faltó un dato
+        if np.any(nans):
+            filtered[nans] = np.nan
+            
+        return filtered
 class SerialReader(QThread):
     error_signal = pyqtSignal(str)
     def __init__(self, port, baudrate, data_queue,sixteen_mode):

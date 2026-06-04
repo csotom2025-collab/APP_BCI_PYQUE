@@ -1,5 +1,4 @@
 **/__pycache__/**
-*.csv
 datosLectura.csv
 *.pyc
 *.pyo

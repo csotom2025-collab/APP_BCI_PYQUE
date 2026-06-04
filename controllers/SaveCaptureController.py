@@ -23,9 +23,9 @@ class controllerSaveCapture:
 
         # Limpiar el DataFrame eliminando .0 innecesarios
         df = self.clean_df_file(df)
-        expected_samples = 500
+        fs=250
+        expected_samples = fs * self.duration  # Por ejemplo, 250 Hz * 2 segundos = 500 muestras
         print(df.shape) #(657,17)
-        print(df.shape[0]) #657
         if df.shape[0] > expected_samples:
             df = df.iloc[:expected_samples, :]
         print(f"Guardando captura en: {filename}")
@@ -124,7 +124,7 @@ class controllerSaveCapture:
         filename = f"{user}_{character}_"
         numero ="0"
         ext = ".csv"
-
+        self.duration = duration
         self.serial_monitor.start_recording(duration)
         
         self.full_path = path_user + filename + numero + ext

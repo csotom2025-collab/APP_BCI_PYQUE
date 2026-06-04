@@ -13,24 +13,38 @@ from collections import deque
 from scipy.signal import butter, filtfilt, iirnotch
 
 class EEGFilter:
-    def __init__(self, fs=250, low=0.5, high=40, notch_freq=50):
+    def __init__(self, fs=250, low=0.5, high=40, notch_freq=50, use_bandpass=False, use_notch=True):
         self.fs = fs
+        self.use_bandpass = use_bandpass
+        self.use_notch = use_notch
         
-        # Bandpass
-        self.b, self.a = butter(2, [low/(fs/2), high/(fs/2)], btype='band')
+        # Bandpass (si se quiere usar)
+        if self.use_bandpass:
+            self.b, self.a = butter(4, [low/(fs/2), high/(fs/2)], btype='band')
         
-        # Notch
-        self.bn, self.an = iirnotch(notch_freq, 30, fs)
+        # Notch (por defecto siempre se aplica para eliminar línea de potencia)
+        if self.use_notch:
+            # Q=15 es más tolerante que Q=30
+            self.bn, self.an = iirnotch(notch_freq, Q=15, fs=fs)
 
     def apply(self, signal):
         if len(signal) < 10:
             return signal
         
         try:
-            #filtered = filtfilt(self.b, self.a, signal)
-            filtered = filtfilt(self.bn, self.an, signal)
+            filtered = signal.copy() if isinstance(signal, np.ndarray) else np.array(signal)
+            
+            # # Aplicar bandpass primero si está habilitado
+            # if self.use_bandpass:
+            #     filtered = filtfilt(self.b, self.a, filtered)
+            
+            # Aplicar notch después (elimina línea de potencia)
+            if self.use_notch:
+                filtered = filtfilt(self.bn, self.an, filtered)
+            
             return filtered
-        except:
+        except Exception as e:
+            print(f"Filter error: {e}")
             return signal
 class SerialReader(QThread):
     error_signal = pyqtSignal(str)
@@ -206,7 +220,9 @@ class RecordingThread(QThread):
         self.recording=False
         self.recording_df=None
         self.daemon=True
-        self.filter = EEGFilter(fs=250, low=0.5, high=40, notch_freq=50)
+        # Unificar: 50 Hz para línea de potencia (Europa/Sudamérica)
+        # Si estás en USA, cambiar a notch_freq=60
+        self.filter = EEGFilter(fs=250, low=0.5, high=40, notch_freq=60, use_bandpass=False, use_notch=True)
 
     def start_recording(self,columns_df,duration):
         print(f"Empezando a grabar por {duration} segundos...")
@@ -274,9 +290,12 @@ class RecordingThread(QThread):
             values = values * LSB_UNIT * 1000000 
 
             # 3. Aplicar filtros (ahora sobre valores reales)
-            if self.filter is not None:
-                values = self.filter.apply(values)
-            df_filtered[ch] = values
+            print(f"Aplicando filtro al canal {ch}...")
+            values_filt = self.filter.apply(values)
+            # print("raw",values[:20])
+            # print("filtered",values_filt[:20])
+            
+            df_filtered[ch] = values_filt
         return df_filtered
 
     def run(self):
@@ -327,8 +346,8 @@ class PlottingThread(QThread):
         self.treshold_red = -40000
         self.treshold_blue=40000
         self.treshold=0
-        #self.filter = EEGFilter(fs=250, low=0.5, high=40, notch_freq=50)
-        self.filter = EEGFilter(fs=250, low=0.1, high=50, notch_freq=60)
+        # Unificar con RecordingThread: 50 Hz, sin bandpass por ahora
+        self.filter = EEGFilter(fs=250, low=0.1, high=50, notch_freq=60, use_bandpass=False, use_notch=True)
         self.applied_filter = apply_filter
         
     def run(self):
@@ -414,7 +433,7 @@ class SignalsWindow(QMainWindow):
         self.port = 'COM5'
         self.baudrate = 330400 *2
         self.test_mode = False  # Flag for test mode
-        self.sixteen_channels_mode=False
+        self.sixteen_channels_mode=True
         self.channels = self.sixteen_channels if self.sixteen_channels_mode else self.eight_channels
         self.df = self.df_sixteen if self.sixteen_channels_mode else self.df_eight
         self.setup_ui()

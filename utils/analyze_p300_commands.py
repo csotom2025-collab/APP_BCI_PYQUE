@@ -53,7 +53,7 @@ def create_command_mapping():
             '9': {'label': 'Número 9', 'type': 'números'},
         },
         'Controls': {
-            '───': {'label': 'Control sin comando', 'type': 'control'},
+            '───': {'label': 'Espacio (space)', 'type': 'control'},
             '⟵': {'label': 'Retroceso (Backspace)', 'type': 'control'},
             '↩': {'label': 'Enter/Enviar', 'type': 'control'},
         }

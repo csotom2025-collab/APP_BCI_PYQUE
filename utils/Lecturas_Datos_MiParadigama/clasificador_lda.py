@@ -28,8 +28,8 @@ from xgboost import XGBClassifier
 #   ├── Comando/Resultados_LDA/TODAS/         ← tipo Comando
 #   └── LDA_General/Estadisticas/             ← todas las clases juntas
 
-USUARIO_BASE    = r'D:/EEG_Python/results/User94'
-OUTPUT_BASE     = r'D:/EEG_Python/results/User94/Resultados_Clasificadores'
+USUARIO_BASE    = r'./results/UserArcane_LDA'
+OUTPUT_BASE     = r'./results/UserArcane_LDA/Resultados_Clasificadores'
 CARPETA_LDA     = 'Resultados_LDA'
 CARPETA_GENERAL = 'LDA_General'
 TIPOS_VALIDOS   = ['Digit', 'Char', 'Comando']

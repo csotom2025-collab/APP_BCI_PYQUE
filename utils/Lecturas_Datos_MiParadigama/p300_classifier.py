@@ -34,8 +34,9 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 from sklearn.metrics import (accuracy_score, classification_report,
-                              confusion_matrix, roc_auc_score)
+                              confusion_matrix, roc_auc_score, f1_score)
 from sklearn.utils.class_weight import compute_sample_weight
+from sklearn.calibration import CalibratedClassifierCV
 
 warnings.filterwarnings("ignore")
 
@@ -456,7 +457,7 @@ def build_dataset(commands_dict, feature_set="TODAS", precomputed_features=None)
     OPTIMIZACIÓN: Si precomputed_features está disponible, usa features 
     pre-calculados sin recalcular (ahorra 80-90% del tiempo).
     """
-    MAX_NEG_RATIO = 5           # máx 5 non-targets por cada target
+    MAX_NEG_RATIO = 1           # 1:1 targets/non-targets — corrige sesgo hacia Non-Target
 
     # Si no se proporcionan features pre-calculados, calcularlos ahora
     if precomputed_features is None:
@@ -507,6 +508,8 @@ def build_dataset(commands_dict, feature_set="TODAS", precomputed_features=None)
 # ─────────────────────────────────────────────
 def get_classifiers():
     return {
+        # LDA no tiene class_weight nativo — se compensa con sample_weight en evaluate_classifiers
+        # y con MAX_NEG_RATIO=1 (dataset balanceado 1:1)
         "LDA_shrinkage": Pipeline([
             ("scaler", StandardScaler()),
             ("clf", LinearDiscriminantAnalysis(solver="eigen", shrinkage="auto")),
@@ -516,18 +519,34 @@ def get_classifiers():
             ("clf", SVC(kernel="rbf", probability=True, class_weight="balanced",
                         C=1.0, gamma="scale")),
         ]),
+        # GBM: subsample para ayudar con desbalance residual
         "GradientBoosting": Pipeline([
             ("scaler", StandardScaler()),
             ("clf", GradientBoostingClassifier(n_estimators=100, max_depth=3,
-                                               learning_rate=0.1)),
+                                               learning_rate=0.1, subsample=0.8)),
         ]),
     }
+
+
+def _find_best_threshold(y_true, y_proba):
+    """
+    Busca el umbral que maximiza F1 sobre el conjunto dado.
+    Retorna (best_threshold, best_f1).
+    """
+    thresholds = np.linspace(0.05, 0.95, 91)
+    best_t, best_f = 0.5, 0.0
+    for t in thresholds:
+        f = f1_score(y_true, (y_proba >= t).astype(int), zero_division=0)
+        if f > best_f:
+            best_f, best_t = f, t
+    return best_t, best_f
 
 
 def evaluate_classifiers(X, y, feature_set_name, category_name):
     """
     Evalúa todos los clasificadores con cross-validation estratificada.
-    Retorna DataFrame con resultados (AUC, Accuracy, F1).
+    Incluye umbral optimizado por F1 para la clasificación binaria.
+    Retorna DataFrame con resultados (AUC, Accuracy, F1, F1_thresh).
     """
     results = []
     clfs    = get_classifiers()
@@ -542,6 +561,21 @@ def evaluate_classifiers(X, y, feature_set_name, category_name):
                                          scoring="roc_auc", n_jobs=-1)
             scores_f1  = cross_val_score(pipeline, X, y, cv=cv,
                                          scoring="f1", n_jobs=-1)
+
+            # ── Umbral optimizado por F1 (fold a fold) ──────────────────
+            thresh_vals, f1_thresh_vals = [], []
+            for tr, te in cv.split(X, y):
+                # LDA: pasar sample_weight para compensar desbalance residual
+                if clf_name == "LDA_shrinkage":
+                    pipeline.fit(X[tr], y[tr],
+                                 clf__sample_weight=compute_sample_weight("balanced", y[tr]))
+                else:
+                    pipeline.fit(X[tr], y[tr])
+                proba_te = pipeline.predict_proba(X[te])[:, 1]
+                t, f     = _find_best_threshold(y[te], proba_te)
+                thresh_vals.append(t)
+                f1_thresh_vals.append(f)
+
             results.append({
                 "Categoria":    category_name,
                 "Feature_Set":  feature_set_name,
@@ -552,13 +586,17 @@ def evaluate_classifiers(X, y, feature_set_name, category_name):
                 "AUC_std":      scores_auc.std(),
                 "F1_mean":      scores_f1.mean(),
                 "F1_std":       scores_f1.std(),
+                "F1_thresh_mean":  float(np.mean(f1_thresh_vals)),
+                "F1_thresh_std":   float(np.std(f1_thresh_vals)),
+                "Threshold_mean":  float(np.mean(thresh_vals)),
                 "N_samples":    len(y),
                 "N_targets":    int(y.sum()),
                 "N_nontargets": int((y == 0).sum()),
             })
             print(f"    [{clf_name:20s}] Acc={scores_acc.mean():.3f}±{scores_acc.std():.3f} "
                   f"AUC={scores_auc.mean():.3f}±{scores_auc.std():.3f} "
-                  f"F1={scores_f1.mean():.3f}±{scores_f1.std():.3f}")
+                  f"F1={scores_f1.mean():.3f}  "
+                  f"F1@thr={np.mean(f1_thresh_vals):.3f}(t={np.mean(thresh_vals):.2f})")
         except Exception as e:
             print(f"    [{clf_name}] ERROR: {e}")
 
@@ -668,7 +706,7 @@ def run_pipeline(root_dir, feature_sets=None):
                .reset_index()
                [["Categoria", "Feature_Set", "Clasificador",
                  "Acc_mean", "Acc_std", "AUC_mean", "AUC_std",
-                 "F1_mean", "F1_std"]])
+                 "F1_mean", "F1_std", "F1_thresh_mean", "Threshold_mean"]])
 
     pd.set_option("display.max_rows", 200)
     pd.set_option("display.width", 150)

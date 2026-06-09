@@ -46,8 +46,8 @@ from p300_classifier import (
 N_FOLDS    = 5
 MAX_NEG    = 5          # ratio máx non-target por target
 FEAT_ORDER = [          # orden visual para heatmap
-    "Estadisticas", "Frecuencias_Abs", "Frecuencias_Rel",
-    "Frecuencias_Est", "Wavelets", "Frecuencias_Todas", "TODAS"
+        "Estadisticas","Estadisticas_tm", "Frecuencias_Abs", "Frecuencias_Rel",
+    "Frecuencias_Est", "Wavelets","welch", "Frecuencias_Todas", "TODAS"
 ]
 
 COMMAND_MAP = {

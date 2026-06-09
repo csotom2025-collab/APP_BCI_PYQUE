@@ -23,7 +23,7 @@ import pandas as pd
 from pathlib import Path
 from collections import defaultdict
 
-from scipy.signal import butter, filtfilt
+from scipy.signal import butter, filtfilt, welch
 from scipy.stats import skew, kurtosis
 import pywt
 
@@ -55,8 +55,8 @@ EEG_COLS = ["Oz","Po7","Po4","Po3","P4","P3","Po8","Pz",
             "Fz","F2","F3","F4","AF3","Cz","AF4","F1"]
 
 FEATURE_SETS = [
-    "Estadisticas", "Frecuencias_Abs", "Frecuencias_Rel",
-    "Frecuencias_Est", "Wavelets", "Frecuencias_Todas", "TODAS"
+    "Estadisticas","Estadisticas_tm", "Frecuencias_Abs", "Frecuencias_Rel",
+    "Frecuencias_Est", "Wavelets","welch", "Frecuencias_Todas", "TODAS"
 ]
 
 CATEGORY_DIRS = ["Letters", "Numbers", "Controls"]
@@ -149,16 +149,31 @@ def downsample_signal(signal, factor=DOWNSAMPLE):
     return signal[::factor]
 
 
-def preprocess_trial(df):
-    """
-    Pipeline completo para un trial:
-      DataFrame (500×16) → ndarray preprocesado (125×16)
-    """
+# En p300_classifier.py — agregar estas constantes:
+STIM_MS       = 500   # onset del estímulo (ms)
+P300_END_MS   = 1200  # fin de la ventana de interés (ms)
+POST_END_MS   = 2000  # fin del trial completo (ms)
+
+# Índices en muestras originales (antes de downsample):
+STIM_SAMPLE   = int(STIM_MS    * FS / 1000)   # 125
+P300_END_SAMPLE = int(P300_END_MS * FS / 1000) # 300
+
+def preprocess_trial(df, use_erp_window=True):
     raw = df[EEG_COLS].values.astype(np.float64)
+    
+    # 1. Baseline correction usando pre-estímulo (muestras 0-125)
     sig = baseline_correct(raw)
+    
+    # 2. Filtrado sobre la señal completa (para evitar artefactos de borde)
     sig = bandpass_filter(sig)
+    
+    # 3. Recortar a ventana de respuesta evocada (0.5s – 1.2s)
+    if use_erp_window:
+        sig = sig[STIM_SAMPLE:P300_END_SAMPLE]  # solo 175 muestras → 44 tras downsample
+    
+    # 4. Downsample
     sig = downsample_signal(sig)
-    return sig                          # shape: (N_SAMPLES//DOWNSAMPLE, 16)
+    return sig
 
 
 # ─────────────────────────────────────────────
@@ -246,7 +261,7 @@ def extract_features(signal):
             skew(ch),
             kurtosis(ch),
         ])
-    features["Estadisticas"] = np.array(feat_est)
+    features["Estadisticas_tm"] = np.array(feat_est)
 
     # ── Potencia absoluta por banda ──────────────────────────────────────
     feat_abs = []
@@ -285,27 +300,35 @@ def extract_features(signal):
             ch = band_sig[:, i]
             feat_fest.extend([
                 np.mean(ch),
-                np.std(ch),
-                np.var(ch),
-                np.sqrt(np.mean(ch**2)),
-                skew(ch),
-                kurtosis(ch),
             ])
+        if band_name in ["beta", "gamma"]:
+            for i in range(n_ch):
+                        ch = band_sig[:, i]
+                        feat_fest.extend([
+                            np.std(ch),
+                            np.var(ch),
+                            np.sqrt(np.mean(ch**2)),
+                            skew(ch),
+                            kurtosis(ch),
+                        ])
     features["Frecuencias_Est"] = np.array(feat_fest)
 
-    # ── Wavelets (DWT) ───────────────────────────────────────────────────
-    # wA5 = approximation coef level 5; wD1..wD5 = detail coefs levels 1-5
+        # ── Wavelets (DWT) ───────────────────────────────────────────────────
+    # Nivel máximo factible: floor(log2(len(signal))) = 5 requiere al menos 32 muestras
     feat_wav = []
-    for i in range(n_ch):
-        ch = signal[:, i]
-        coeffs = pywt.wavedec(ch, 'db4', level=5)
-        # coeffs[0]=cA5, coeffs[1]=cD5, ..., coeffs[5]=cD1
-        cA5 = coeffs[0]
-        feat_wav.extend([np.mean(cA5), np.std(cA5), np.var(cA5),
-                         np.sqrt(np.mean(cA5**2))])
-        for cD in coeffs[1:]:
-            feat_wav.extend([np.mean(cD), np.std(cD), np.var(cD),
-                             np.sqrt(np.mean(cD**2))])
+    if n_samples < 32:
+        # No se puede hacer DWT nivel 5: 4 estadísticos * (1 cA5 + 5 cD) = 24 por canal
+        feat_wav.extend([0.0] * (4 * (5+1) * n_ch))
+    else:
+        for i in range(n_ch):
+            ch = signal[:, i]
+            coeffs = pywt.wavedec(ch, 'db4', level=5)
+            cA5 = coeffs[0]
+            feat_wav.extend([np.mean(cA5), np.std(cA5), np.var(cA5),
+                             np.sqrt(np.mean(cA5**2))])
+            for cD in coeffs[1:]:
+                feat_wav.extend([np.mean(cD), np.std(cD), np.var(cD),
+                                 np.sqrt(np.mean(cD**2))])
     features["Wavelets"] = np.array(feat_wav)
 
     # ── Frecuencias_Todas = Abs + Rel + Est concatenadas ─────────────────
@@ -314,28 +337,61 @@ def extract_features(signal):
         features["Frecuencias_Rel"],
         features["Frecuencias_Est"],
     ])
-    """feat_welch= []
-    for i in range(n_ch):
-        ch = band_sig[:, i]
-        f_welch, Pxx = signal.welch(signal, fs=fs_ds, nperseg=min(256, len(signal)))
-        band_mask_welch = (f_welch >= 13) & (f_welch <= 40)
-        Pxx = Pxx[band_mask_welch]
-        feat_welch.extend([#solo en Beta y Gamma
-                float(np.mean(Pxx)),
-                float(np.std(Pxx)),
-                float(np.var(Pxx)),
-                float(np.sqrt(np.mean(Pxx**2))),
-                float(kurtosis(Pxx)),
-                float(skew(Pxx)),
-                ])
-    features["welch"] = np.array(feat_welch) """   
+        # ── Welch (potencia en Beta y Gamma) ──────────────────────────────────────
+    # La señal ya está filtrada entre 0.5 y 30 Hz. Calculamos PSD con Welch
+    # y extraemos estadísticos únicamente en la banda de interés (13-30 Hz).
+    feat_welch = []
+    low_welch, high_welch = 13.0, 30.0   # dentro del límite del filtro original
     
+    # Parámetros adaptativos según longitud de la señal
+    n_samples = signal.shape[0]
+    # Longitud mínima para calcular Welch: al menos 4 muestras por segmento
+    # y se necesita al menos 2 segmentos (no es estricto, pero para evitar errores)
+    if n_samples < 8:
+        # Señal demasiado corta: rellenar con ceros
+        feat_welch.extend([0.0] * (6 * n_ch))
+    else:
+        # Calcular PSD para cada canal
+        for i in range(n_ch):
+            ch = signal[:, i]
+            # Elegir nperseg: no mayor que la señal, mínimo 4, preferible potencia de 2
+            nperseg = min(256, len(ch) // 2) if len(ch) > 32 else len(ch)
+            if nperseg < 4:
+                feat_welch.extend([0.0] * 6)
+                continue
+            try:
+                f_welch, Pxx = welch(ch, fs=fs_ds, nperseg=nperseg, axis=-1)
+                # Seleccionar solo frecuencias dentro de [13, 30] Hz
+                band_mask = (f_welch >= low_welch) & (f_welch <= high_welch)
+                if not np.any(band_mask):
+                    feat_welch.extend([0.0] * 6)
+                    continue
+                Pxx_band = Pxx[band_mask]
+                # Estadísticos del PSD en la banda
+                feat_welch.extend([
+                    float(np.mean(Pxx_band)),
+                    float(np.std(Pxx_band)),
+                    float(np.var(Pxx_band)),
+                    float(np.sqrt(np.mean(Pxx_band**2))),
+                    float(kurtosis(Pxx_band)),
+                    float(skew(Pxx_band)),
+                ])
+            except Exception:
+                feat_welch.extend([0.0] * 6)
+    
+    features["welch"] = np.array(feat_welch)   
+    
+    features["Estadisticas"] = np.concatenate([
+        features["Estadisticas_tm"],
+        features["Frecuencias_Est"],
+        features["welch"]
+    ])
     # ── TODAS ─────────────────────────────────────────────────────────────
     features["TODAS"] = np.concatenate([
-        features["Estadisticas"],
+        features["Estadisticas_tm"],
         features["Frecuencias_Todas"],
-        features["Wavelets"]
-        #features["welch"],
+        features["Wavelets"],
+        features["welch"]
     ])
     return features
 
@@ -475,8 +531,8 @@ def run_pipeline(root_dir, feature_sets=None):
     """
     root_dir = Path(root_dir)
     if feature_sets is None:
-        feature_sets = ["Estadisticas", "Frecuencias_Abs", "Frecuencias_Rel",
-                        "Frecuencias_Est", "Wavelets", "Frecuencias_Todas", "TODAS"]
+        feature_sets = ["Estadisticas", "Estadisticas_tm", "Frecuencias_Abs", "Frecuencias_Rel",
+                        "Frecuencias_Est", "Wavelets","welch", "Frecuencias_Todas", "TODAS"]
 
     all_results   = []
     global_cmds   = {}    # para evaluación general fusionando todas las categorías
@@ -626,5 +682,6 @@ if __name__ == "__main__":
     # Para evaluar solo algunos: feature_sets=["Estadisticas", "Wavelets"]
     results = run_pipeline(
         root_dir      = root,
-        feature_sets  = ["Estadisticas", "Frecuencias_Abs", "Wavelets", "TODAS"],
+        feature_sets  = ["Estadisticas","Estadisticas_tm", "Frecuencias_Abs", "Frecuencias_Rel","Frecuencias_Est", "Wavelets","welch", "Frecuencias_Todas"],
     )
+    #"Estadisticas","Estadisticas_tm", "Frecuencias_Abs", "Frecuencias_Rel","Frecuencias_Est", "Wavelets","welch", "Frecuencias_Todas", "TODAS"

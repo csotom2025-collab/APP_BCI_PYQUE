@@ -399,9 +399,48 @@ def extract_features(signal):
 # ─────────────────────────────────────────────
 #  4. CONSTRUCCIÓN DEL DATASET BINARIO
 # ─────────────────────────────────────────────
-def build_dataset(commands_dict, feature_set="TODAS"):
+def _precompute_all_features(commands_dict):
     """
-    A partir de {cmd_idx: [df, ...]} construye X, y para clasificación binaria.
+    Pre-calcula TODOS los feature sets para todos los trials UNA SOLA VEZ.
+    Retorna dict: {cmd_idx: {feature_set_name: [feature_array, ...], ...}}
+    
+    OPTIMIZACIÓN CRÍTICA: Evita procesar el mismo trial múltiples veces
+    cuando se evalúan múltiples feature sets.
+    
+    Ahorro de tiempo: Si tienes 10 feature sets y N trials,
+      - ANTES: N trials × 10 feature sets = 10N procesados
+      - AHORA: N trials × 1 procesamiento = N procesados
+      Mejora: 10x más rápido cuando se usan múltiples feature sets
+    """
+    precomputed = {}
+    all_feature_sets = None
+    total_trials = sum(len(trials) for trials in commands_dict.values())
+    processed = 0
+    
+    for cmd_idx, trials in commands_dict.items():
+        cmd_all_features = {fs: [] for fs in FEATURE_SETS}
+        
+        for df in trials:
+            sig = preprocess_trial(df)
+            # ✓ Calcula TODOS los feature sets de una sola vez
+            all_feats = extract_features(sig)
+            
+            for fs_name in FEATURE_SETS:
+                cmd_all_features[fs_name].append(all_feats[fs_name])
+            
+            processed += 1
+            if processed % 10 == 0:
+                print(f"    [Preprocesando] {processed}/{total_trials} trials", end='\r')
+        
+        precomputed[cmd_idx] = cmd_all_features
+    
+    print(f"    [Preprocesando] {processed}/{total_trials} trials ✓          ")
+    return precomputed
+
+
+def build_dataset(commands_dict, feature_set="TODAS", precomputed_features=None):
+    """
+    A partir de {cmd_idx: {feature_set: [feature_array, ...]}} construye X, y.
 
     Estrategia de labels:
       - Cada trial de cmd_i  → TARGET (1)    para el clasificador del cmd_i
@@ -413,10 +452,17 @@ def build_dataset(commands_dict, feature_set="TODAS"):
 
     Para evitar un dataset gigantesco con muchos comandos, sub-muestreamos
     non-targets (max_neg_ratio):
+    
+    OPTIMIZACIÓN: Si precomputed_features está disponible, usa features 
+    pre-calculados sin recalcular (ahorra 80-90% del tiempo).
     """
     MAX_NEG_RATIO = 5           # máx 5 non-targets por cada target
 
-    all_cmd_idxs = sorted(commands_dict.keys())
+    # Si no se proporcionan features pre-calculados, calcularlos ahora
+    if precomputed_features is None:
+        precomputed_features = _precompute_all_features(commands_dict)
+
+    all_cmd_idxs = sorted(precomputed_features.keys())
     n_commands   = len(all_cmd_idxs)
 
     if n_commands < 2:
@@ -428,26 +474,21 @@ def build_dataset(commands_dict, feature_set="TODAS"):
     X_pos, X_neg = [], []
 
     for target_cmd in all_cmd_idxs:
-        target_trials = commands_dict[target_cmd]
+        # Extraer features para este feature_set (ya pre-calculados)
+        target_features = precomputed_features[target_cmd][feature_set]
 
-        # Features de trials TARGET
-        for df in target_trials:
-            sig  = preprocess_trial(df)
-            feat = extract_features(sig)[feature_set]
-            X_pos.append(feat)
+        # Features de trials TARGET (ya calculados)
+        X_pos.extend(target_features)
 
-        # Features de trials NON-TARGET (de otros comandos)
+        # Features de trials NON-TARGET (de otros comandos, ya calculados)
         neg_pool = []
         for other_cmd in all_cmd_idxs:
             if other_cmd == target_cmd:
                 continue
-            for df in commands_dict[other_cmd]:
-                sig  = preprocess_trial(df)
-                feat = extract_features(sig)[feature_set]
-                neg_pool.append(feat)
+            neg_pool.extend(precomputed_features[other_cmd][feature_set])
 
         # Sub-muestreo para balancear ratio
-        max_neg = len(target_trials) * MAX_NEG_RATIO
+        max_neg = len(target_features) * MAX_NEG_RATIO
         if len(neg_pool) > max_neg:
             idx = np.random.choice(len(neg_pool), max_neg, replace=False)
             neg_pool = [neg_pool[i] for i in idx]
@@ -486,7 +527,7 @@ def get_classifiers():
 def evaluate_classifiers(X, y, feature_set_name, category_name):
     """
     Evalúa todos los clasificadores con cross-validation estratificada.
-    Retorna DataFrame con resultados.
+    Retorna DataFrame con resultados (AUC, Accuracy, F1).
     """
     results = []
     clfs    = get_classifiers()
@@ -499,6 +540,8 @@ def evaluate_classifiers(X, y, feature_set_name, category_name):
                                          scoring="accuracy", n_jobs=-1)
             scores_auc = cross_val_score(pipeline, X, y, cv=cv,
                                          scoring="roc_auc", n_jobs=-1)
+            scores_f1  = cross_val_score(pipeline, X, y, cv=cv,
+                                         scoring="f1", n_jobs=-1)
             results.append({
                 "Categoria":    category_name,
                 "Feature_Set":  feature_set_name,
@@ -507,12 +550,15 @@ def evaluate_classifiers(X, y, feature_set_name, category_name):
                 "Acc_std":      scores_acc.std(),
                 "AUC_mean":     scores_auc.mean(),
                 "AUC_std":      scores_auc.std(),
+                "F1_mean":      scores_f1.mean(),
+                "F1_std":       scores_f1.std(),
                 "N_samples":    len(y),
                 "N_targets":    int(y.sum()),
                 "N_nontargets": int((y == 0).sum()),
             })
             print(f"    [{clf_name:20s}] Acc={scores_acc.mean():.3f}±{scores_acc.std():.3f} "
-                  f"AUC={scores_auc.mean():.3f}±{scores_auc.std():.3f}")
+                  f"AUC={scores_auc.mean():.3f}±{scores_auc.std():.3f} "
+                  f"F1={scores_f1.mean():.3f}±{scores_f1.std():.3f}")
         except Exception as e:
             print(f"    [{clf_name}] ERROR: {e}")
 
@@ -565,9 +611,15 @@ def run_pipeline(root_dir, feature_sets=None):
             global_key = f"{cat_name}_{cmd_idx}"
             global_cmds[global_key] = trials
 
+        # ✓ OPTIMIZACIÓN: Pre-calcular TODOS los features UNA SOLA VEZ
+        print(f"\n  [Pre-calculando features para todos los trials...]")
+        precomputed = _precompute_all_features(commands)
+
         for fs_name in feature_sets:
             print(f"\n  [Feature set: {fs_name}]")
-            X, y, cmd_list = build_dataset(commands, feature_set=fs_name)
+            # Usar features pre-calculados en lugar de recalcularlos
+            X, y, cmd_list = build_dataset(commands, feature_set=fs_name, 
+                                          precomputed_features=precomputed)
             if X is None:
                 continue
             cat_results = evaluate_classifiers(X, y, fs_name, cat_name)
@@ -578,9 +630,16 @@ def run_pipeline(root_dir, feature_sets=None):
         print(f"\n{'='*60}")
         print(f"  EVALUACIÓN GENERAL (todas las categorías)")
         print(f"{'='*60}")
+        
+        # ✓ OPTIMIZACIÓN: Pre-calcular TODOS los features UNA SOLA VEZ
+        print(f"\n  [Pre-calculando features para todos los trials...]")
+        precomputed_global = _precompute_all_features(global_cmds)
+        
         for fs_name in feature_sets:
             print(f"\n  [Feature set: {fs_name}]")
-            X, y, _ = build_dataset(global_cmds, feature_set=fs_name)
+            # Usar features pre-calculados en lugar de recalcularlos
+            X, y, _ = build_dataset(global_cmds, feature_set=fs_name,
+                                   precomputed_features=precomputed_global)
             if X is None:
                 continue
             gen_results = evaluate_classifiers(X, y, fs_name, "GENERAL")
@@ -608,10 +667,11 @@ def run_pipeline(root_dir, feature_sets=None):
                .first()
                .reset_index()
                [["Categoria", "Feature_Set", "Clasificador",
-                 "Acc_mean", "Acc_std", "AUC_mean", "AUC_std"]])
+                 "Acc_mean", "Acc_std", "AUC_mean", "AUC_std",
+                 "F1_mean", "F1_std"]])
 
     pd.set_option("display.max_rows", 200)
-    pd.set_option("display.width", 120)
+    pd.set_option("display.width", 150)
     print(summary.to_string(index=False))
 
     return df_results

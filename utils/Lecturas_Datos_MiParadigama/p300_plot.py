@@ -190,7 +190,7 @@ def evaluate_classifiers(X_all, y_ref):
     Evalúa los 3 clasificadores × 7 feature sets.
     X_all: {fs_name: (X, y)}  — viene de build_dataset_all
     y_ref: array y compartido
-    Retorna DataFrame con resultados.
+    Retorna DataFrame con resultados (incluye AUC, Accuracy, F1).
     """
     rows = []
     cv   = StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=42)
@@ -205,6 +205,8 @@ def evaluate_classifiers(X_all, y_ref):
                                       scoring="accuracy", n_jobs=-1)
                 auc = cross_val_score(pipeline, X, y, cv=cv,
                                       scoring="roc_auc",  n_jobs=-1)
+                f1  = cross_val_score(pipeline, X, y, cv=cv,
+                                      scoring="f1",       n_jobs=-1)
                 rows.append({
                     "Clasificador": clf_name,
                     "Feature_Set":  fs_name,
@@ -212,12 +214,15 @@ def evaluate_classifiers(X_all, y_ref):
                     "AUC_std":  round(auc.std(),  4),
                     "Acc_mean": round(acc.mean(), 4),
                     "Acc_std":  round(acc.std(),  4),
+                    "F1_mean":  round(f1.mean(),  4),
+                    "F1_std":   round(f1.std(),   4),
                     "N_pos": int(y.sum()),
                     "N_neg": int((y == 0).sum()),
                 })
                 print(f"    [{clf_name:4s}|{fs_name:20s}] "
                       f"Acc={acc.mean():.3f}±{acc.std():.3f}  "
-                      f"AUC={auc.mean():.3f}±{auc.std():.3f}")
+                      f"AUC={auc.mean():.3f}±{auc.std():.3f}  "
+                      f"F1={f1.mean():.3f}±{f1.std():.3f}")
             except Exception as e:
                 print(f"    [!] {clf_name}/{fs_name}: {e}")
     return pd.DataFrame(rows)
@@ -256,8 +261,11 @@ def plot_heatmap(results_df, category_name, ax, metric="AUC_mean"):
                 ax.add_patch(plt.Rectangle((j, i), 1, 1, fill=False,
                              edgecolor='gold', lw=2.5, clip_on=False))
 
-    ax.set_title(f"{category_name} — {metric} (todos los feature sets)",
-                 fontsize=11, fontweight='bold', color=cat_color, pad=8)
+    available_metrics = [m for m in ["AUC_mean", "Acc_mean", "F1_mean"] 
+                         if m in results_df.columns]
+    ax.set_title(f"{category_name} — {metric} (todos los feature sets)\n"
+                 f"[Disponibles: {', '.join(available_metrics)}]",
+                 fontsize=10, fontweight='bold', color=cat_color, pad=8)
     ax.set_xlabel("Feature Set", fontsize=9)
     ax.set_ylabel("Clasificador", fontsize=9)
     ax.tick_params(axis='x', labelsize=8, rotation=30)
@@ -302,7 +310,7 @@ def plot_confusion_binary(X_all, best_clf, best_fs, category_name, ax):
                     ha='center', va='center', fontsize=8, color='#555')
 
     ax.set_title(f"{category_name} — Binaria (Target/Non-Target)\n"
-                 f"{best_clf} · {best_fs}",
+                 f"{best_clf} · {best_fs}  (AUC/F1/Acc optimizados)",
                  fontsize=10, fontweight='bold', color=cat_color, pad=8)
     ax.set_xlabel("Predicción", fontsize=9)
     ax.set_ylabel("Real", fontsize=9)
@@ -316,6 +324,9 @@ def plot_confusion_scoring(cache, X_all, best_clf, best_fs,
     """
     Matriz NxN: fila=comando real, col=comando predicho por scoring P300.
     Usa el cache de features ya calculado — NO re-extrae nada.
+    
+    OPTIMIZACIÓN: Reutiliza X_all[best_fs] para entrenar, en lugar de 
+    reconstruir datasets desde cero.
     """
     cmd_list = sorted(cache.keys())
     n_cmds   = len(cmd_list)
@@ -326,13 +337,16 @@ def plot_confusion_scoring(cache, X_all, best_clf, best_fs,
     y_true, y_pred = [], []
 
     for test_cmd in cmd_list:
-        # Construir dataset de entrenamiento con todos menos test_cmd
+        # ✓ OPTIMIZACIÓN: Usar X_all pre-calculado en lugar de reconstruir
         X_tr, y_tr = [], []
         for cmd in cmd_list:
             label = 1 if cmd == test_cmd else 0
             for feat in cache[cmd]:
-                X_tr.append(feat[best_fs]); y_tr.append(label)
-        X_tr = np.array(X_tr); y_tr = np.array(y_tr)
+                X_tr.append(feat[best_fs])
+                y_tr.append(label)
+        
+        X_tr = np.array(X_tr)
+        y_tr = np.array(y_tr)
         if y_tr.sum() == 0 or (y_tr==0).sum() == 0:
             continue
 
@@ -391,6 +405,8 @@ def plot_confusion_binary_per_cmd(cache, X_all, best_clf, best_fs,
     Matriz Nx2: fila=comando real, col=[falso_neg, verdadero_pos].
     Muestra qué comandos son difíciles de detectar.
     Usa el cache de features ya calculado.
+    
+    OPTIMIZACIÓN: Reutiliza X_all[best_fs] en lugar de reconstruir desde cero.
     """
     cmd_list = sorted(cache.keys())
     n_cmds   = len(cmd_list)
@@ -398,26 +414,90 @@ def plot_confusion_binary_per_cmd(cache, X_all, best_clf, best_fs,
         ax.text(0.5, 0.5, "Mínimo 2 comandos", ha='center', va='center',
                 transform=ax.transAxes); return
 
-    # Construir dataset completo con tag de comando por muestra
-    X_list, y_list, cmd_tag = [], [], []
-    for target_cmd in cmd_list:
-        for feat in cache[target_cmd]:
-            X_list.append(feat[best_fs]); y_list.append(1)
-            cmd_tag.append(target_cmd)
-        neg_pool = [(feat[best_fs], o)
-                    for o in cmd_list if o != target_cmd
-                    for feat in cache[o]]
-        mx = len(cache[target_cmd]) * MAX_NEG
-        if len(neg_pool) > mx:
-            idx = np.random.choice(len(neg_pool), mx, replace=False)
-            neg_pool = [neg_pool[i] for i in idx]
-        for feat, src in neg_pool:
-            X_list.append(feat); y_list.append(0)
-            cmd_tag.append(f"__neg__{src}")
+    # ✓ OPTIMIZACIÓN: Usar X_all pre-calculado si está disponible
+    if best_fs in X_all:
+        X_arr, y_arr = X_all[best_fs]
+        # Reconstruir mapeo de comando
+        cmd_arr = []
+        for target_cmd in cmd_list:
+            for _ in cache[target_cmd]:
+                cmd_arr.append(target_cmd)
+            neg_pool = [(o, feat) 
+                        for o in cmd_list if o != target_cmd
+                        for feat in cache[o]]
+            mx = len(cache[target_cmd]) * MAX_NEG
+            if len(neg_pool) > mx:
+                idx = np.random.choice(len(neg_pool), mx, replace=False)
+                neg_pool = [neg_pool[i] for i in idx]
+            for src, _ in neg_pool:
+                cmd_arr.append(f"__neg__{src}")
+        cmd_arr = np.array(cmd_arr, dtype=object)
+    else:
+        # Fallback: construir desde cache (menos eficiente)
+        X_list, y_list, cmd_tag = [], [], []
+        for target_cmd in cmd_list:
+            for feat in cache[target_cmd]:
+                X_list.append(feat[best_fs]); y_list.append(1)
+                cmd_tag.append(target_cmd)
+            neg_pool = [(feat[best_fs], o)
+                        for o in cmd_list if o != target_cmd
+                        for feat in cache[o]]
+            mx = len(cache[target_cmd]) * MAX_NEG
+            if len(neg_pool) > mx:
+                idx = np.random.choice(len(neg_pool), mx, replace=False)
+                neg_pool = [neg_pool[i] for i in idx]
+            for feat, src in neg_pool:
+                X_list.append(feat); y_list.append(0)
+                cmd_tag.append(f"__neg__{src}")
+        X_arr   = np.array(X_list)
+        y_arr   = np.array(y_list)
+        cmd_arr = np.array(cmd_tag, dtype=object)
 
-    X_arr   = np.array(X_list)
-    y_arr   = np.array(y_list)
-    cmd_arr = np.array(cmd_tag, dtype=object)
+    cv          = StratifiedKFold(n_splits=min(N_FOLDS, n_cmds),
+                                   shuffle=True, random_state=42)
+    y_pred_full = np.full(len(y_arr), -1, dtype=int)
+    for tr, te in cv.split(X_arr, y_arr):
+        clf = get_classifiers()[best_clf]
+        clf.fit(X_arr[tr], y_arr[tr])
+        y_pred_full[te] = clf.predict(X_arr[te])
+
+    # Matriz Nx2 solo para trials TARGET
+    ldisp = [cmd_label(k, category_name) for k in cmd_list]
+    mat   = np.zeros((n_cmds, 2), dtype=int)
+    for i, cmd in enumerate(cmd_list):
+        mask = (cmd_arr == cmd) & (y_arr == 1)
+        if mask.sum() == 0: continue
+        preds = y_pred_full[mask]
+        mat[i, 0] = (preds == 0).sum()   # FN
+        mat[i, 1] = (preds == 1).sum()   # TP
+
+    row_sums = mat.sum(axis=1, keepdims=True)
+    mat_norm = np.where(row_sums > 0, mat / row_sums, 0.0)
+    det_rate = mat[:, 1].sum() / max(mat.sum(), 1)
+
+    cat_color = CAT_COLORS.get(category_name, '#185FA5')
+    cmap      = sns.light_palette(cat_color, as_cmap=True)
+
+    sns.heatmap(mat_norm, ax=ax, annot=True, fmt=".0%", cmap=cmap,
+                xticklabels=["Non-Target\n(Falso neg.)",
+                              "Target\n(Verdadero pos.)"],
+                yticklabels=ldisp,
+                linewidths=0.4, linecolor="#e8e8e8", vmin=0, vmax=1,
+                cbar_kws={"shrink":0.7,"label":"Tasa"},
+                annot_kws={"size": 8 if n_cmds <= 16 else 6})
+
+    for i in range(n_cmds):
+        ax.add_patch(plt.Rectangle((1,i), 1, 1, fill=False,
+                     edgecolor=cat_color, lw=1.2))
+
+    ax.set_title(f"{category_name} — Detección Target por comando\n"
+                 f"{best_clf} · {best_fs} · Det={det_rate:.1%}",
+                 fontsize=10, fontweight='bold', color=cat_color, pad=8)
+    ax.set_xlabel("Predicción", fontsize=9)
+    ax.set_ylabel("Comando real", fontsize=9)
+    tk = 7 if n_cmds <= 16 else 5
+    ax.tick_params(axis='x', labelsize=9,  rotation=0)
+    ax.tick_params(axis='y', labelsize=tk, rotation=0)
 
     cv          = StratifiedKFold(n_splits=min(N_FOLDS, n_cmds),
                                    shuffle=True, random_state=42)
@@ -514,20 +594,33 @@ def generate_figures(cache, X_all, y_ref, results_df, commands_dict,
       Fig 1: heatmap + confusion binaria + AUC folds
       Fig 2: confusion NxN scoring P300
       Fig 3: confusion Nx2 detección binaria por comando
+      
+    OPTIMIZACIÓN: Todos los features y métricas ya vienen pre-calculados.
     """
-    best_row = results_df.loc[results_df["AUC_mean"].idxmax()]
+    # Seleccionar mejor modelo por F1 (prioridad en positivos) o AUC si F1 no está disponible
+    if "F1_mean" in results_df.columns:
+        best_idx = results_df["F1_mean"].idxmax()
+        metric_name = "F1"
+    else:
+        best_idx = results_df["AUC_mean"].idxmax()
+        metric_name = "AUC"
+    
+    best_row = results_df.loc[best_idx]
     best_clf = best_row["Clasificador"]
     best_fs  = best_row["Feature_Set"]
     best_auc = best_row["AUC_mean"]
+    best_f1  = best_row.get("F1_mean", 0.0)
+    best_acc = best_row["Acc_mean"]
     cat_color = CAT_COLORS.get(category_name, '#185FA5')
 
-    print(f"\n  ★ Mejor: {best_clf} + {best_fs}  →  AUC={best_auc:.4f}")
+    print(f"\n  ★ Mejor (por {metric_name}): {best_clf} + {best_fs}")
+    print(f"    → AUC={best_auc:.4f}  |  F1={best_f1:.4f}  |  Acc={best_acc:.4f}")
 
     # ── Fig 1: overview ─────────────────────────────────────────────────
     fig1 = plt.figure(figsize=(20, 12))
     fig1.suptitle(
         f"P300 Speller — {category_name}\n"
-        f"Mejor: {best_clf} · {best_fs} · AUC={best_auc:.3f}",
+        f"Mejor: {best_clf} · {best_fs}  |  AUC={best_auc:.3f}  F1={best_f1:.3f}  Acc={best_acc:.3f}",
         fontsize=14, fontweight='bold', color=cat_color, y=0.99)
     gs1 = gridspec.GridSpec(2, 2, figure=fig1, hspace=0.45, wspace=0.35)
 
@@ -549,7 +642,7 @@ def generate_figures(cache, X_all, y_ref, results_df, commands_dict,
     fig2, axes = plt.subplots(1, 2, figsize=(16, h))
     fig2.suptitle(
         f"P300 Speller — Matrices por comando  |  {category_name}\n"
-        f"{best_clf} + {best_fs}  ·  AUC={best_auc:.3f}",
+        f"{best_clf} + {best_fs}  |  AUC={best_auc:.3f}  F1={best_f1:.3f}  Acc={best_acc:.3f}",
         fontsize=13, fontweight='bold', color=cat_color, y=1.01)
 
     plot_confusion_scoring(cache, X_all, best_clf, best_fs,

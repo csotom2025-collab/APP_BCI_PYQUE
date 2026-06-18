@@ -106,7 +106,6 @@ class P300WindowExtractor:
             features['P300_Latency_Max'].append(max_latency)
             features['P300_Mean_Amplitude'].append(mean_amp)
             features['P300_RMS'].append(rms)
-        
         return pd.DataFrame(features)
     
     def plot_p300_windows(self, eeg_data, windows, channel_names=None, 

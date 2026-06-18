@@ -10,8 +10,8 @@ from PyQt6.QtCore import QTimer,Qt,QThread,pyqtSignal
 import pyqtgraph as pg
 from utils.testDataReader import CSVReader  # Import for test mode
 from collections import deque
-from scipy.signal import butter, filtfilt, iirnotch
-
+from scipy.signal import butter, filtfilt, freqz, iirnotch
+import matplotlib.pyplot as plt
 import numpy as np
 from scipy.signal import butter, iirnotch, filtfilt
 
@@ -24,6 +24,15 @@ class EEGFilter:
         # Filtro Notch (Eliminación de línea de potencia)
         if self.use_notch:
             self.bn, self.an = iirnotch(notch_freq, Q=15, fs=fs)
+        
+        # #PLot filtro notch para referencia
+        # w, h = freqz(self.bn, self.an, fs=fs)
+        # plt.plot(w, 20 * np.log10(abs(h)))
+        # plt.title("Respuesta en frecuencia del filtro Notch")
+        # plt.xlabel("Frecuencia (Hz)")
+        # plt.ylabel("Magnitud (dB)")
+        # plt.grid(True)
+        # plt.show()
         
         # Filtro Bandpass (Pasa-bandas)
         if self.use_bandpass:
@@ -45,11 +54,11 @@ class EEGFilter:
         nans = np.isnan(filtered)
         if np.any(nans):
             filtered[nans] = 0.0
-        
+         
         try:
             # 1. Aplicar bandpass primero (si está habilitado)
-            if self.use_bandpass:
-                filtered = filtfilt(self.b, self.a, filtered)
+            # if self.use_bandpass:
+            #     filtered = filtfilt(self.b, self.a, filtered)
             
             # 2. Aplicar notch (Elimina los 50/60 Hz de la red eléctrica)
             if self.use_notch:
@@ -88,8 +97,6 @@ class SerialReader(QThread):
                 # Esto es vital para que el ADS deje de escupir números
                 self.ser.write(b's') 
                 time.sleep(0.1)
-                
-                # PASO 2: Limpiar TODO lo que quedó en el cable
                 self.ser.reset_input_buffer()
                 
                 # PASO 3: Ahora sí, pedir registros
@@ -149,58 +156,11 @@ class SerialReader(QThread):
                         values = line.split(",")
                         if len(values) == (9 if not self.sixteen_mode else 17):
                             self.data_queue.put(values)
-                            sample_count += 1
-                        # elif len(values) == 11:
-                        #     registers = values
-                        #     reg_name = registers[0]
-                        #     reg_addr = registers[1]
-                        #     reg_value = registers[2]
-                        #     binary_value = bin(int(reg_value, 16))[2:].zfill(8)
-                        #     self.registers[reg_name] = (reg_addr, reg_value, binary_value)
-                        #     print(f"{reg_name} ({reg_addr}): {reg_value}, bin: {binary_value}")
+                            sample_count += 1    
                 else:
                     #time.sleep(0.2)  # Evitar un bucle muy rápido mientras se leen registros
                     time.sleep(0.2)  # Evitar un bucle muy rápido mientras se leen registros
 
-
-                # # if self.ser.in_waiting:
-                # #         buffer += self.ser.read(self.ser.in_waiting)
-
-                # #     # Procesar frames completos
-                # #     while len(buffer) >= frame_size:
-                # #         # Buscar header
-                # #         if buffer[0] != 0xA5:
-                # #             buffer.pop(0)
-                # #             continue
-
-                # #         # Verificar footer
-                # #         if buffer[frame_size - 1] != 0x5A:
-                # #             buffer.pop(0)
-                # #             continue
-
-                # #         frame = buffer[:frame_size]
-                # #         buffer = buffer[frame_size:]
-
-                # #         # -------- Decodificación --------
-                # #         sample = int.from_bytes(frame[1:5], 'little')
-
-                # #         channels = []
-                # #         idx = 5
-                # #         for _ in range(N):
-                # #             raw = frame[idx:idx+3]
-
-                # #             # convertir 24-bit signed
-                # #             val = int.from_bytes(raw, byteorder='big', signed=True)
-                # #             channels.append(val)
-
-                # #             idx += 3
-
-                # #         # Enviar a tu queue
-                # #         # Convertir a strings como antes (igual que readline)
-                # #         values = [str(sample)] + [str(ch) for ch in channels]
-
-                # #         self.data_queue.put(values)
-    
                     #print(f"Received: {line}")
                     # current_time = time.time()
                     # if current_time - start_time >= 1.0:
@@ -267,6 +227,9 @@ class RecordingThread(QThread):
         df_microvolts = pd.DataFrame(columns=self.recording_df.columns)
         # ... dentro de tu hilo ...
         for idx, ch in enumerate(self.recording_df.columns):
+            if ch.lower() == 'tm':
+                df_microvolts[ch] = self.recording_df[ch]
+                continue
             # 1. Obtener valores crudos
             raw_values = self.recording_df[ch].values
             values = np.array(raw_values, dtype=np.float32)
@@ -283,22 +246,23 @@ class RecordingThread(QThread):
             return self.recording_df
 
         df_filtered = self.recording_df.copy()
-        channel_columns = [c for c in df_filtered.columns if c.lower() != 'tm']
+        channel_columns = [c for c in df_filtered.columns if c.lower() != 'tm' ]
+        print(f"Aplicando filtro a canales: {channel_columns}")
 
-        # # # for ch in channel_columns:
-        # # #     try:
-        # # #         values = df_filtered[ch].astype(np.float32).values
-        # # #         filtered_values = self.filter.apply(values)
-        # # #         df_filtered[ch] = filtered_values
-        # # #     except Exception:
-        # # #         pass
+        # # # # for ch in channel_columns:
+        # # # #     try:
+        # # # #         values = df_filtered[ch].astype(np.float32).values
+        # # # #         filtered_values = self.filter.apply(values)
+        # # # #         df_filtered[ch] = filtered_values
+        # # # #     except Exception:
+        # # # #         pass
+        
         V_REF = 4.5
         GAIN = 24  # Ajusta esto si usas otra ganancia en el ADS1299
         LSB_UNIT = V_REF / (GAIN * (2**23 - 1))
 
         # ... dentro de tu hilo ...
-        for idx, ch in enumerate(channel_columns):
-            # 1. Obtener valores crudos
+        for idx, ch in enumerate(channel_columns):            # 1. Obtener valores crudos
             raw_values = df_filtered[ch].values
             values = np.array(raw_values, dtype=np.float32)
 
@@ -307,7 +271,7 @@ class RecordingThread(QThread):
             values = values * LSB_UNIT * 1000000 
 
             # 3. Aplicar filtros (ahora sobre valores reales)
-            print(f"Aplicando filtro al canal {ch}...")
+            #print(f"Aplicando filtro al canal {ch}...")
             values_filt = self.filter.apply(values)
             # print("raw",values[:20])
             # print("filtered",values_filt[:20])
@@ -450,7 +414,7 @@ class SignalsWindow(QMainWindow):
         self.port = 'COM5'
         self.baudrate = 330400 *2
         self.test_mode = False  # Flag for test mode
-        self.sixteen_channels_mode=True
+        self.sixteen_channels_mode=False
         self.channels = self.sixteen_channels if self.sixteen_channels_mode else self.eight_channels
         self.df = self.df_sixteen if self.sixteen_channels_mode else self.df_eight
         self.setup_ui()

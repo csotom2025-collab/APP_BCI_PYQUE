@@ -10,7 +10,7 @@ from PyQt6.QtCore import QTimer,Qt,QThread,pyqtSignal
 # def guardar_grafica(df):
 #     plt.plot(df)
 #     pass
-
+SR =250
 
 class controllerSaveCapture:
     def __init__(self, serial_monitor: SignalsWindow):
@@ -23,7 +23,7 @@ class controllerSaveCapture:
 
         # Limpiar el DataFrame eliminando .0 innecesarios
         df = self.clean_df_file(df)
-        fs=250
+        fs=SR
         expected_samples = fs * self.duration  # Por ejemplo, 250 Hz * 2 segundos = 500 muestras
         print(df.shape) #(657,17)
         if df.shape[0] > expected_samples:
@@ -91,13 +91,16 @@ class controllerSaveCapture:
             data = data * 1e-6  # Convertir de microvoltios a voltios
             
             # Recortar a 500 muestras exactas (2 segundos a 250 Hz) para evitar warnings EDF
-            expected_samples = 500
+            fs = SR
+            expected_samples = fs * self.duration
             if df.shape[0] > expected_samples:
-                df = df.iloc[:, :expected_samples]
+                df = df.iloc[:expected_samples, :]
+                print(f"Recortando datos a {expected_samples} muestras para EDF.")
+                print(f"Data shape después de recorte: {df.shape}")
             
             # --- PASO 3: Crear Info de MNE ---
             ch_names = list(df_signals.columns)
-            sfreq = 250  # Ajusta a la frecuencia real de tu dispositivo
+            sfreq = SR  # Ajusta a la frecuencia real de tu dispositivo
             ch_types = ['eeg'] * len(ch_names)
             
 

@@ -29,7 +29,8 @@ from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import StratifiedKFold, cross_val_score
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, f1_score
+from sklearn.utils.class_weight import compute_sample_weight
 from sklearn.utils.class_weight import compute_sample_weight
 
 warnings.filterwarnings("ignore")
@@ -44,7 +45,7 @@ from p300_classifier import (
 #  CONSTANTES
 # ─────────────────────────────────────────
 N_FOLDS    = 5
-MAX_NEG    = 5          # ratio máx non-target por target
+MAX_NEG    = 1          # 1:1 targets/non-targets — corrige sesgo hacia Non-Target
 FEAT_ORDER = [          # orden visual para heatmap
         "Estadisticas","Estadisticas_tm", "Frecuencias_Abs", "Frecuencias_Rel",
     "Frecuencias_Est", "Wavelets","welch", "Frecuencias_Todas", "TODAS"
@@ -91,6 +92,7 @@ CAT_COLORS = {
 # ─────────────────────────────────────────
 def get_classifiers():
     return {
+        # LDA: balanceo via sample_weight en evaluate_classifiers + dataset 1:1
         "LDA": Pipeline([("sc", StandardScaler()),
                          ("clf", LinearDiscriminantAnalysis(
                              solver="eigen", shrinkage="auto"))]),
@@ -98,10 +100,11 @@ def get_classifiers():
                          ("clf", SVC(kernel="rbf", probability=True,
                                      class_weight="balanced",
                                      C=1.0, gamma="scale"))]),
+        # subsample=0.8 ayuda con desbalance residual
         "GBM": Pipeline([("sc", StandardScaler()),
                          ("clf", GradientBoostingClassifier(
                              n_estimators=80, max_depth=3,
-                             learning_rate=0.1))]),
+                             learning_rate=0.1, subsample=0.8))]),
     }
 
 
@@ -185,12 +188,23 @@ def build_dataset_all(commands_dict):
 # ─────────────────────────────────────────
 #  EVALUACIÓN (usa X_all pre-calculado)
 # ─────────────────────────────────────────
+def _find_best_threshold(y_true, y_proba):
+    """Busca el umbral que maximiza F1. Retorna (threshold, f1)."""
+    thresholds = np.linspace(0.05, 0.95, 91)
+    best_t, best_f = 0.5, 0.0
+    for t in thresholds:
+        f = f1_score(y_true, (y_proba >= t).astype(int), zero_division=0)
+        if f > best_f:
+            best_f, best_t = f, t
+    return best_t, best_f
+
+
 def evaluate_classifiers(X_all, y_ref):
     """
-    Evalúa los 3 clasificadores × 7 feature sets.
+    Evalúa los 3 clasificadores × feature sets.
     X_all: {fs_name: (X, y)}  — viene de build_dataset_all
     y_ref: array y compartido
-    Retorna DataFrame con resultados (incluye AUC, Accuracy, F1).
+    Retorna DataFrame con resultados (AUC, Accuracy, F1, F1@umbral_optimo).
     """
     rows = []
     cv   = StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=42)
@@ -207,6 +221,20 @@ def evaluate_classifiers(X_all, y_ref):
                                       scoring="roc_auc",  n_jobs=-1)
                 f1  = cross_val_score(pipeline, X, y, cv=cv,
                                       scoring="f1",       n_jobs=-1)
+
+                # ── Umbral optimizado por F1 (fold a fold) ───────────────
+                thresh_vals, f1_thresh_vals = [], []
+                for tr, te in cv.split(X, y):
+                    if clf_name == "LDA":
+                        pipeline.fit(X[tr], y[tr],
+                                     clf__sample_weight=compute_sample_weight("balanced", y[tr]))
+                    else:
+                        pipeline.fit(X[tr], y[tr])
+                    proba_te = pipeline.predict_proba(X[te])[:, 1]
+                    t, fv    = _find_best_threshold(y[te], proba_te)
+                    thresh_vals.append(t)
+                    f1_thresh_vals.append(fv)
+
                 rows.append({
                     "Clasificador": clf_name,
                     "Feature_Set":  fs_name,
@@ -216,13 +244,16 @@ def evaluate_classifiers(X_all, y_ref):
                     "Acc_std":  round(acc.std(),  4),
                     "F1_mean":  round(f1.mean(),  4),
                     "F1_std":   round(f1.std(),   4),
+                    "F1_thresh_mean": round(float(np.mean(f1_thresh_vals)), 4),
+                    "Threshold_mean": round(float(np.mean(thresh_vals)),    4),
                     "N_pos": int(y.sum()),
                     "N_neg": int((y == 0).sum()),
                 })
                 print(f"    [{clf_name:4s}|{fs_name:20s}] "
                       f"Acc={acc.mean():.3f}±{acc.std():.3f}  "
                       f"AUC={auc.mean():.3f}±{auc.std():.3f}  "
-                      f"F1={f1.mean():.3f}±{f1.std():.3f}")
+                      f"F1={f1.mean():.3f}  "
+                      f"F1@thr={np.mean(f1_thresh_vals):.3f}(t={np.mean(thresh_vals):.2f})")
             except Exception as e:
                 print(f"    [!] {clf_name}/{fs_name}: {e}")
     return pd.DataFrame(rows)
@@ -275,8 +306,12 @@ def plot_heatmap(results_df, category_name, ax, metric="AUC_mean"):
 # ─────────────────────────────────────────
 #  PLOT 2: CONFUSION MATRIX BINARIA (Target vs Non-Target)
 # ─────────────────────────────────────────
-def plot_confusion_binary(X_all, best_clf, best_fs, category_name, ax):
-    """Matriz 2×2 Target/Non-Target del mejor clasificador."""
+def plot_confusion_binary(X_all, best_clf, best_fs, category_name, ax,
+                          results_df=None):
+    """
+    Matriz 2×2 Target/Non-Target usando umbral optimizado por F1.
+    Si results_df está disponible, usa el Threshold_mean ya calculado.
+    """
     if best_fs not in X_all:
         ax.text(0.5, 0.5, f"Feature set '{best_fs}' no disponible",
                 ha='center', va='center', transform=ax.transAxes); return
@@ -284,13 +319,31 @@ def plot_confusion_binary(X_all, best_clf, best_fs, category_name, ax):
     X, y  = X_all[best_fs]
     clf   = get_classifiers()[best_clf]
     cv    = StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=42)
-    y_true_all, y_pred_all = [], []
+    y_true_all, y_pred_all, y_proba_all = [], [], []
 
     for tr, te in cv.split(X, y):
-        clf.fit(X[tr], y[tr])
-        y_pred_all.extend(clf.predict(X[te]))
+        if best_clf == "LDA":
+            clf.fit(X[tr], y[tr],
+                    clf__sample_weight=compute_sample_weight("balanced", y[tr]))
+        else:
+            clf.fit(X[tr], y[tr])
+        proba = clf.predict_proba(X[te])[:, 1]
+        y_proba_all.extend(proba)
         y_true_all.extend(y[te])
 
+    y_proba_all = np.array(y_proba_all)
+    y_true_all  = np.array(y_true_all)
+
+    # Obtener umbral: del results_df si está disponible, si no buscar por F1
+    if results_df is not None and "Threshold_mean" in results_df.columns:
+        mask = (results_df["Clasificador"] == best_clf) & \
+               (results_df["Feature_Set"]  == best_fs)
+        row  = results_df[mask]
+        threshold = float(row["Threshold_mean"].values[0]) if len(row) else 0.5
+    else:
+        threshold, _ = _find_best_threshold(y_true_all, y_proba_all)
+
+    y_pred_all = (y_proba_all >= threshold).astype(int)
     cm      = confusion_matrix(y_true_all, y_pred_all)
     cm_norm = cm.astype(float) / cm.sum(axis=1, keepdims=True)
 
@@ -309,8 +362,9 @@ def plot_confusion_binary(X_all, best_clf, best_fs, category_name, ax):
             ax.text(j+0.5, i+0.72, f"n={cm[i,j]}",
                     ha='center', va='center', fontsize=8, color='#555')
 
+    f1_val = f1_score(y_true_all, y_pred_all, zero_division=0)
     ax.set_title(f"{category_name} — Binaria (Target/Non-Target)\n"
-                 f"{best_clf} · {best_fs}  (AUC/F1/Acc optimizados)",
+                 f"{best_clf} · {best_fs}  |  umbral={threshold:.2f}  F1={f1_val:.3f}",
                  fontsize=10, fontweight='bold', color=cat_color, pad=8)
     ax.set_xlabel("Predicción", fontsize=9)
     ax.set_ylabel("Real", fontsize=9)
@@ -626,7 +680,7 @@ def generate_figures(cache, X_all, y_ref, results_df, commands_dict,
 
     plot_heatmap(results_df, category_name, fig1.add_subplot(gs1[0, :]))
     plot_confusion_binary(X_all, best_clf, best_fs, category_name,
-                          fig1.add_subplot(gs1[1, 0]))
+                          fig1.add_subplot(gs1[1, 0]), results_df=results_df)
     plot_auc_folds(X_all, best_clf, best_fs, category_name,
                    fig1.add_subplot(gs1[1, 1]))
 

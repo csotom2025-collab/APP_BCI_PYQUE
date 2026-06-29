@@ -10,6 +10,7 @@ from windows.gridWindow import KeyboardWindow
 from windows.trainWindow import TrainWindow
 from controllers.serialConfigSingnalsController import ControllerSerialConfig
 from controllers.predictorController import PredictorController
+from windows.recordingShowedWindow import RecordingShowedWindow
 class Menu(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -24,7 +25,7 @@ class Menu(QWidget):
         self.capture_window.controller_save_capture = self.controller_save_capture  # Asigna el controlador de
         self.predictor_controller = PredictorController()
         self.speller_config_window = SpellerConfigurationWindow(predict_controller=self.predictor_controller, save_capture_controller=self.controller_save_capture,keyboard_window = self.keyboard_window)  # Pasa el controlador de guardado al speller
-        
+        self.recordingShowWindow = RecordingShowedWindow()
 
         self.setup_ui()
 
@@ -42,6 +43,8 @@ class Menu(QWidget):
         button_capture.clicked.connect(self.open_capture_window)
         button_serial_config = QPushButton("Configurar Serial")
         button_serial_config.clicked.connect(self.open_config_serial_window)
+        button_show_plot_window = QPushButton("Menu ver señales")
+        button_show_plot_window.clicked.connect(self.open_recording_show_window)
 
 
         self.setLayout(self.layout)
@@ -51,7 +54,7 @@ class Menu(QWidget):
         self.layout.addWidget(button_train)
         self.layout.addWidget(button_capture)
         self.layout.addWidget(button_serial_config)
-
+        self.layout.addWidget(button_show_plot_window)
         
         self.move(100, 150)
     def closeEvent(self, event: QCloseEvent):
@@ -78,6 +81,8 @@ class Menu(QWidget):
             self.capture_window.quit()
         if self.serial_window:
             self.serial_window.close()
+        if self.recordingShowWindow:
+            self.recordingShowWindow.close()
 
     def open_signals_window(self):
         self.signals_window.show()
@@ -90,6 +95,8 @@ class Menu(QWidget):
         self.capture_window.show()
     def open_config_serial_window(self):
         self.serial_window.show()
+    def open_recording_show_window(self):
+        self.recordingShowWindow.show()
     
 
 class MainWindow(QMainWindow):
@@ -104,13 +111,16 @@ class MainWindow(QMainWindow):
         """Cierra todas las ventanas secundarias y la aplicación."""
         #Acepta el evento de cierre de la ventana principal
         event.accept()
+        self.menu.quit_application()
         QApplication.quit()
     
     def close_application(self):
         self.close()
+        self.menu.quit_application()
 
-if __name__ == "__main__":
+def main():
     app = QApplication([])
     window = MainWindow()
     window.show()
     app.exec()
+main()

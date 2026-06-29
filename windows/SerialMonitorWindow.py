@@ -404,15 +404,16 @@ class SignalsWindow(QMainWindow):
 
 
         self.columns = self.columnasReal if True else self.columnasTests
-        self.eight_channels =["ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8"]
+        # self.eight_channels =["ch1","ch2","ch3","ch4","ch5","ch6","ch7","ch8"]
+        self.eight_channels =["Oz","Cz","F3","F4","Fz","P3","P4","Pz"]
         self.sixteen_channels = self.columns[1:]
         self.df_sixteen= pd.DataFrame(columns=self.columns)
         self.apply_filter = False
         self.overlay_mode = False
         #  ["Oz","Po7","Po4","Po3","P4","P3","Po","Pz","Fz","F2","F3","F4,"AF3","Cz","AF4","F1"]
         self.serial_thread = None
-        self.port = 'COM5'
-        self.baudrate = 330400 *2
+        self.port = 'COM9'
+        self.baudrate = 230400 *2
         self.test_mode = False  # Flag for test mode
         self.sixteen_channels_mode=False
         self.channels = self.sixteen_channels if self.sixteen_channels_mode else self.eight_channels

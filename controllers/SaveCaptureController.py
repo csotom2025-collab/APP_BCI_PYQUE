@@ -93,10 +93,11 @@ class controllerSaveCapture:
             # Recortar a 500 muestras exactas (2 segundos a 250 Hz) para evitar warnings EDF
             fs = SR
             expected_samples = fs * self.duration
-            if df.shape[0] > expected_samples:
-                df = df.iloc[:expected_samples, :]
+            print(f"Data shape antes de recorte: {data.shape}, expected_samples: {expected_samples}")
+            if data.shape[1] > expected_samples:
+                data = data[:, :expected_samples]
                 print(f"Recortando datos a {expected_samples} muestras para EDF.")
-                print(f"Data shape después de recorte: {df.shape}")
+                print(f"Data shape después de recorte: {data.shape}")
             
             # --- PASO 3: Crear Info de MNE ---
             ch_names = list(df_signals.columns)

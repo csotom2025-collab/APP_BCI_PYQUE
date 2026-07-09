@@ -37,10 +37,10 @@ def graficar_captura(user, letter, capture_number, apply_notch=False, clear_base
         print(f"\n✅ Cargado: {filename}")
         print(f"   Forma del dataset: {df.shape}")
         print(f"   Canales disponibles: {df.columns.tolist()}")
-        if apply_notch:
-            print(f"   ✓ Filtro notch aplicado (50 Hz)")
-        if clear_baseline:
-            print(f"   ✓ Eliminación de línea base aplicada")
+        # if apply_notch:
+        #     print(f"   ✓ Filtro notch aplicado (50 Hz)")
+        # if clear_baseline:
+        #     print(f"   ✓ Eliminación de línea base aplicada")
 
         # Crear gráficas por canal
         fig, axes = plt.subplots(8, 2, figsize=(12, 8))
@@ -113,15 +113,14 @@ def graficar_captura_sobrepuesta(user, letter, capture_number, apply_notch=False
             return False
         
         df = pd.read_csv(filename)
-        print(df.head())
         # Mostrar información del archivo
-        print(f"\n✅ Cargado: {filename}")
-        print(f"   Forma del dataset: {df.shape}")
-        print(f"   Canales disponibles: {df.columns.tolist()}")
-        if apply_notch:
-            print(f"   ✓ Filtro notch aplicado (50 Hz)")
-        if clear_baseline:
-            print(f"   ✓ Eliminación de línea base aplicada")
+        # print(f"\n✅ Cargado: {filename}")
+        # print(f"   Forma del dataset: {df.shape}")
+        # print(f"   Canales disponibles: {df.columns.tolist()}")
+        # if apply_notch:
+        #     print(f"   ✓ Filtro notch aplicado (50 Hz)")
+        # if clear_baseline:
+        #     print(f"   ✓ Eliminación de línea base aplicada")
 
         channels = [col for col in df.columns if col != 'Tm']
         print(channels)

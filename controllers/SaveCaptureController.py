@@ -10,7 +10,7 @@ from PyQt6.QtCore import QTimer,Qt,QThread,pyqtSignal
 # def guardar_grafica(df):
 #     plt.plot(df)
 #     pass
-SR =250
+SR =128
 
 class controllerSaveCapture:
     def __init__(self, serial_monitor: SignalsWindow):

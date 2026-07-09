@@ -30,7 +30,7 @@ class RecordingShowedWindow(QWidget):
         
 
         self.combo_box_dirs = QComboBox()
-        self.combo_box_users.currentTextChanged.connect(self.load_files)
+        self.combo_box_dirs.currentTextChanged.connect(self.load_files)
 
         self.combo_box_files = QComboBox()
 
@@ -66,9 +66,15 @@ class RecordingShowedWindow(QWidget):
         self.hide()
     
     def load_users(self):
+        current_user = self.combo_box_users.currentText()
+        current_dir = self.combo_box_dirs.currentText()
         self.combo_box_users.clear()
         users = os.listdir("captures")
         self.combo_box_users.addItems(users)
+        if current_user in users:
+            self.combo_box_users.setCurrentText(current_user)
+        
+        self.combo_box_dirs.setCurrentText(current_dir)
 
     def load_dirs(self):
         user = self.combo_box_users.currentText()
@@ -98,7 +104,6 @@ class RecordingShowedWindow(QWidget):
         # print("using_notch",use_notch)
         # print("clear_baseline", clear_baseline)
         # print("overlay_plotting", overlay_plotting)
-        # print(file_path)
         # print("mostrando ")
         if overlay_plotting:
             self.graficar_captura_sobrepuesta(user,letter,capture_number,apply_notch=use_notch,clear_baseline=clear_baseline,file_path=file_path)
@@ -106,7 +111,6 @@ class RecordingShowedWindow(QWidget):
             self.graficar_captura(user,letter,capture_number,apply_notch=use_notch,clear_baseline=clear_baseline,file_path=file_path)
 
     def close_window(self):
-        
         self.close()
         plt.close('all')
     def graficar_captura(self,user, letter, capture_number, apply_notch=False, clear_baseline=False,file_path=None):
@@ -125,17 +129,17 @@ class RecordingShowedWindow(QWidget):
             # Intentar Letter primero
             filename = f'captures/{user}/Letters/{user}_{letter}_{capture_number}.csv'
             
-            # Si no existe, intentar Numbers
-            if not os.path.exists(filename):
-                filename = f'captures/{user}/Numbers/{user}_{letter}_{capture_number}.csv'
+            # # Si no existe, intentar Numbers
+            # if not os.path.exists(filename):
+            #     filename = f'captures/{user}/Numbers/{user}_{letter}_{capture_number}.csv'
             
-            # Si aún no existe, intentar Controls
-            if not os.path.exists(filename):
-                filename = f'captures/{user}/Controls/{user}_{letter}_{capture_number}.csv'
+            # # Si aún no existe, intentar Controls
+            # if not os.path.exists(filename):
+            #     filename = f'captures/{user}/Controls/{user}_{letter}_{capture_number}.csv'
             
-            if not os.path.exists(filename):
-                print(f"❌ Archivo no encontrado: {filename}")
-                return False
+            # if not os.path.exists(filename):
+            #     print(f"❌ Archivo no encontrado: {filename}")
+            #     return False
             if file_path is not None:
                 df = pd.read_csv(file_path)
             else:
@@ -145,10 +149,10 @@ class RecordingShowedWindow(QWidget):
             # print(f"\n✅ Cargado: {filename}")
             # print(f"   Forma del dataset: {df.shape}")
             # print(f"   Canales disponibles: {df.columns.tolist()}")
-            if apply_notch:
-                print(f"   ✓ Filtro notch aplicado (50 Hz)")
-            if clear_baseline:
-                print(f"   ✓ Eliminación de línea base aplicada")
+            # if apply_notch:
+            #     print(f"   ✓ Filtro notch aplicado (50 Hz)")
+            # if clear_baseline:
+            #     print(f"   ✓ Eliminación de línea base aplicada")
 
             # Crear gráficas por canal
             fig, axes = plt.subplots(4, 2, figsize=(10, 6))
@@ -214,17 +218,17 @@ class RecordingShowedWindow(QWidget):
             # 1. Intentar Letter primero
             filename = f'captures/{user}/Letters/{user}_{letter}_{capture_number}.csv'
             
-            # Si no existe, intentar Numbers
-            if not os.path.exists(filename):
-                filename = f'captures/{user}/Numbers/{user}_{letter}_{capture_number}.csv'
+            # # Si no existe, intentar Numbers
+            # if not os.path.exists(filename):
+            #     filename = f'captures/{user}/Numbers/{user}_{letter}_{capture_number}.csv'
             
-            # Si aún no existe, intentar Controls
-            if not os.path.exists(filename):
-                filename = f'captures/{user}/Controls/{user}_{letter}_{capture_number}.csv'
+            # # Si aún no existe, intentar Controls
+            # if not os.path.exists(filename):
+            #     filename = f'captures/{user}/Controls/{user}_{letter}_{capture_number}.csv'
             
-            if not os.path.exists(filename):
-                print(f"❌ Archivo no encontrado: {filename}")
-                return False
+            # if not os.path.exists(filename):
+            #     print(f"❌ Archivo no encontrado: {filename}")
+            #     return False
             
             if file_path is not None:
                 df = pd.read_csv(file_path)
@@ -235,13 +239,10 @@ class RecordingShowedWindow(QWidget):
             # print(f"\n✅ Cargado: {filename}")
             # print(f"   Forma del dataset: {df.shape}")
             # print(f"   Canales disponibles: {df.columns.tolist()}")
-            if apply_notch:
-                print(f"   ✓ Filtro notch aplicado (50 Hz)")
-            if clear_baseline:
-                print(f"   ✓ Eliminación de línea base aplicada")
+
+
 
             channels = [col for col in df.columns if col != 'Tm']
-            print(channels)
             
             color_array = ['brown','orange','yellow','green','blue','purple','gray','white'] * 2
             plt.style.use('dark_background')
@@ -267,7 +268,8 @@ class RecordingShowedWindow(QWidget):
                 if clear_baseline:
                     n_muestras_baseline = int(0.5 * fs) # 0.5 segundos * 250 Hz = 125 muestras
                     # Calculamos el promedio de esas primeras 125 muestras en el arreglo 1D
-                    baseline_mean = np.mean(signal_data[:n_muestras_baseline])
+                    # baseline_mean = np.mean(signal_data[:n_muestras_baseline])
+                    baseline_mean = np.mean(signal_data)
                     # Restamos el promedio a toda la señal
                     signal_data = signal_data - baseline_mean
                 
@@ -288,6 +290,12 @@ class RecordingShowedWindow(QWidget):
         except Exception as e:
             print(f"❌ Error al procesar el archivo: {e}")
             return False
+    def closeEvent(self, event: QCloseEvent):
+        self.close_window()
+        event.accept()  # Close the window
+
+
+
 # def main():
 #     app = QApplication(sys.argv)
 #     window = RecordingShowedWindow()

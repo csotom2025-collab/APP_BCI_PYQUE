@@ -56,6 +56,8 @@ class CaptureWindow(QWidget):
 
         self.grid_button = QPushButton("Mostrar Grid")
         self.grid_button.clicked.connect(self.show_grid)
+        self.grid_button_hide = QPushButton("ocultar Grid")
+        self.grid_button_hide.clicked.connect(self.hide_grid)
 
 
         # self.layout.addWidget(QLabel("Seleccionar usuario:"), 0, 0)
@@ -72,7 +74,8 @@ class CaptureWindow(QWidget):
         self.layout.addWidget(self.duration_recording_edit_line,4,1)
         self.layout.addWidget(self.button_start_capture, 5, 0, 1, 2)
         self.layout.addWidget(self.button_simulation, 7, 0, 1, 2)
-        self.layout.addWidget(self.grid_button, 8, 0, 1, 2)
+        self.layout.addWidget(self.grid_button, 8, 0, 1, 1)
+        self.layout.addWidget(self.grid_button_hide, 8, 1, 1, 1)
         self.layout.addWidget(QLabel("Veces:"), 6, 0, 1, 1)
         self.layout.addWidget(self.n_times_edit_line, 6, 1, 1, 1)
         self.setLayout(self.layout)
@@ -100,13 +103,14 @@ class CaptureWindow(QWidget):
         # user = self.combo_box_users.currentText()
         user = "User" + self.user_edit_line.text()
         #path = self.path_edit_line.text()
-        #self.show_grid()
+        self.show_grid()
         character = self.combo_box_character.currentText()
         character_type = self.combo_box_character_type.currentText()
         self.controller_keyboard.flash_character(character)
         duration = self.duration_recording_edit_line.text()
         ###salvar captura
         duration= int(duration)
+
         self.controller_save_capture.start_capture(user,character_type,character,duration)
         
 
@@ -127,7 +131,7 @@ class CaptureWindow(QWidget):
             return
         print("Mostrando Pantalla")
         qtime = QTimer()
-        qtime.singleShot(1500, self.start_n_times)
+        qtime.singleShot(850, self.start_n_times)
     def show_grid_after_rest(self):
         if not self.keyboard_window or not self.isBlackScreenVisible():
             print("No hay ventana de teclado, mostrando mensaje de error")
@@ -148,6 +152,9 @@ class CaptureWindow(QWidget):
             self.black_screen.show()
         else:
             self.show_grid_after_rest()
+    def hide_grid(self):
+        if self.keyboard_window:
+            self.keyboard_window.hide_grid()
     def isBlackScreenVisible(self):
         return self.black_screen and self.black_screen.isVisible()
     def closeEvent(self, event: QCloseEvent):

@@ -155,7 +155,7 @@ class RecordingShowedWindow(QWidget):
             #     print(f"   ✓ Eliminación de línea base aplicada")
 
             # Crear gráficas por canal
-            fig, axes = plt.subplots(4, 2, figsize=(10, 6))
+            fig, axes = plt.subplots(8, 2, figsize=(10, 6))
             fig.suptitle(f'Señales EEG - {user} {letter} #{capture_number} { "con notch" if apply_notch else "sinotch"} {"sin linea base" if clear_baseline else ""}', fontsize=10)
 
             # Aplanar el array de axes para ite

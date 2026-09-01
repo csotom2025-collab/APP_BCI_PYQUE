@@ -179,7 +179,7 @@ class controllerSaveCapture:
             print("Descanso")
             if self.capture_count < self.times:
                 # Programar la siguiente grabación con un pequeño delay
-                QTimer.singleShot(1000, start_next_capture)  # 1 segundo de pausa entre grabaciones
+                QTimer.singleShot(600, start_next_capture)  # .750 segundo de pausa entre grabaciones
             else:
                 # Todas las grabaciones completadas
                 print(f"\nTodas las  grabaciones completadas!")

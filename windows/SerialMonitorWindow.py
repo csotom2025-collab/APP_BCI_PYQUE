@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox, QPushButton, QLabel, QVBoxLayout, QWidget, QHBoxLayout, QComboBox, QCheckBox,QScrollArea
 from PyQt6.QtCore import QTimer,Qt,QThread,pyqtSignal
+from PyQt6.QtGui import QCloseEvent, QFont
 import pyqtgraph as pg
 from utils.testDataReader import CSVReader  # Import for test mode
 from collections import deque
@@ -121,10 +122,10 @@ _emotiv_sensor_quality_bit = {
 }
 
 _emotiv_battery_values = {
-    255: 100, 254: 100, 253: 100, 252: 100, 251: 100, 250: 100, 249: 100, 248: 100,
-    247: 99, 246: 97, 245: 93, 244: 89, 243: 85, 242: 82, 241: 77, 240: 72,
-    239: 66, 238: 62, 237: 55, 236: 46, 235: 32, 234: 20, 233: 12, 232: 6,
-    231: 4, 230: 3, 229: 2, 228: 2, 227: 2, 226: 1, 225: 0, 224: 0,
+    255: 103, 254: 102, 253: 101, 252: 100, 251: 110, 250: 111, 249: 112, 248: 113,
+    247: 100, 246: 97, 245: 93, 244: 99, 243: 95, 242: 91, 241: 89, 240: 83,
+    239: 79, 238: 74, 237: 66, 236: 60, 235: 58, 234: 54, 233: 48, 232: 42,
+    231: 35, 230: 28, 229: 23, 228: 17, 227: 16, 226: 14, 225: 10, 224: 9,
 }
 
 _emotiv_sensors_mapping = {name: {'value': 0.0, 'quality': 0} for name in EMOTIV_CHANNELS}
@@ -726,6 +727,7 @@ class SignalsWindow(QMainWindow):
         self.emotiv_overlay_quality_label = QLabel("")
         self.emotiv_overlay_quality_label.setWordWrap(True)
         self.emotiv_overlay_quality_label.setVisible(False)
+        self.emotiv_overlay_quality_label.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         main_layout.addWidget(self.emotiv_overlay_quality_label)
 
         container = QWidget()
@@ -809,19 +811,25 @@ class SignalsWindow(QMainWindow):
         Modo superpuesto: la calidad de todos los canales se muestra junta
         en el label de abajo, ya que ahi no hay un titulo por canal.
         """
+        # greather than 1000 is considered 100%, less than 100 is 0% from 100-400 is 33%, from 400 to 600 is 66% , else 80%
+        value_to_quality = lambda v: 100 if v > 1000 else (0 if v < 100 else (33 if v < 400 else (66 if v < 600 else 80)))
         if not self.use_emotiv:
             return
         if self.overlay_mode:
+            # texto = "  |  ".join(
+            #     f"{ch}: {int(self.emotiv_quality.get(ch, 0))}" for ch in self.emotiv_channels
+            # )
             texto = "  |  ".join(
-                f"{ch}: {int(self.emotiv_quality.get(ch, 0))}" for ch in self.emotiv_channels
-            )
+                             f"{ch}: {value_to_quality(self.emotiv_quality.get(ch, 0))}%" for ch in self.emotiv_channels
+                         )
             self.emotiv_overlay_quality_label.setText("Calidad de señal (Emotiv): " + texto)
             self.emotiv_overlay_quality_label.setVisible(True)
         else:
             self.emotiv_overlay_quality_label.setVisible(False)
             for idx, ch in enumerate(self.channels):
                 if idx < len(self.plots) and ch in self.emotiv_quality:
-                    self.plots[idx].setTitle(f"Canal: {ch}  -  calidad: {int(self.emotiv_quality[ch])}")
+                    #self.plots[idx].setTitle(f"Canal: {ch}  -  calidad: {int(self.emotiv_quality[ch])}")
+                    self.plots[idx].setTitle(f"Canal: {ch}  -  calidad: {value_to_quality(self.emotiv_quality[ch])}%")
 
     def _rebuild_plots(self):
         self.plots = []

@@ -1,7 +1,16 @@
 import os
+import sys
+from pathlib import Path
+
 import pandas as pd
 import numpy as np
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from models.pipeline_completo_lda import PipelineCompletoLDA
+
 class controllerTraining():
     def __init__(self):
         pass
@@ -11,6 +20,7 @@ class controllerTraining():
             print("no existe la ruta")
             return
         if modelType== "LDA":
+            print("lda")
             self.pipeline_lda = PipelineCompletoLDA(base_output_dir="resultsALL/")
             self.pipeline_lda.separar_archivos_csv(usuario=user)
             print("SE SEPARARON LOS ARCHIVOS ")
@@ -25,7 +35,7 @@ class controllerTraining():
             print("LDA")
         if modelType == "CNN":
             print("cnn")
-        df = self.create_df(dataPath)
+        #df = self.create_df(dataPath)
 
 
     def save_model(self,path):
@@ -44,7 +54,10 @@ class controllerTraining():
         labels_dict={}
         files_dataset = []
         for file_name in files:
+            if not file_name.endswith('.csv'):
+                continue
             label = self.get_label(file_name)
+            print(f"Processing file: {path + f'/{file_name}'}")
 
             file = pd.read_csv(path + f'/{file_name}')
             file_channels =[]
@@ -80,8 +93,6 @@ class controllerTraining():
         print(letters_path)
         if os.path.exists(letters_path):
             letters_files = os.listdir(letters_path)
-            for file in letters_files:
-                self.get_label(file)
         if os.path.exists(numbers_path):
             numbers_files = os.listdir(numbers_path)
         if os.path.exists(controls_path):
@@ -91,7 +102,9 @@ class controllerTraining():
 
 
 
-controller =controllerTraining()
-user="Usermar"
-path = "captures/" + user
-controller.train_model(user,path,"lstm")
+if __name__ == "__main__":
+    controller = controllerTraining()
+    user = "UserMartinEpoc"
+    path = "captures/" + user
+    #controller.train_model(user, path, "LDA")
+    controller.create_df(path)

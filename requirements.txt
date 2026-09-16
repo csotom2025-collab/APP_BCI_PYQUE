@@ -1,0 +1,14 @@
+PyQt6
+pyqtgraph
+pandas
+numpy
+pyserial
+mne
+edfio
+hid
+hidapi
+matplotlib
+scipy
+pycryptodome
+scikit-learn
+seaborn

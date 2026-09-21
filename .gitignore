@@ -11,7 +11,6 @@ __pycache__/
 /onlineCaptures
 #/models
 /utils/mvp
-*.csv
 *.png
 *.edf
 resultsALL/

@@ -1,0 +1,2 @@
+usuario,n_trials,mejor_nivel,mejor_grupo,mejor_feature_set,mejor_clasificador,accuracy_mean,f1_macro_mean
+UserArcane,1198,super_clase,Letters/Numbers/Controls,Frecuencias_Todas,LogReg,0.8372559274755927,0.6984638005368083

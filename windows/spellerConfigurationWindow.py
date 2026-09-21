@@ -1,7 +1,7 @@
 import sys
 import json
 import os
-from PyQt6.QtWidgets import QApplication, QHBoxLayout, QLabel, QMessageBox, QWidget, QPushButton, QGridLayout, QVBoxLayout, QLineEdit, QComboBox
+from PyQt6.QtWidgets import QApplication, QLabel, QMessageBox, QWidget, QPushButton, QGridLayout, QLineEdit, QComboBox
 from PyQt6.QtCore import QTimer, Qt, QRect
 from PyQt6.QtWidgets import QSizePolicy
 from PyQt6.QtGui import QCloseEvent, QFont

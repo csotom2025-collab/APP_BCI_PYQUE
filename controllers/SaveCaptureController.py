@@ -123,7 +123,7 @@ class controllerSaveCapture:
             # Tu respaldo en CSV...
 
     def start_capture(self, user, character_type, character, duration, callback=None,online=False):
-        path = 'captures' if not online else 'onlineCaptures'
+        path = 'captures' 
         path_user= f"{path}/{user}/{character_type}/"
         filename = f"{user}_{character}_"
         numero ="0"

@@ -251,6 +251,9 @@ class EmotivReader(QThread):
 
     def run(self):
         device_info = _emotiv_find_device()
+        print("Device info:", device_info)
+        print("Device info path:", device_info["path"])
+
         if device_info is None:
             self.error_signal.emit("No se encontro la diadema Emotiv EPOC+ conectada (revisa el USB/dongle).")
             return

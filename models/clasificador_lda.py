@@ -1,10 +1,12 @@
 import copy
+import re
 from pathlib import Path
 
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import joblib
 
 from sklearn.preprocessing import StandardScaler, LabelEncoder, label_binarize
 from sklearn.model_selection import train_test_split
@@ -67,6 +69,8 @@ class LDAClassifierTrainer:
         models: dict | None = None,
         verbose: bool = True,
         save_plots: bool = True,
+        save_models: bool = False,
+        model_format: str = 'joblib',
     ):
         self.usuario_base = Path(usuario_base)
         self.output_base = Path(output_base) if output_base else self.usuario_base / 'Resultados_Clasificadores'
@@ -78,11 +82,60 @@ class LDAClassifierTrainer:
         self.models = models or get_default_models(random_state=random_state)
         self.verbose = verbose
         self.save_plots = save_plots
+        self.save_models = save_models
+        self.model_format = model_format.lower().lstrip('.')
+        if self.model_format not in {'joblib', 'pkl'}:
+            raise ValueError("model_format debe ser 'joblib' o 'pkl'.")
         self.output_base.mkdir(parents=True, exist_ok=True)
 
     def _log(self, *args, **kwargs):
         if self.verbose:
             print(*args, **kwargs)
+
+    @staticmethod
+    def _safe_filename(value: str) -> str:
+        return re.sub(r'[^A-Za-z0-9_.-]+', '_', str(value)).strip('_')
+
+    def _save_model_artifact(
+        self,
+        result: dict,
+        output_dir: Path,
+        tipo_clase: str,
+        group_name: str,
+        model_name: str,
+        feature_columns: list[str],
+        etiquetas_clase: list[str],
+    ) -> Path | None:
+        if not self.save_models:
+            return None
+
+        models_dir = output_dir / 'modeloos'
+
+        models_dir.mkdir(parents=True, exist_ok=True)
+        print(models_dir)
+        filename = '_'.join([
+            self._safe_filename(tipo_clase),
+            self._safe_filename(group_name),
+            self._safe_filename(model_name),
+        ])
+        extension = '.joblib' if self.model_format == 'joblib' else '.pkl'
+        model_path = models_dir / f'{filename}{extension}'
+        artifact = {
+            'model': result['model'],
+            'scaler': result['scaler'],
+            'label_encoder': result['label_encoder'],
+            'feature_columns': feature_columns,
+            'labels': etiquetas_clase,
+            'model_name': model_name,
+            'tipo_clase': tipo_clase,
+            'group_name': group_name,
+        }
+        if self.model_format == 'joblib':
+            joblib.dump(artifact, model_path, compress=3)
+        else:
+            pd.to_pickle(artifact, model_path)
+        self._log(f'  Modelo guardado: {model_path}')
+        return model_path
 
     def discover_sources(self) -> dict[str, Path]:
         sources: dict[str, Path] = {}
@@ -275,7 +328,8 @@ class LDAClassifierTrainer:
             self._log(f"  GRUPO LDA: {feat_name}")
             self._log(f"{'='*60}")
 
-            X_train, X_test, y_train_enc, y_test_enc, y_test, le, _ = self._prepare_train_test(
+            feature_columns = [column for column in data_grupo.columns if column.startswith('LD')]
+            X_train, X_test, y_train_enc, y_test_enc, y_test, le, scaler = self._prepare_train_test(
                 data_grupo, etiquetas_clase
             )
 
@@ -294,6 +348,17 @@ class LDAClassifierTrainer:
                 )
                 results_feat[model_name] = result
                 if result is not None:
+                    result['scaler'] = scaler
+                    result['label_encoder'] = le
+                    result['model_path'] = self._save_model_artifact(
+                        result,
+                        output_dir,
+                        tipo_clase,
+                        feat_name,
+                        model_name,
+                        feature_columns,
+                        etiquetas_clase,
+                    )
                     auc_str = f"{result['auc']:.2%}" if result['auc'] >= 0 else 'N/A'
                     summary_rows.append({
                         'Grupo LDA': feat_name,

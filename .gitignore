@@ -9,5 +9,9 @@ __pycache__/
 /results
 
 /onlineCaptures
-/models
+#/models
 /utils/mvp
+*.csv
+*.png
+*.edf
+resultsALL/

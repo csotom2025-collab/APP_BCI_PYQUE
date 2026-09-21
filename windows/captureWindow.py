@@ -1,4 +1,6 @@
-from PyQt6.QtWidgets import QMessageBox, QWidget, QVBoxLayout, QComboBox, QPushButton, QLabel, QLineEdit,QMainWindow, QApplication, QGridLayout
+import os
+
+from PyQt6.QtWidgets import QMessageBox, QWidget, QVBoxLayout, QComboBox, QPushButton, QLabel, QLineEdit, QMainWindow, QApplication, QGridLayout, QInputDialog
 import sys
 from controllers.KeyboardCaptureController import ControllerKeyboardCapture
 from controllers.SaveCaptureController import controllerSaveCapture
@@ -35,7 +37,10 @@ class CaptureWindow(QWidget):
         self.layout = QGridLayout()
         # self.combo_box_users = QComboBox()
         # self.combo_box_users.currentIndexChanged.connect(self.show_path)
-        self.user_edit_line = QLineEdit()
+        self.user_id = QComboBox()
+        self.load_users()
+        self.button_new_user = QPushButton("Nuevo usuario")
+        self.button_new_user.clicked.connect(self.create_user)
         self.combo_box_character_type = QComboBox()
         self.combo_box_character_type.addItems(["Letters", "Numbers", "Controls"])
         self.combo_box_character_type.currentIndexChanged.connect(self.update_character_options)
@@ -63,7 +68,8 @@ class CaptureWindow(QWidget):
         # self.layout.addWidget(QLabel("Seleccionar usuario:"), 0, 0)
         # self.layout.addWidget(self.combo_box_users, 0, 1)
         self.layout.addWidget(QLabel("Numero de Usuario User:"), 0, 0)
-        self.layout.addWidget(self.user_edit_line, 0, 1)
+        self.layout.addWidget(self.user_id, 0, 1)
+        self.layout.addWidget(self.button_new_user, 0, 2)
         # self.layout.addWidget(QLabel("Ruta de guardado:"), 1, 0)
         # self.layout.addWidget(self.path_edit_line, 1, 1)
         self.layout.addWidget(QLabel("Tipo de caracter:"), 2, 0)
@@ -72,7 +78,7 @@ class CaptureWindow(QWidget):
         self.layout.addWidget(self.combo_box_character, 3, 1)
         self.layout.addWidget(QLabel("Duracion grabacion"), 4, 0)
         self.layout.addWidget(self.duration_recording_edit_line,4,1)
-        self.layout.addWidget(self.button_start_capture, 5, 0, 1, 2)
+        # self.layout.addWidget(self.button_start_capture, 5, 0, 1, 2)
         self.layout.addWidget(self.button_simulation, 7, 0, 1, 2)
         self.layout.addWidget(self.grid_button, 8, 0, 1, 1)
         self.layout.addWidget(self.grid_button_hide, 8, 1, 1, 1)
@@ -97,13 +103,52 @@ class CaptureWindow(QWidget):
 
     def show_path(self):
         user = self.combo_box_users.currentText()
+
+    def load_users(self):
+        users_directory = "captures"
+        self.user_id.clear()
+        if os.path.exists(users_directory):
+            users = sorted(
+                name for name in os.listdir(users_directory)
+                if os.path.isdir(os.path.join(users_directory, name))
+            )
+            self.user_id.addItems(users)
+        else:
+            print(f"El directorio {users_directory} no existe.")
+
+    def create_user(self):
+        user_name, accepted = QInputDialog.getText(
+            self,
+            "Nuevo usuario",
+            "Escribe el nombre del usuario",
+            QLineEdit.EchoMode.Normal,
+            "User",
+        )
+        if not accepted:
+            return
+
+        user_name = user_name.strip()
+
+        if not user_name.startswith("User") :
+            user_name = "User" + user_name
+
+        user_path = os.path.join("captures", user_name)
+        if os.path.exists(user_path):
+            QMessageBox.information(self, "Usuario existente", f"El usuario {user_name} ya existe.")
+            self.load_users()
+            self.user_id.setCurrentText(user_name)
+            return
+
+        os.makedirs(user_path)
+        self.load_users()
+        self.user_id.setCurrentText(user_name)
         
         
     def start_capture(self):
         # user = self.combo_box_users.currentText()
-        user = "User" + self.user_edit_line.text()
+        user = self.user_id.currentText()
         #path = self.path_edit_line.text()
-        self.show_grid()
+        self.show_grid_after_rest()
         character = self.combo_box_character.currentText()
         character_type = self.combo_box_character_type.currentText()
         self.controller_keyboard.flash_character(character)
@@ -112,10 +157,11 @@ class CaptureWindow(QWidget):
         duration= int(duration)
 
         self.controller_save_capture.start_capture(user,character_type,character,duration)
+        self.hide_grid()
         
 
     def start_n_times(self):
-        user = "User" + self.user_edit_line.text()
+        user = self.user_id.currentText()   
         #path = self.path_edit_line.text()
         character = self.combo_box_character.currentText()
         character_type = self.combo_box_character_type.currentText()

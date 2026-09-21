@@ -84,18 +84,27 @@ class SeparacionTiempos:
 
         return filtered_signals
     
-    def extraer_info_archivo(self, nombre_archivo):
+    def extraer_info_archivo(self, nombre_archivo,unknown=False):
         """
         Extrae user, letra y trial del nombre del archivo.
         """
-        match = re.match(r'(User\d+|[A-Za-z0-9]+)_([A-Z0-9ñÑ])_(\d+)', nombre_archivo)
-        if match:
-            return match.group(1), match.group(2), int(match.group(3))
+        print("nombre_archivo",nombre_archivo)
+        if unknown:
+            match = re.search(r'([A-Za-z0-9]+)_UNKNOWN_(\d+)', nombre_archivo)
+
+            if match:
+                usuario = match.group(1)
+                numero = int(match.group(2))
+                print(f"Usuario: {usuario}, Número: {numero}")
+                print(f"Usuario: {usuario}, Número: {numero}")
+                return usuario, numero
+
         
         match = re.match(r'([A-Za-z0-9_]+)_([A-Z0-9ñÑ])_(\d+)', nombre_archivo)
         if match:
             return match.group(1), match.group(2), int(match.group(3))
-        
+
+        print("retonanrodnoa idfaon ")
         return None
     
     def determinar_tipo_comando(self, letra):
@@ -109,7 +118,7 @@ class SeparacionTiempos:
         else:
             return 'Comandos'
     
-    def procesar_archivo(self, ruta_csv, carpeta_salida_base='results/user'):
+    def procesar_archivo(self, ruta_csv, carpeta_salida_base='results/user',unknown=False):
         """
         Procesa un archivo CSV y genera los archivos separados con la corrección requerida.
         """
@@ -119,14 +128,25 @@ class SeparacionTiempos:
             return {'exito': False, 'error': f'Archivo no encontrado: {ruta_csv}'}
         
         nombre_sin_ext = ruta_csv.stem
-        info = self.extraer_info_archivo(nombre_sin_ext)
+        if not unknown:
+            info = self.extraer_info_archivo(nombre_sin_ext)
+            
+            if not info:
+                return {'exito': False, 'error': f'No se pudo extraer info del nombre: {nombre_sin_ext}'}
         
-        if not info:
-            return {'exito': False, 'error': f'No se pudo extraer info del nombre: {nombre_sin_ext}'}
+            user, letra, trial_num = info
+            tipo_comando = self.determinar_tipo_comando(letra)
+        else:
+            info = self.extraer_info_archivo(nombre_sin_ext,unknown=True)
+                        
+            if not info:
+                return {'exito': False, 'error': f'No se pudo extraer info del nombre: {nombre_sin_ext}'}
         
-        user, letra, trial_num = info
-        tipo_comando = self.determinar_tipo_comando(letra)
-        
+            user, trial_num = info
+            letra = "UNKNOWN"
+            tipo_comando = self.determinar_tipo_comando(letra)
+           
+        print("infgo",info)
         try:
             df = pd.read_csv(ruta_csv)
             cols_canales = list(df.columns[1:])

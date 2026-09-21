@@ -30,8 +30,9 @@ class controllerTraining():
             print("Optimizando LDA")
             self.pipeline_lda.optimizacion_lda(user=user)
             print("Entrenado Modelo")
-            #pipeline.entrenar_modelo(user, tipo='LDA_General', grupo='TODAS', modelo='ALL')
-            self.pipeline_lda.entrenar_todos_los_modelos(usuario=user, save_plots=True, show_plots=True)
+            #self.pipeline_lda.entrenar_modelo(user, tipo='LDA_General', grupo='TODAS', modelo='ALL',save_model=True,model_format='joblib')
+            self.pipeline_lda.entrenar_todos_los_modelos(usuario=user, save_plots=True, show_plots=True,save_models=True,model_format = 'joblib')
+            
             print("LDA")
         if modelType == "CNN":
             print("cnn")
@@ -49,20 +50,28 @@ class controllerTraining():
         """
             generamos el dataset de los archivos ,separados por canales y con su label
         """
-        columnas = pd.read_csv(path + f'/{files[0]}').columns # obtenemos los headers del archivo los cuales son los canales 
+        sample_count = 250
+        csv_files = [file_name for file_name in files if file_name.endswith('.csv')]
+        if not csv_files:
+            return {}
+
+        columnas = pd.read_csv(path + f'/{csv_files[0]}').columns # obtenemos los headers del archivo los cuales son los canales
         print("Columnas Archivo" , columnas)
         labels_dict={}
         files_dataset = []
-        for file_name in files:
-            if not file_name.endswith('.csv'):
-                continue
+        skipped_files = []
+        for file_name in csv_files:
             label = self.get_label(file_name)
-            print(f"Processing file: {path + f'/{file_name}'}")
+            # print(f"Processing file: {path + f'/{file_name}'}")
 
             file = pd.read_csv(path + f'/{file_name}')
+            if len(file) < sample_count:
+                skipped_files.append((file_name, len(file)))
+                continue
+
             file_channels =[]
             for channel in columnas[1:]: # no nos importa el Tm o si ???
-                file_channels.append(np.array(file[channel].iloc[:190])) # 190 muestras
+                file_channels.append(np.array(file[channel].iloc[:sample_count]))
             file_channels = np.array(file_channels)
             files_dataset.append(file_channels)
             if label not in labels_dict:
@@ -70,15 +79,19 @@ class controllerTraining():
             else:
                 labels_dict[label].append(file_channels)
             #print(label)
-        print(len(files_dataset))
+        print(f"Archivos validos: {len(files_dataset)}")
+        if skipped_files:
+            print(f"Archivos omitidos por tener menos de {sample_count} muestras: {len(skipped_files)}")
+            for file_name, row_count in skipped_files:
+                print(f"  {file_name}: {row_count} muestras")
 
         files_dataset = np.array(files_dataset)
-        file_divided = []
-        for idx,label in enumerate(labels_dict.keys()):
-            print(f"idx {idx} : {label}")
-            file_divided.append(labels_dict[label])
-        file_divided = np.array(file_divided)
-        print(file_divided.shape)
+        datasets_by_label = {}
+        for idx, (label, label_files) in enumerate(labels_dict.items()):
+            datasets_by_label[label] = np.array(label_files)
+            print(f"idx {idx} : {label} -> {datasets_by_label[label].shape}")
+
+        return datasets_by_label
         
 
     def create_df(self,path):
@@ -97,8 +110,15 @@ class controllerTraining():
             numbers_files = os.listdir(numbers_path)
         if os.path.exists(controls_path):
             controls_files = os.listdir(controls_path)
-        self.generate_data_set_by_files(letters_path,letters_files)
-        
+        df_letters = self.generate_data_set_by_files(letters_path,letters_files)
+        df_numbers = self.generate_data_set_by_files(numbers_path,numbers_files)
+        df_controls = self.generate_data_set_by_files(controls_path,controls_files)
+        df_general = {**df_letters, **df_numbers, **df_controls}
+        print("DataFrames Generados:")
+        print("Letters:", df_letters.keys(),df_letters.shape)
+        print("Numbers:", df_numbers.keys(),df_numbers.shape)
+        print("Controls:", df_controls.keys(),df_controls.shape)
+        print("General:", df_general.keys(),df_general.shape)
 
 
 

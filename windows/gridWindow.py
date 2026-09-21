@@ -512,7 +512,7 @@ class KeyboardWindow(QWidget):
         self.current_epoca = 0
         self.num_epocas = times     # Configurable
         self.flash_duration = 125 # ms encendido
-        self.isi_duration = 75   # ms apagado (Inter-Stimulus Interval)
+        self.isi_duration = 375   # ms apagado (Inter-Stimulus Interval)
         self.prepare_epoca()
 
     def prepare_epoca(self):
@@ -588,6 +588,7 @@ class KeyboardWindow(QWidget):
     def quit(self):
         # if not self.training_mode:
         #     self.text_field_window.close()F
+        
         self.close()
 if __name__ == "__main__":
     app = QApplication(sys.argv)

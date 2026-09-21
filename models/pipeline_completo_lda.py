@@ -57,14 +57,15 @@ class PipelineCompletoLDA:
             for archivo in archivos_csv:
                 resultado = self.separar_archivo_por_ruta(f'captures/{usuario}/{tpComando}/{archivo}',usuario)
             
-    def separar_archivo_por_ruta(self, ruta_archivo,usuario):
+    def separar_archivo_por_ruta(self, ruta_archivo,usuario,unknown=False):
         resultado = self.separador.procesar_archivo(
             ruta_archivo,
             carpeta_salida_base=self.base_output_dir + f'/{usuario}',
+            unknown=unknown
         )
         if resultado['exito']:
             #print(f"\n✓ Procesamiento exitoso:")
-            return resultado['archivo_post']
+            return resultado['archivo_post'],resultado['trial']
         else:
             print(f"\n✗ Error: {resultado['error']}")
             return None
@@ -94,7 +95,7 @@ class PipelineCompletoLDA:
             'genero': 'masculino',
             'experiencia': 'intermedia'
         }
-    def extraer_caracteristicas_file(self, ruta_archivo,usuario,subcarpeta="Unknown",letra='?',trial='?',save_output=True):
+    def extraer_caracteristicas_file(self, ruta_archivo,usuario,subcarpeta="Unknown",letra='?',trial='?',save_output=True,online=False):
         try:
             print(f"Extrayendo características de: {ruta_archivo}")
             data = pd.read_csv(ruta_archivo)
@@ -110,6 +111,9 @@ class PipelineCompletoLDA:
             #print(features_df.head())
             # Guardar las caracteristicas en un nuevo archivo CSV
             if save_output:
+                print(f"Guardando características en: {self.base_output_dir}/{usuario}/{subcarpeta}/features/features_{letra}_{trial}.csv")
+                if not os.path.exists(f"{self.base_output_dir}/{usuario}/{subcarpeta}/features/"):
+                    os.makedirs(f"{self.base_output_dir}/{usuario}/{subcarpeta}/features/")
                 output_path = f"{self.base_output_dir}/{usuario}/{subcarpeta}/features/features_{letra}_{trial}.csv"
                 features_df.to_csv(output_path, index=False)
             return features_df
@@ -117,7 +121,7 @@ class PipelineCompletoLDA:
             print(f"Error procesando {ruta_archivo}: {e}")
             return None
 
-    def optimizacion_lda(self,user):
+    def optimizacion_lda(self,user,online=False):
         args ={
             'base': f'{self.base_output_dir}',
             'usuarios': [user],
@@ -215,13 +219,15 @@ class PipelineCompletoLDA:
             save_output=True,
         )
         return resultado
-    def entrenar_modelo(self, usuario, tipo='ALL', grupo=None, modelo='Regresión Logística'):
+    def entrenar_modelo(self, usuario, tipo='ALL', grupo=None, modelo='Regresión Logística',save_model=True,model_format='joblib'):
         usuario_base = Path(self.base_output_dir) / usuario
         trainer = LDAClassifierTrainer(
             usuario_base=str(usuario_base),
             output_base=str(usuario_base / 'Resultados_Clasificadores'),
             verbose=True,
-            save_plots=True
+            save_plots=True,
+            save_models=save_model,
+            model_format=model_format,
         )
 
         if tipo.upper() == 'ALL':
@@ -294,7 +300,7 @@ class PipelineCompletoLDA:
             print(f"  AUC-ROC: {resultado['metrics']['auc']:.2%}" if resultado['metrics']['auc'] >= 0 else "  AUC-ROC: N/A")
             return resultado
 
-    def entrenar_todos_los_modelos(self, usuario, tipos_validos=None, carpeta_lda='Resultados_LDA', carpeta_general='LDA_General', save_plots=True, show_plots=True):
+    def entrenar_todos_los_modelos(self, usuario, tipos_validos=None, carpeta_lda='Resultados_LDA', carpeta_general='LDA_General', save_plots=True, show_plots=True, save_models=True, model_format='joblib'):
         usuario_base = Path(self.base_output_dir) / usuario
 
         trainer = LDAClassifierTrainer(
@@ -305,6 +311,8 @@ class PipelineCompletoLDA:
             carpeta_general=carpeta_general,
             verbose=True,
             save_plots=save_plots,
+            save_models=save_models,
+            model_format=model_format,
         )
 
         resultados = trainer.evaluate_all(save_plots=save_plots, show_plots=show_plots)

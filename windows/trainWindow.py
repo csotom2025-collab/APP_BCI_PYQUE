@@ -2,6 +2,8 @@ import os
 import sys
 from PyQt6.QtWidgets import QApplication, QComboBox, QGridLayout, QLineEdit, QMainWindow, QPushButton, QWidget, QVBoxLayout, QLabel, QMessageBox
 
+from controllers.TrainingController import controllerTraining
+
 
 
 
@@ -15,27 +17,22 @@ class TrainWindow(QMainWindow):
         # self.show_users()
         self.models= ['lstm', 'cnn', 'svm', 'random_forest', 'xgboost']
         self.show_models()
+        self.show_users()
         
     def setup_ui(self):
         self.setWindowTitle("Ventana de Entrenamiento")
         layout = QVBoxLayout()
         self.grid_layout = QGridLayout()
 
-        self.pathLine = QLineEdit("path")
-        self.id_user_line = QLineEdit()
+        self.user_combobox = QComboBox()
 
         self.combo_box_models = QComboBox()
         self.button_start_training = QPushButton("Iniciar entrenamiento")
         self.button_start_training.clicked.connect(self.start_training)
-        self.button_verify_path = QPushButton("Verificar path")
-        self.button_verify_path.clicked.connect(self.verify_path)
 
         layout.addWidget(QLabel("Ventana de Entrenamiento"))
-        self.grid_layout.addWidget(QLabel("Id del usuario:"), 0, 0)
-        self.grid_layout.addWidget(self.id_user_line, 0, 1)
-        self.grid_layout.addWidget(self.button_verify_path, 0, 2)
-        self.grid_layout.addWidget(QLabel("Ruta del usuario seleccionado:"), 1, 0)
-        self.grid_layout.addWidget(self.pathLine, 1, 1, 1, 2)
+        self.grid_layout.addWidget(QLabel("Seleccione usuario:"), 0, 0)
+        self.grid_layout.addWidget(self.user_combobox, 0, 1)
         self.grid_layout.addWidget(QLabel("Selecciona un modelo:"), 2, 0)
         self.grid_layout.addWidget(self.combo_box_models, 2, 1)
         self.grid_layout.addWidget(self.button_start_training, 3, 0, 1, 3)
@@ -48,24 +45,8 @@ class TrainWindow(QMainWindow):
         self.move(200, 200)
 
     
-    def show_path(self):
-        user = self.get_user()
-        path = os.path.join("captures", f"User{user}")
-        self.pathLine.setText(path)
 
-    def verify_path(self):
-        user = self.get_user().strip()
-        if not user:
-            QMessageBox.warning(self, "Usuario requerido", "Ingrese el ID del usuario antes de verificar.")
-            return
-
-        path = os.path.join("captures", f"User{user}")
-        if os.path.isdir(path):
-            self.pathLine.setText(path)
-            QMessageBox.information(self, "Ruta encontrada", f"La carpeta del usuario existe:\n{path}")
-        else:
-            self.pathLine.setText("")
-            QMessageBox.warning(self, "Ruta no existe", f"No existe la carpeta del usuario:\n{path}")
+    
 
     def show_models(self):
         self.combo_box_models.clear()
@@ -76,20 +57,34 @@ class TrainWindow(QMainWindow):
         return model
     
     def get_user(self):
-        user_id = self.id_user_line.text()
+        user_id = self.user_combobox.currentText()
         return user_id
     
     def get_path(self):
-        user = self.get_user().strip()
+        user = self.get_user()
         if not user:
             return ""
-        return os.path.join("captures", f"User{user}")
-    
+        return os.path.join("captures", f"{user}")
+    def show_users(self):
+        self.user_combobox.clear()
+        captures_dir = "captures"
+        if not os.path.exists(captures_dir):
+            QMessageBox.warning(self, "Directorio no encontrado", f"No se encontró el directorio '{captures_dir}'.")
+            return
+
+        users = [d for d in os.listdir(captures_dir) if os.path.isdir(os.path.join(captures_dir, d)) and d.startswith("User")]
+        if not users:
+            QMessageBox.information(self, "Usuarios no encontrados", "No se encontraron carpetas de usuarios en el directorio 'captures'.")
+            return
+
+        self.user_combobox.addItems(users)
     def start_training(self):    
         user = self.get_user()
         path = self.get_path()
         model = self.get_model()
         print(f"Entrenando modelo {model} con los datos de {user} que se encuentran en la ruta: {path}")
+        training_controller = controllerTraining()
+        training_controller.train_model(user, path, "LDA")
 
 
 if __name__ == "__main__":

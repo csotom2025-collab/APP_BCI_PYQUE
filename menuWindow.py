@@ -33,17 +33,17 @@ class Menu(QWidget):
     def setup_ui(self):
         self.layout = QVBoxLayout()
         self.label = QLabel("Menú Principal")
-        button_signals = QPushButton("Visualizar Señales EEG")
+        button_signals = QPushButton("Visualizar EEG en Tiempo Real")
         button_signals.clicked.connect(self.open_signals_window)
-        button_grid = QPushButton("Mostrar Teclado")
+        button_grid = QPushButton("Uso de Speller")
         button_grid.clicked.connect(self.open_grid_window)
-        button_train = QPushButton("Entrenamiento")
+        button_train = QPushButton("Entrenamiento de Modelos")
         button_train.clicked.connect(self.open_train_window)
         button_capture = QPushButton("Captura de datos")
         button_capture.clicked.connect(self.open_capture_window)
-        button_serial_config = QPushButton("Configurar Serial")
+        button_serial_config = QPushButton("Configurar Serial  ADS1299+")
         button_serial_config.clicked.connect(self.open_config_serial_window)
-        button_show_plot_window = QPushButton("Menu ver señales")
+        button_show_plot_window = QPushButton("Visualizar Grabaciones")
         button_show_plot_window.clicked.connect(self.open_recording_show_window)
 
 
@@ -83,12 +83,14 @@ class Menu(QWidget):
             self.serial_window.close()
         if self.recordingShowWindow:
             self.recordingShowWindow.close()
+        if self.speller_config_window:
+            self.speller_config_window.quit()
 
     def open_signals_window(self):
         self.signals_window.show()
     def open_grid_window(self):
-        self.keyboard_window.show()
         self.speller_config_window.show()  # Mostrar la ventana de configuración del speller junto con el teclado
+        self.speller_config_window.show_grid()
     def open_train_window(self):
         self.train_window.show()
     def open_capture_window(self):

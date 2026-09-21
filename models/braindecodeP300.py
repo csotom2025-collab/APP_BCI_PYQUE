@@ -35,7 +35,7 @@ from sklearn.metrics import (
     classification_report
 )
 
-from braindecode.models import EEGNetv4, EEGInceptionERP,InterpolatedSignalJEPA,EEGSimpleConv	
+from braindecode.models import  EEGInceptionERP,EEGSimpleConv	
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -48,7 +48,7 @@ CONFIG = {
     # ==========================
     # DATA
     # ==========================
-    "sampling_rate": 500,
+    "sampling_rate": 128,
 
     # ventana temporal en segundos
     "tmin": 0.0,
@@ -571,8 +571,8 @@ class P300DataGenerator:
 
             eeg_data = self.read_csv_eeg(filepath)
             #print("EEG data shape:", eeg_data.shape)
-            if eeg_data.shape[1] < 480:
-                print(f"Advertencia: {file_name} tiene menos de 480 muestras. Se omite., tiene {eeg_data.shape[1]}")
+            if eeg_data.shape[1] < 245:
+                print(f"Advertencia: {file_name} tiene menos de 245 muestras. Se omite., tiene {eeg_data.shape[1]}")
                 
                 continue
             # =========================================
@@ -602,6 +602,7 @@ class P300DataGenerator:
             y.append(0)
         print("Total samples generated:", len(X))
         print("Example sample shape:", X[0].shape)
+        return X, y
         X = np.array(X)
 
         print("X shape:", X.shape)
@@ -658,20 +659,19 @@ def main():
     """
 
     n_trials = 300
-    n_channels = 8
+    n_channels = 14
     n_samples = 1000
 
-    path = "./captures/User69/Letters"
+    path = "./captures/UserCMSM/Controls"
     print(path)
     X, y = create_dataset_from_folder(path)
-    return
     # EEG random de ejemplo
     signals = X
-
+    return
     # labels binarias
     labels = y
 
-    models = ["eegnet", "EEGInceptionERP","EEGSimpleConv"]
+    models = [ "EEGInceptionERP","EEGSimpleConv"]
     for model_type in models:
         print(f"\n\n==============================")
         print(f"Training model: {model_type}")

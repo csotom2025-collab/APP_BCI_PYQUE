@@ -11,3 +11,5 @@ scipy
 pycryptodome
 scikit-learn
 seaborn
+PyWavelets
+xgboost

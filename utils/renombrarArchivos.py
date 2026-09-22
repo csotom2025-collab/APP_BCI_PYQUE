@@ -4,14 +4,15 @@ ruta_carpeta= "captures/UserJorge"
 subcarpetas = os.listdir(ruta_carpeta)
 print(subcarpetas)
 nuevoNombre = "Jorge"
-subcarpetas = ["Letters"]
+subcarpetas = ["Controls","Numbers"]
 for subcarpeta in subcarpetas:
     path= os.path.join(ruta_carpeta, subcarpeta)
-    print(path)
     for nombre_archivo in os.listdir(path):
         # 1. Separar nombre y extensión
         nombre_base, extension = os.path.splitext(nombre_archivo)
         extension = extension[1:]  # Eliminar el punto inicial
+        if extension != "csv":
+            continue  # Saltar archivos que no sean CSV
 
         # 2. Extraer partes del nombre original
         nombre_base = nombre_base.split("_")
@@ -37,4 +38,4 @@ for subcarpeta in subcarpetas:
         archivo.to_csv(ruta_nueva, index=False)
 
         # 8. Eliminar el archivo original si no quieres dejar un duplicado
-        os.remove(ruta_original)
+        #os.remove(ruta_original)

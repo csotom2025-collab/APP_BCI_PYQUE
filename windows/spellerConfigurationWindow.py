@@ -74,7 +74,7 @@ class SpellerConfigurationWindow(QWidget):
                 self.black_screen = None
                 self.keyboard_window = None
         if not self.keyboard_window:
-            self.keyboard_window = KeyboardWindow(training_mode=True)
+            self.keyboard_window = KeyboardWindow(training_mode=False)
             # self.keyboard_window.show()  # No mostrar por separado, ahora está en black_screen
             self.black_screen = BlackScreen(self.keyboard_window)
             self.black_screen.show()

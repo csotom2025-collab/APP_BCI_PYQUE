@@ -1,10 +1,13 @@
 import os
-ruta_carpeta= "Usermvp"
+ruta_carpeta= "captures/UserJorge"
 subcarpetas = os.listdir(ruta_carpeta)
 print(subcarpetas)
-nuevoNombre = "MartinEpoc"
+nuevoNombre = "Jorge"
+subcarpetas = ["Letters"]
 for subcarpeta in subcarpetas:
-    for nombre_archivo in os.listdir(os.path.join(ruta_carpeta, subcarpeta)):
+    path= os.path.join(ruta_carpeta, subcarpeta)
+    print(path)
+    for nombre_archivo in os.listdir(path):
         ##RENOnmbrar archivo
         nombre_base, extension = os.path.splitext(nombre_archivo)
         extension = extension[1:]  # Eliminar el punto inicial de la extensión

@@ -3,8 +3,8 @@ from validate_model import validate_single
 
 predictor = HierarchicalBCIPredictor(usuario="UserCMSM")
 # Por defecto, use_flash_segmentation=True (automático)
-comand="A"
-tip="Letters"
+comand="1"
+tip="Numbers"
 file=[2,3,5,7,11,13,17,19,23,29]
 for num in file:
     csv_file = f"D:/APP_BCI_PYQUE/captures/UserCMSM/{tip}/UserCMSM_{comand}_{num}.csv"

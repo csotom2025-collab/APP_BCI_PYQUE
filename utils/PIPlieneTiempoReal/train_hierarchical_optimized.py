@@ -50,13 +50,14 @@ from eeg_features import get_feature_sets, log_transform_power_columns
 # ===========================================================================================
 def build_classifiers(n_classes):
     """6 clasificadores a evaluar"""
+    ramdomState = config.RANDOM_STATE
     mlp = MLPClassifier(hidden_layer_sizes=(64, 32), activation="relu",
-                         alpha=1e-3, max_iter=2000, random_state=42)
-    svm_lin = SVC(kernel="linear", C=1.0, probability=True, random_state=42)
-    svm_rbf = SVC(kernel="rbf", C=2.0, gamma="scale", probability=True, random_state=42)
-    logreg = LogisticRegression(max_iter=2000, random_state=42)
-    rff= RandomForestClassifier(n_estimators=100, random_state=42)
-    xgc = XGBClassifier(n_estimators=100, random_state=42)
+                         alpha=1e-3, max_iter=2000, random_state=ramdomState)
+    svm_lin = SVC(kernel="linear", C=1.0, probability=True, random_state=ramdomState)
+    svm_rbf = SVC(kernel="rbf", C=2.0, gamma="scale", probability=True, random_state=ramdomState)
+    logreg = LogisticRegression(max_iter=2000, random_state=ramdomState)
+    rff= RandomForestClassifier(n_estimators=100, random_state=ramdomState)
+    xgc = XGBClassifier(n_estimators=100, random_state=ramdomState)
 
     ensemble_mlp_svmrbf = VotingClassifier(
         estimators=[("mlp", mlp), ("svm_rbf", svm_rbf)],

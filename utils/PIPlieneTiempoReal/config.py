@@ -15,7 +15,7 @@ BASE_DIR = "D:/APP_BCI_PYQUE/captures"
 TP_COMANDOS = ["Letters", "Numbers", "Controls"]
 
 # Usuarios a incluir en el dataset (agrega todos los que tengas grabados)
-USUARIOS = ["UserCMSM"]  # <-- EDITA esta lista con tus usuarios reales
+USUARIOS = ["UserCMSM","UserMartinEpoc"]  # <-- EDITA esta lista con tus usuarios reales
 
 # ---------------------------------------------------------------------------
 # Vocabulario de "letra" por cada tpComando (nombre usado en el archivo)
@@ -41,12 +41,27 @@ CHANNEL_NAMES = ["F3", "FC5", "AF3", "F7", "T7", "P7", "O1", "O2","P8", "T8", "F
 # Frecuencia de muestreo (Hz). AJUSTA al valor real de tu dispositivo (Emotiv=128).
 FS = 128
 
+#Semilla para la aleatoriedad
+RANDOM_STATE=100
+##====================================================================================================
+# RESUMEN FINAL: 41 MEJOR COMBINACIÓN POR USUARIO
+# ====================================================================================================
+#        usuario  n_trials mejor_nivel              mejor_grupo mejor_feature_set mejor_clasificador  accuracy_mean  f1_macro_mean
+#       UserCMSM      1228 super_clase Letters/Numbers/Controls Frecuencias_Todas                MLP       0.868903       0.784191
+# UserMartinEpoc      1202 super_clase Letters/Numbers/Controls   Frecuencias_Rel                MLP       0.756210       0.637974
+#====================================================================================================
+# RESUMEN FINAL: MEJOR COMBINACIÓN POR USUARIO (42)
+# ====================================================================================================
+#        usuario  n_trials mejor_nivel              mejor_grupo mejor_feature_set mejor_clasificador  accuracy_mean  f1_macro_mean
+#       UserCMSM      1228 super_clase Letters/Numbers/Controls Frecuencias_Todas                MLP       0.868903       0.784191
+# UserMartinEpoc      1202 super_clase Letters/Numbers/Controls   Frecuencias_Rel                MLP       0.756210       0.637974
+#====================================================================================================
 # Duracion del trial en segundos, segun tu protocolo (0.0 - 2.0s)
 TRIAL_DURATION_S = 2.0
 
 # Ventana de interes P300 dentro del trial (0.5 - 1.2s). Se usa opcionalmente
 # para recortar la señal antes de extraer caracteristicas.
-P300_WINDOW_S = (0.5, 1.2)
+P300_WINDOW_S = (0.5, 2.0)
 
 # Ventana de pre-estimulo usada para la correccion de linea base (0.0 - 0.5s),
 # tal como describe el protocolo de grabacion.
@@ -70,7 +85,7 @@ WINDOW_OVERLAP = 0
 # ---------------------------------------------------------------------------
 # Salidas
 # ---------------------------------------------------------------------------
-OUTPUT_DIR = "D:/EEG_Python/PIPlieneTiempoReal/OutputOPt_14Canales_LDA_2"
+OUTPUT_DIR = "D:/EEG_Python/PIPlieneTiempoReal/OutputOPt_14Canales_LDA_SinICA"
 FEATURES_CSV = os.path.join(OUTPUT_DIR, "features_dataset.csv")
 RESULTS_CSV = os.path.join(OUTPUT_DIR, "resultados_modelos.csv")
 FIGURES_DIR = os.path.join(OUTPUT_DIR, "figures")

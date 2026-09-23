@@ -120,7 +120,7 @@ def build_dataset(base_dir=None, usuarios=None, tp_comandos=None, verbose=True):
                         )
                         
                     # 3) Eliminacion de Artefactos Biologicos (ICA)
-                    signals = apply_ica_artifact_removal(signals)
+                    #signals = apply_ica_artifact_removal(signals)
                     
                     # 4) Re-referenciacion Espacial (CAR)
                     signals = apply_car_rereference(signals)

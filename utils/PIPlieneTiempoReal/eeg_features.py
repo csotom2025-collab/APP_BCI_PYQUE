@@ -5,6 +5,7 @@ Contiene la funcion extract_features original (provista por el usuario),
 envuelta en una clase con fs y un metodo `safe` para sanitizar nombres de canal.
 """
 
+from scipy.signal import signaltools
 from pandas.core import window
 from joblib import compressor
 import re
@@ -222,6 +223,44 @@ class EEGFeatureExtractor:
                         window_features[f'{cname}_wA5_skewness'] = 0.0
                         window_features[f'{cname}_wA5_kurtosis'] = 0.0
 
+                # --- Welch PSD: estadisticas en bandas beta y gamma ---
+                try:
+                    welch_freqs, welch_psd = signal.welch(
+                        channel_data, fs=self.fs,
+                        nperseg=min(len(channel_data), max(32, len(channel_data) // 4))
+                    )
+                    welch_delta_mask = (welch_freqs >= 0.5) & (welch_freqs <= 4)
+                    welch_theta_mask = (welch_freqs > 4) & (welch_freqs <= 8)
+                    welch_alpha_mask = (welch_freqs > 8) & (welch_freqs <= 14)
+                    welch_beta_mask  = (welch_freqs > 14) & (welch_freqs <= 30)
+                    welch_gamma_mask = (welch_freqs > 30)
+
+                    welch_mask=[
+                        ('delta',welch_delta_mask),
+                        ('theta',welch_theta_mask),
+                        ('alpha',welch_alpha_mask),
+                        ('beta',welch_beta_mask),
+                        ('gamma',welch_gamma_mask)                        
+                    ]
+                    
+                    for band_name, band_mask in welch_mask:
+                        if band_mask.any():
+                            psd_band = welch_psd[band_mask]
+                            window_features[f'{cname}_welch_{band_name}_power']    = float(np.sum(psd_band))
+                            window_features[f'{cname}_welch_{band_name}_mean']     = float(np.mean(psd_band))
+                            window_features[f'{cname}_welch_{band_name}_std']      = float(np.std(psd_band))
+                            window_features[f'{cname}_welch_{band_name}_var']      = float(np.var(psd_band))
+                            window_features[f'{cname}_welch_{band_name}_rms']      = float(np.sqrt(np.mean(psd_band**2)))
+                            window_features[f'{cname}_welch_{band_name}_skewness'] = float(stats.skew(psd_band))
+                            window_features[f'{cname}_welch_{band_name}_kurtosis'] = float(stats.kurtosis(psd_band))
+                        else:
+                            for stat in ('power', 'mean', 'std', 'var', 'rms', 'skewness', 'kurtosis'):
+                                window_features[f'{cname}_welch_{band_name}_{stat}'] = np.nan
+                except Exception:
+                    for band_name in ('delta', 'theta', 'alpha', 'beta', 'gamma'):
+                        for stat in ('power', 'mean', 'std', 'var', 'rms', 'skewness', 'kurtosis'):
+                            window_features[f'{cname}_welch_{band_name}_{stat}'] = np.nan
+
             features.append(window_features)
         return pd.DataFrame(features)
 
@@ -275,7 +314,7 @@ def get_feature_sets(all_cols):
     wav_keys = wA_keys + wD_keys
 
     sets = {
-        "Estadisticas": [c for c in all_cols if any(k in c for k in
+        "Estadisticas_Tm": [c for c in all_cols if any(k in c for k in
                          ["mean", "std", "var", "rms", "skewness", "kurtosis"])
                          and not any(k in c for k in
                          ["delta_", "theta_", "alpha_", "beta_", "gamma_", "wA", "wD"])],
@@ -296,6 +335,18 @@ def get_feature_sets(all_cols):
 
         "Frecuencias_Todas": [c for c in all_cols if any(k in c for k in
                               ["delta_", "theta_", "alpha_", "beta_", "gamma_"])],
+
+        "Welch": [c for c in all_cols if any(k in c for k in["welch_"])],
+
+        "Estadicas_todas":[c for c in all_cols if any(k in c for k in
+                         ["mean", "std", "var", "rms", "skewness", "kurtosis"])],
+
+        "Beta_Gamma_All":[c for c in all_cols if any(k in c for k in
+                              ["beta_", "gamma_"])],
+        
+        "Beta_Gamma_Est":[c for c in all_cols if any(k in c for k in
+                              ["beta_", "gamma_"])and not any(k in c for k in
+                         ["_Abs", "_rel"])],
 
         "TODAS": list(all_cols),
     }
@@ -332,10 +383,26 @@ def apply_ica_artifact_removal(signals, n_components=None, random_state=42):
     """
     if n_components is None:
         n_components = signals.shape[0]
-        
+        # REGLA 1: El límite estricto (Heurística lineal: muestras >= 20 * n_components)
+        n_max_lineal = n_components // 20
+
+        # REGLA 2: El límite ideal (Heurística cuadrática: muestras >= 20 * n_components^2)
+        n_max_ideal = int(np.sqrt(n_components / 20))
+
+        # Seleccionamos el valor óptimo dinámico sin superar nunca el total de canales físicos
+        if n_max_ideal >= 1:
+            n_optimo = min(n_components, n_max_ideal)
+        else:
+            # Si los datos son críticamente cortos, usamos la regla lineal
+            n_optimo = min(n_components, n_max_lineal)
+
+        # Asegurar un mínimo de 2 componentes para poder hacer ICA
+        n_components_dinamico = max(9, n_optimo)
+        n_components = n_components_dinamico
+
     X = signals.T
     try:
-        ica = FastICA(n_components=n_components, random_state=random_state, max_iter=200, tol=1e-3)
+        ica = FastICA(n_components=n_components, random_state=random_state, max_iter=2000, tol=1e-2)
         S_ = ica.fit_transform(X)
         
         # Eliminacion automatica y simplificada de artefactos (ej. mayor curtosis = parpadeo/ruido)

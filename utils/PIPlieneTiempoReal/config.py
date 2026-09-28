@@ -42,19 +42,8 @@ CHANNEL_NAMES = ["F3", "FC5", "AF3", "F7", "T7", "P7", "O1", "O2","P8", "T8", "F
 FS = 128
 
 #Semilla para la aleatoriedad
-RANDOM_STATE=100
-##====================================================================================================
-# RESUMEN FINAL: 41 MEJOR COMBINACIÓN POR USUARIO
-# ====================================================================================================
-#        usuario  n_trials mejor_nivel              mejor_grupo mejor_feature_set mejor_clasificador  accuracy_mean  f1_macro_mean
-#       UserCMSM      1228 super_clase Letters/Numbers/Controls Frecuencias_Todas                MLP       0.868903       0.784191
-# UserMartinEpoc      1202 super_clase Letters/Numbers/Controls   Frecuencias_Rel                MLP       0.756210       0.637974
-#====================================================================================================
-# RESUMEN FINAL: MEJOR COMBINACIÓN POR USUARIO (42)
-# ====================================================================================================
-#        usuario  n_trials mejor_nivel              mejor_grupo mejor_feature_set mejor_clasificador  accuracy_mean  f1_macro_mean
-#       UserCMSM      1228 super_clase Letters/Numbers/Controls Frecuencias_Todas                MLP       0.868903       0.784191
-# UserMartinEpoc      1202 super_clase Letters/Numbers/Controls   Frecuencias_Rel                MLP       0.756210       0.637974
+RANDOM_STATE=42
+
 #====================================================================================================
 # Duracion del trial en segundos, segun tu protocolo (0.0 - 2.0s)
 TRIAL_DURATION_S = 2.0
@@ -77,15 +66,24 @@ APPLY_BASELINE_CORRECTION = True
 # Si False, se usa el trial completo (0 - 2.0s).
 USE_P300_WINDOW_ONLY = False
 
+
 # Parametros de ventaneo para extract_features. Con window_size = n_samples del
 # segmento y overlap = 0 se obtiene EXACTAMENTE 1 vector de caracteristicas por
 # trial (recomendado para clasificacion por trial).
-WINDOW_OVERLAP = 0
+WINDOW_OVERLAP = 0.89
+
+
+# Parametros de ventaneo para extract_features.  para definir el tamaño de la ventana  
+USE_WIN_SIZE = True
+
+
+WINDOW_SIZE=192
+
 
 # ---------------------------------------------------------------------------
 # Salidas
 # ---------------------------------------------------------------------------
-OUTPUT_DIR = "D:/EEG_Python/PIPlieneTiempoReal/OutputOPt_14Canales_LDA_SinICA"
+OUTPUT_DIR = "D:/EEG_Python/PIPlieneTiempoReal/OutputOPt_14_Canales_Sub4ven"
 FEATURES_CSV = os.path.join(OUTPUT_DIR, "features_dataset.csv")
 RESULTS_CSV = os.path.join(OUTPUT_DIR, "resultados_modelos.csv")
 FIGURES_DIR = os.path.join(OUTPUT_DIR, "figures")

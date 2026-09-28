@@ -6,6 +6,9 @@ extrae caracteristicas por trial con EEGFeatureExtractor y arma un
 DataFrame final con una fila por trial (label = letra/simbolo/numero).
 """
 
+from sklearn import feature_selection
+from sklearn import feature_selection
+from pandas.core import window
 import os
 import glob
 import numpy as np
@@ -95,21 +98,31 @@ def build_dataset(base_dir=None, usuarios=None, tp_comandos=None, verbose=True):
             archivos = sorted(glob.glob(os.path.join(carpeta, f"{usuario}_*.csv")))
             if not archivos and verbose:
                 print(f"[AVISO] Sin archivos en: {carpeta}")
-
+            
+            if tp=="Letters":
+                bef='A'
+            if tp=="Numbers":
+                bef='1'
+            if tp=="Controls":
+                bef='↩'
+            trialn=-1
             for path in archivos:
                 letra, trial = _parse_filename(path, usuario)
                 if letra is None:
                     if verbose:
                         print(f"[AVISO] No se pudo parsear el nombre: {path}")
                     continue
-
+                else: 
+                    if(letra!=bef):
+                        trialn=-1
+                        bef=letra
                 try:
                     signals = _load_signal_csv(path, config.CHANNEL_NAMES)
 
-                    # --- PREPROCESAMIENTO AVANZADO ---
+                    # --- PREPROCESAMIENTO ---
                     # 0) Filtro Notch (60 Hz)
                     signals = apply_notch_filter(signals, config.FS, notch_freq=60.0)
-                    
+
                     # 1) Filtro Paso de Banda (0.5 a 40 Hz)
                     signals = apply_bandpass_filter(signals, config.FS, lowcut=0.5, highcut=40.0)
                     
@@ -118,24 +131,28 @@ def build_dataset(base_dir=None, usuarios=None, tp_comandos=None, verbose=True):
                         signals = apply_baseline_correction(
                             signals, config.FS, config.BASELINE_WINDOW_S
                         )
-                        
-                    # 3) Eliminacion de Artefactos Biologicos (ICA)
-                    #signals = apply_ica_artifact_removal(signals)
+                    # 3) Deteccion y Descarte de picos (>150uV) Parpadeo
+                    pico_maximo = np.max(np.abs(signals))
+                    if pico_maximo > 150.0:
+                        print(f"Bloque descartado por Pico: {pico_maximo:.2f} uV en archivo: {path}")
+                        n_fail += 1
+                        continue
                     
-                    # 4) Re-referenciacion Espacial (CAR)
-                    signals = apply_car_rereference(signals)
-                    
-                    # 5) Normalizacion y Escalamiento (Z-score)
+                    # 4) Normalizacion y Escalamiento (Z-score)
                     signals = apply_zscore_normalization(signals)
                     # ---------------------------------
 
-                    # 2) Recorte opcional a la ventana P300 (0.5-1.2s)
+                    # 5) Recorte opcional a la ventana P300 (0.5-1.2s)
                     if config.USE_P300_WINDOW_ONLY:
                         signals = _crop_p300_window(signals, config.FS)
 
                     n_samples = signals.shape[1]
+
                     # Un solo "window" = el trial (o el recorte P300) completo
-                    window_size = n_samples
+                    if config.USE_WIN_SIZE:
+                        window_size = config.WINDOW_SIZE
+                    else:
+                        window_size=n_samples
 
                     feat_df = extractor.extract_features(
                         signals,
@@ -144,16 +161,25 @@ def build_dataset(base_dir=None, usuarios=None, tp_comandos=None, verbose=True):
                         window_size=window_size,
                         overlap=config.WINDOW_OVERLAP,
                     )
-                    # Si por algun motivo salieran varias ventanas, se promedian
-                    # para dejar un solo vector de caracteristicas por trial.
-                    feat_row = feat_df.mean(axis=0, numeric_only=True).to_dict()
 
-                    feat_row["usuario"] = usuario
-                    feat_row["tpComando"] = tp
-                    feat_row["letra"] = letra
-                    feat_row["trial"] = trial
-                    feat_row["label"] = letra  # 40 clases posibles: A-Z, 0-9, simbolos control
-                    rows.append(feat_row)
+                    if(feat_df.shape[0]>1):
+                        for index, row in feat_df.iterrows():
+                            trialn+=1
+                            feat_row = row.to_dict()
+                            feat_row["usuario"] = usuario
+                            feat_row["tpComando"] = tp
+                            feat_row["letra"] = letra
+                            feat_row["trial"] = trialn
+                            feat_row["label"] = letra  # 40 clases posibles: A-Z, 0-9, simbolos control
+                            rows.append(feat_row)
+                    else:
+                        feat_row = feat_df.mean(axis=0, numeric_only=True).to_dict()
+                        feat_row["usuario"] = usuario
+                        feat_row["tpComando"] = tp
+                        feat_row["letra"] = letra
+                        feat_row["trial"] = trial
+                        feat_row["label"] = letra  # 40 clases posibles: A-Z, 0-9, simbolos control
+                        rows.append(feat_row)
                     n_ok += 1
                 except Exception as e:
                     n_fail += 1

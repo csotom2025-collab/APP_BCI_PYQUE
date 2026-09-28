@@ -5,6 +5,7 @@ Contiene la funcion extract_features original (provista por el usuario),
 envuelta en una clase con fs y un metodo `safe` para sanitizar nombres de canal.
 """
 
+from scipy.stats import _mannwhitneyu
 from scipy.signal import signaltools
 from pandas.core import window
 from joblib import compressor
@@ -82,7 +83,7 @@ class EEGFeatureExtractor:
         n_windows = max(0, (signals.shape[1] - window_size) // step_size + 1)
         if n_windows <= 0:
             raise ValueError("Segmento demasiado corto para el window_size y overlap especificados.")
-
+        
         features = []
         for window_idx in range(n_windows):
             start = window_idx * step_size

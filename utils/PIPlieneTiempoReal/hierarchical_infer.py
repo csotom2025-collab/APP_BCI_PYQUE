@@ -21,7 +21,14 @@ import numpy as np
 import pandas as pd
 
 import config
-from eeg_features import EEGFeatureExtractor, apply_baseline_correction, log_transform_power_columns
+from eeg_features import (
+    EEGFeatureExtractor,
+    apply_notch_filter,
+    apply_bandpass_filter,
+    apply_baseline_correction,
+    apply_zscore_normalization,
+    log_transform_power_columns
+)
 from p300_segmentation import extract_with_flash_segmentation
 from lda_utils import SafeLDA  # noqa: F401 — necesario para que joblib deserialice SafeLDA correctamente
 
@@ -31,10 +38,9 @@ class HierarchicalBCIPredictor:
         """
         usuario: nombre del usuario cuyo modelo monousuario se debe cargar
         model_path: ruta explicita al .joblib
-        use_flash_segmentation: si True (default), segmenta los 2 segundos en 5 flashes P300,
-                                extrae características de cada uno, y promedia antes de
-                                clasificar (mejora SNR y accuracy). Si False, usa el
-                                archivo completo tal cual.
+        use_flash_segmentation: si True, segmenta en flashes P300. Si False (default),
+                                procesa la señal completa con las mismas ventanas y filtros
+                                que data_loader.py.
         """
         if model_path is None:
             if usuario is None:
@@ -53,13 +59,29 @@ class HierarchicalBCIPredictor:
         self.usuario = self.bundle.get("usuario", usuario)
         self.use_flash_segmentation = use_flash_segmentation
 
-        self.channel_names = self.bundle["channel_names"]
-        self.fs = self.bundle["fs"]
-        self.use_p300_window_only = self.bundle.get("use_p300_window_only", False)
-        self.p300_window_s = self.bundle.get("p300_window_s", (0.5, 1.2))
-        self.apply_baseline = self.bundle.get("apply_baseline_correction", True)
-        self.baseline_window_s = self.bundle.get("baseline_window_s", (0.0, 0.5))
+        self.channel_names = self.bundle.get("channel_names", config.CHANNEL_NAMES)
+        self.fs = self.bundle.get("fs", config.FS)
+        self.use_p300_window_only = self.bundle.get("use_p300_window_only", getattr(config, "USE_P300_WINDOW_ONLY", False))
+        self.p300_window_s = self.bundle.get("p300_window_s", getattr(config, "P300_WINDOW_S", (0.5, 1.2)))
+        self.apply_baseline = self.bundle.get("apply_baseline_correction", getattr(config, "APPLY_BASELINE_CORRECTION", True))
+        self.baseline_window_s = self.bundle.get("baseline_window_s", getattr(config, "BASELINE_WINDOW_S", (0.0, 0.5)))
         self.log_transform_power = self.bundle.get("log_transform_power", True)
+
+        # Filtros y normalización idénticos a data_loader.py
+        self.apply_notch = getattr(config, "APPLY_NOTCH_FILTER", True)
+        self.notch_freq = getattr(config, "NOTCH_FREQ", 60.0)
+        self.apply_bandpass = getattr(config, "APPLY_BANDPASS_FILTER", True)
+        self.lowcut = getattr(config, "BANDPASS_LOWCUT", 0.5)
+        self.highcut = getattr(config, "BANDPASS_HIGHCUT", 40.0)
+        self.apply_zscore = getattr(config, "APPLY_ZSCORE_NORMALIZATION", True)
+        self.max_peak_threshold = getattr(config, "MAX_PEAK_THRESHOLD", 150.0)
+
+        # Configuración de ventaneo idéntica a data_loader.py
+        self.use_win_size = getattr(config, "USE_WIN_SIZE", True)
+        self.window_size = getattr(config, "WINDOW_SIZE", 192)
+        self.window_overlap = getattr(config, "WINDOW_OVERLAP", 0.89)
+
+        self.last_artifact_info = {}
 
         self.super_bundle = self.bundle["super_clase"]
         self.group_bundles = self.bundle["por_grupo"]  # {"Letters": {...}, "Numbers": {...}, "Controls": {...}}
@@ -91,126 +113,204 @@ class HierarchicalBCIPredictor:
             return signals
         return signals[:, start:end]
 
-    def _signals_to_feature_row(self, signals):
-        """signals: (n_channels, n_samples) -> DataFrame de 1 fila con TODAS las columnas de features.
-        
-        Si use_flash_segmentation=True (default): segmenta en 5 flashes P300,
-        extrae características de cada uno, promedia (máxima SNR, máxima accuracy).
-        Si False: usa la señal completa (backward compatibility).
+    def preprocess_signals(self, signals):
         """
+        Aplica exactamente la misma cadena de preprocesamiento que data_loader.py:
+        0) Filtro Notch (60 Hz)
+        1) Filtro Paso de Banda (0.5 a 40 Hz)
+        2) Corrección de línea base (pre-estímulo 0.0 - 0.5s)
+        3) Detección de picos (> 150 uV)
+        4) Normalización Z-score
+        5) Recorte a ventana P300 si use_p300_window_only=True
+        """
+        signals = np.array(signals, dtype=float, copy=True)
+
+        # 0) Filtro Notch (60 Hz)
+        if self.apply_notch:
+            signals = apply_notch_filter(signals, self.fs, notch_freq=self.notch_freq)
+
+        # 1) Filtro Paso de Banda (0.5 a 40 Hz)
+        if self.apply_bandpass:
+            signals = apply_bandpass_filter(signals, self.fs, lowcut=self.lowcut, highcut=self.highcut)
+
+        # 2) Correccion de linea base
         if self.apply_baseline:
             signals = apply_baseline_correction(signals, self.fs, self.baseline_window_s)
 
+        # 3) Deteccion de picos (> 150 uV)
+        pico_maximo = float(np.max(np.abs(signals)))
+        es_artefacto = pico_maximo > self.max_peak_threshold
+
+        # 4) Normalizacion y Escalamiento (Z-score)
+        if self.apply_zscore:
+            signals = apply_zscore_normalization(signals)
+
+        # 5) Recorte opcional a la ventana P300
+        if self.use_p300_window_only:
+            signals = self._crop_p300(signals)
+
+        return signals, es_artefacto, pico_maximo
+
+    def _signals_to_features(self, signals, return_artifact_info=False):
+        """
+        signals: (n_channels, n_samples) -> DataFrame con 1 fila por ventana (ej. 4 ventanas de 192 muestras).
+        Aplica el mismo preprocesamiento y extracción que data_loader.py para que cada
+        ventana se pase individualmente al clasificador tal como se entrenó.
+        """
+        signals, es_artefacto, pico_maximo = self.preprocess_signals(signals)
+
         if self.use_flash_segmentation:
-            # Segmentación de 5 flashes + extracción + promediado automático
-            feat_row = extract_with_flash_segmentation(
+            # Segmentación de flashes P300 (experimental)
+            feat_df = extract_with_flash_segmentation(
                 signals, self.feature_columns, self.extractor,
-                apply_baseline=False,  # ya se hizo arriba
-                use_p300_window=self.use_p300_window_only,
+                apply_baseline=False,
+                use_p300_window=False,
                 p300_window_s=self.p300_window_s,
                 log_transform_power=self.log_transform_power,
                 fs=self.fs,
                 verbose=False
             )
         else:
-            # Método anterior (sin segmentación)
-            if self.use_p300_window_only:
-                signals = self._crop_p300(signals)
+            n_samples = signals.shape[1]
+            if self.use_win_size:
+                window_size = min(self.window_size, n_samples)
+                overlap = self.window_overlap
+            else:
+                window_size = n_samples
+                overlap = 0.0
 
             feat_df = self.extractor.extract_features(
                 signals,
                 channel_names=self.channel_names,
                 available_channel_names=self.channel_names,
-                window_size=signals.shape[1],
-                overlap=0.0,
+                window_size=window_size,
+                overlap=overlap,
             )
-            feat_row = feat_df.mean(axis=0, numeric_only=True).to_frame().T
 
             if self.log_transform_power:
-                feat_row = log_transform_power_columns(feat_row, feat_row.columns)
+                feat_df = log_transform_power_columns(feat_df, feat_df.columns)
 
+        self.last_artifact_info = {
+            "es_artefacto": es_artefacto,
+            "pico_maximo_uV": pico_maximo,
+        }
+
+        if return_artifact_info:
+            return feat_df, es_artefacto, pico_maximo
+        return feat_df
+
+    def _signals_to_feature_row(self, signals, return_artifact_info=False):
+        """Método de compatibilidad: promedia las ventanas en una sola fila."""
+        feat_df, es_art, pico = self._signals_to_features(signals, return_artifact_info=True)
+        feat_row = feat_df.mean(axis=0, numeric_only=True).to_frame().T
+        if return_artifact_info:
+            return feat_row, es_art, pico
         return feat_row
 
-    def _predict_with_bundle(self, bundle, feat_row):
-        x = feat_row.reindex(columns=bundle["feature_columns"]).iloc[0].to_numpy(dtype=float)
-        x = np.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0).reshape(1, -1)
+    def _predict_with_bundle(self, bundle, feat_df):
+        """
+        Pasa todas las ventanas (filas de feat_df) al clasificador.
+        Evalúa cada ventana y combina las predicciones mediante soft voting (promedio de probabilidades).
+        
+        Retorna:
+            pred_label: clase ganadora global
+            proba_dict: diccionario de probabilidades promedio
+            window_details: lista con predicción y probabilidades de cada ventana individual
+        """
+        X = feat_df.reindex(columns=bundle["feature_columns"]).to_numpy(dtype=float)
+        X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
 
         pipeline = bundle["pipeline"]
         le = bundle["label_encoder"]
+        clases = le.classes_
 
-        pred_idx = pipeline.predict(x)[0]
-        pred_label = le.inverse_transform([pred_idx])[0]
+        window_preds_idx = pipeline.predict(X)
+        window_preds = le.inverse_transform(window_preds_idx)
 
-        proba_dict = {}
+        window_details = []
         if hasattr(pipeline, "predict_proba"):
-            probas = pipeline.predict_proba(x)[0]
-            clases = le.inverse_transform(np.arange(len(probas)))
-            proba_dict = dict(sorted(zip(clases, probas), key=lambda kv: -kv[1]))
+            all_probas = pipeline.predict_proba(X)  # shape: (n_ventanas, n_clases)
+            avg_probas = np.mean(all_probas, axis=0)  # Soft voting entre las 4 ventanas
+            pred_idx = np.argmax(avg_probas)
+            pred_label = clases[pred_idx]
+            proba_dict = dict(sorted(zip(clases, avg_probas), key=lambda kv: -kv[1]))
 
-        return pred_label, proba_dict
+            for i in range(len(X)):
+                w_dict = dict(sorted(zip(clases, all_probas[i]), key=lambda kv: -kv[1]))
+                window_details.append({
+                    "ventana": i + 1,
+                    "prediccion": window_preds[i],
+                    "probabilidades": w_dict
+                })
+        else:
+            vals, counts = np.unique(window_preds, return_counts=True)
+            pred_label = vals[np.argmax(counts)]
+            proba_dict = {pred_label: 1.0}
+            for i in range(len(X)):
+                window_details.append({
+                    "ventana": i + 1,
+                    "prediccion": window_preds[i],
+                    "probabilidades": {}
+                })
+
+        return pred_label, proba_dict, window_details
 
     # -----------------------------------------------------------------
     def predict_from_signals(self, signals):
         """
-        ATAJO para una sola repeticion (signals: array (n_channels, n_samples)).
-        Solo da resultados consistentes con el entrenamiento si TODAS las
-        etapas fueron entrenadas con n_rep=1. Si alguna etapa (ej. Letters o
-        Numbers) fue entrenada promediando varias repeticiones, usa
-        `predict_from_repetitions()` en su lugar -- ver esa funcion para el
-        porque.
+        Predice a partir de un arreglo (n_channels, n_samples).
+        Extrae y pasa las 4 ventanas directamente al clasificador jerárquico.
         """
         return self.predict_from_repetitions([signals])
 
     def predict_from_repetitions(self, lista_signals):
         """
-        Version correcta para tiempo real cuando las etapas se entrenaron
-        promediando repeticiones (ver STAGE_CONFIG["n_rep"] en
-        hierarchical_train.py). En un speller P300 real, nunca se decide con
-        un solo flash: se presenta el mismo estimulo candidato varias veces
-        seguidas y se promedian las respuestas antes de clasificar (asi se
-        entrenaron estos modelos, y asi hay que usarlos para que el
-        rendimiento en vivo coincida con el medido en validacion cruzada).
-
-        lista_signals: lista de arrays (n_channels, n_samples), cada uno una
-                       repeticion/flash del MISMO estimulo candidato, en
-                       cualquier cantidad >= max(n_rep de todas las etapas)
-                       -- si tienes menos repeticiones que las que pide una
-                       etapa, se usan todas las disponibles (con un aviso).
-
-        Retorna: (comando_final, detalle)
+        Pasa todas las ventanas de las señales de entrada al clasificador.
+        Si hay 1 trial de 2s, extrae 4 ventanas y las clasifica individualmente,
+        combinando sus probabilidades con soft voting.
         """
-        feat_rows = [self._signals_to_feature_row(s) for s in lista_signals]
-        all_feats = pd.concat(feat_rows, ignore_index=True)
-        n_disponibles = len(all_feats)
+        feat_dfs = []
+        artefactos = []
+        picos = []
+        for s in lista_signals:
+            f_df, es_art, pico = self._signals_to_features(s, return_artifact_info=True)
+            feat_dfs.append(f_df)
+            artefactos.append(es_art)
+            picos.append(pico)
 
-        # Etapa 1: super-clase (usa las primeras n_rep_super repeticiones)
-        n_rep_super = self.super_bundle.get("n_rep", 1)
-        n_use = min(n_rep_super, n_disponibles)
-        if n_use < n_rep_super:
-            print(f"[AVISO] super_clase espera {n_rep_super} repeticiones, "
-                  f"solo hay {n_disponibles}. Se usan todas las disponibles.")
-        feat_super = all_feats.iloc[:n_use].mean(axis=0).to_frame().T
-        grupo_pred, grupo_probas = self._predict_with_bundle(self.super_bundle, feat_super)
+        all_feats = pd.concat(feat_dfs, ignore_index=True)
 
-        # Etapa 2: modelo especializado del grupo predicho
+        # Etapa 1: super-clase pasando todas las ventanas
+        grupo_pred, grupo_probas, grupo_ventanas = self._predict_with_bundle(self.super_bundle, all_feats)
+
+        # Etapa 2: modelo especializado del grupo predicho pasando todas las ventanas
         if grupo_pred not in self.group_bundles:
             raise ValueError(f"Grupo predicho '{grupo_pred}' no tiene modelo especializado asociado.")
         group_bundle = self.group_bundles[grupo_pred]
-        n_rep_group = group_bundle.get("n_rep", 1)
-        n_use_g = min(n_rep_group, n_disponibles)
-        if n_use_g < n_rep_group:
-            print(f"[AVISO] el modelo de '{grupo_pred}' espera {n_rep_group} repeticiones, "
-                  f"solo hay {n_disponibles}. Se usan todas las disponibles (la accuracy "
-                  f"esperada sera menor a la reportada en validacion cruzada).")
-        feat_group = all_feats.iloc[:n_use_g].mean(axis=0).to_frame().T
-        comando_final, comando_probas = self._predict_with_bundle(group_bundle, feat_group)
+        comando_final, comando_probas, comando_ventanas = self._predict_with_bundle(group_bundle, all_feats)
 
         detalle = {
             "grupo_predicho": grupo_pred,
             "grupo_probabilidades": grupo_probas,
             "comando_probabilidades": comando_probas,
-            "n_repeticiones_usadas_super": n_use,
-            "n_repeticiones_usadas_grupo": n_use_g,
+            "n_repeticiones_usadas": len(lista_signals),
+            "n_ventanas": len(all_feats),
+            "ventanas": [
+                {
+                    "ventana": i + 1,
+                    "grupo": grupo_ventanas[i]["prediccion"],
+                    "comando": comando_ventanas[i]["prediccion"],
+                    "confianza_grupo": float(grupo_ventanas[i]["probabilidades"].get(grupo_ventanas[i]["prediccion"], 1.0)),
+                    "confianza_comando": float(comando_ventanas[i]["probabilidades"].get(comando_ventanas[i]["prediccion"], 1.0)),
+                }
+                for i in range(len(all_feats))
+            ],
+            "detalle_ventanas_grupo": grupo_ventanas,
+            "detalle_ventanas_comando": comando_ventanas,
+            "artefactos_detectados": artefactos,
+            "picos_maximos_uV": picos,
+            "es_artefacto": any(artefactos) if artefactos else False,
+            "pico_maximo_uV": max(picos) if picos else 0.0,
         }
         return comando_final, detalle
 

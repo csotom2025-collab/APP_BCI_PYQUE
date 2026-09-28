@@ -53,7 +53,7 @@ def main():
 
     print(f">>> Comando predicho: {comando_pred}")
     print(f">>> Comando real: {comando_real}")
-    print(f">>> Resultado: {'✓ CORRECTO' if es_correcto else '✗ INCORRECTO'}")
+    print(f">>> Resultado: {'[OK] CORRECTO' if es_correcto else '[X] INCORRECTO'}")
     print()
     print("Probabilidades de grupo:")
     for g, p in detalle["grupo_probabilidades"].items():

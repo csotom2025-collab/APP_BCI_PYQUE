@@ -45,6 +45,14 @@ import config
 from eeg_features import get_feature_sets, log_transform_power_columns
 
 
+def normalize_string_columns(df, columns):
+    """Convierte columnas de metadatos a texto para evitar mezclas int/str en LabelEncoder."""
+    for col in columns:
+        if col in df.columns:
+            df[col] = df[col].map(lambda x: "" if pd.isna(x) else str(x))
+    return df
+
+
 # ===========================================================================================
 # PASO 1: DEFINIR CLASIFICADORES (6 total)
 # ===========================================================================================
@@ -147,7 +155,7 @@ def plot_confusion_matrix(y_true, y_pred, labels, title, out_path):
 
     plt.figure(figsize=(fig_size, fig_size))
     sns.heatmap(cm_norm, xticklabels=labels, yticklabels=labels,
-                cmap="Blues", vmin=0, vmax=1, cbar=True, square=True)
+                cmap="magma", vmin=0, vmax=1, cbar=True, square=True)
     plt.xlabel("Predicción")
     plt.ylabel("Real")
     plt.title(title)
@@ -164,7 +172,7 @@ def evaluate_combination(df_subset, feature_cols, group_name, clf_name, clf,
     """Evalúa 1 combinación: retorna accuracy_mean, f1_macro_mean, y_pred_oof, label_encoder, y_true"""
     
     le = LabelEncoder()
-    y = le.fit_transform(df_subset["label"])
+    y = le.fit_transform(df_subset["label"].astype(str))
     n_classes = len(le.classes_)
     
     X = df_subset[feature_cols].to_numpy()
@@ -344,7 +352,7 @@ def train_final_models(df, best_per_group):
     super_info = best_per_group["super_clase"]
     
     le_super = LabelEncoder()
-    y_super = le_super.fit_transform(df_super["label"])
+    y_super = le_super.fit_transform(df_super["label"].astype(str))
     X_super = df_super[super_info["cols"]].to_numpy()
     X_super = np.nan_to_num(X_super, nan=0.0, posinf=0.0, neginf=0.0)
     
@@ -373,7 +381,7 @@ def train_final_models(df, best_per_group):
         grupo_info = best_per_group[grupo]
         
         le_grupo = LabelEncoder()
-        y_grupo = le_grupo.fit_transform(df_grupo["label"])
+        y_grupo = le_grupo.fit_transform(df_grupo["label"].astype(str))
         X_grupo = df_grupo[grupo_info["cols"]].to_numpy()
         X_grupo = np.nan_to_num(X_grupo, nan=0.0, posinf=0.0, neginf=0.0)
         
@@ -425,6 +433,7 @@ def main():
     # Cargar y preparar datos
     print("\n1) Cargando dataset...")
     df = pd.read_csv(config.FEATURES_CSV)
+    df = normalize_string_columns(df, ["usuario", "tpComando", "letra", "label"])
     meta_cols = ["usuario", "tpComando", "letra", "trial", "label"]
     feature_cols = [c for c in df.columns if c not in meta_cols]
     df[feature_cols] = log_transform_power_columns(df[feature_cols], feature_cols)

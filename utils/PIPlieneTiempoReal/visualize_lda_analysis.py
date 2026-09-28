@@ -67,6 +67,13 @@ GROUP_PRETTY = {
 }
 
 
+def _normalize_label_series(values):
+    """Convierte etiquetas mezcladas (int + str) a strings para sklearn."""
+    s = pd.Series(values, copy=True)
+    s = s.where(pd.notna(s), "NaN")
+    return s.astype(str).str.strip()
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # HELPERS
 # ──────────────────────────────────────────────────────────────────────────────
@@ -230,7 +237,7 @@ def plot_lda_projections(df_usuario, bundle, out_dir, usuario):
     ax_s = fig.add_subplot(gs[0, 0])
     super_b = bundle["super_clase"]
     df_s = df_usuario.copy()
-    df_s["label"] = df_s["tpComando"]
+    df_s["label"] = _normalize_label_series(df_s["tpComando"])
     fc_s = super_b["feature_columns"]
     df_s[fc_s] = log_transform_power_columns(df_s[fc_s], fc_s)
 
@@ -267,6 +274,7 @@ def plot_lda_projections(df_usuario, bundle, out_dir, usuario):
     ax_l = fig.add_subplot(gs[0, 1])
     let_b = bundle["por_grupo"]["Letters"]
     df_l = df_usuario[df_usuario["tpComando"] == "Letters"].reset_index(drop=True)
+    df_l["label"] = _normalize_label_series(df_l["label"])
     fc_l = let_b["feature_columns"]
     df_l = df_l.copy()
     df_l[fc_l] = log_transform_power_columns(df_l[fc_l], fc_l)
@@ -296,6 +304,7 @@ def plot_lda_projections(df_usuario, bundle, out_dir, usuario):
     ax_n = fig.add_subplot(gs[1, 0])
     num_b = bundle["por_grupo"]["Numbers"]
     df_n = df_usuario[df_usuario["tpComando"] == "Numbers"].reset_index(drop=True)
+    df_n["label"] = _normalize_label_series(df_n["label"])
     fc_n = num_b["feature_columns"]
     df_n = df_n.copy()
     df_n[fc_n] = log_transform_power_columns(df_n[fc_n], fc_n)
@@ -324,6 +333,7 @@ def plot_lda_projections(df_usuario, bundle, out_dir, usuario):
     ax_c = fig.add_subplot(gs[1, 1])
     ctrl_b = bundle["por_grupo"]["Controls"]
     df_c = df_usuario[df_usuario["tpComando"] == "Controls"].reset_index(drop=True)
+    df_c["label"] = _normalize_label_series(df_c["label"])
     fc_c = ctrl_b["feature_columns"]
     df_c = df_c.copy()
     df_c[fc_c] = log_transform_power_columns(df_c[fc_c], fc_c)
@@ -508,6 +518,9 @@ def _compute_learning_curve(df_subset, feature_cols, n_components, clf,
                              n_points=8):
     """Calcula learning curve (train_sizes, train_scores, val_scores)."""
     from sklearn.base import clone
+
+    df_subset = df_subset.copy()
+    df_subset["label"] = _normalize_label_series(df_subset["label"])
 
     le = LabelEncoder()
     y = le.fit_transform(df_subset["label"])
@@ -809,6 +822,7 @@ def main():
 
     print(f"\n1) Cargando dataset: {config.FEATURES_CSV} ...")
     df = pd.read_csv(config.FEATURES_CSV)
+    df["label"] = _normalize_label_series(df["label"])
     meta_cols = ["usuario", "tpComando", "letra", "trial", "label"]
     feature_cols = [c for c in df.columns if c not in meta_cols]
     df[feature_cols] = log_transform_power_columns(df[feature_cols], feature_cols)

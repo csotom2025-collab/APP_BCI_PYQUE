@@ -1,20 +1,37 @@
 from hierarchical_infer import HierarchicalBCIPredictor
-from validate_model import validate_single
+import os
 
-predictor = HierarchicalBCIPredictor(usuario="UserCMSM")
-# Por defecto, use_flash_segmentation=True (automático)
-comand="1"
+
+User="UserCMSM"
+comand="7"
 tip="Numbers"
-file=[2,3,5,7,11,13,17,19,23,29]
+file=[i for  i in range(1,29)]
+predictor = HierarchicalBCIPredictor(usuario=User)
+reCom=0
+realTp=0
 for num in file:
-    csv_file = f"D:/APP_BCI_PYQUE/captures/UserCMSM/{tip}/UserCMSM_{comand}_{num}.csv"
+    csv_file = f"D:/APP_BCI_PYQUE/captures/{User}/{tip}/{User}_{comand}_{num}.csv"
+    #checar si existe el archivo csv si no existe continuar
+    if (os.path.exists(csv_file) == False):
+        print("El archivo "+csv_file+" no existe")
+        continue    
     comando, detalle = predictor.predict_from_csv(csv_file)
-    print(f"Archivo: UserCMSM_{comand}_{num}.csv")
-    print(f"Comando predicho: {comando}")
-    print(f"Grupo: {detalle['grupo_predicho']}")
-    print("-" * 40)
-
-
+    
+    
+    if (comando==comand):
+        reCom+=1
+    if (tip==detalle['grupo_predicho']):
+        realTp+=1
+    # print("----------------------------------------------------------------")
+    # print(detalle["ventanas"][0])
+    # print(detalle["ventanas"][1])
+    # print(detalle["ventanas"][2])
+    # print(detalle["ventanas"][3])
+    # print("----------------------------------------------------------------")
+    # print("Comando: ",comando," Tipo:",detalle['grupo_predicho'],"del archivo ",csv_file)
+print("Comando Reales Predichos, ",reCom)
+print("Grupo Real Predicho, ",realTp)
 #python validate_model.py UserCMSM D:/APP_BCI_PYQUE/captures/Speller/UserCMSM_UNKNOWN_2.csv O
 
 ##D:/APP_BCI_PYQUE/captures/UserCMSM/UNKNOWN/UserCMSM_UNKNOWN_2.csv
+#Deltrador EEG Habla Imgainda del CIC  DEHI_CIC

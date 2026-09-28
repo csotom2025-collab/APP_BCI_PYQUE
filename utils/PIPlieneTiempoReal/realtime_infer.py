@@ -18,7 +18,14 @@ import numpy as np
 import pandas as pd
 
 import config
-from eeg_features import EEGFeatureExtractor, apply_baseline_correction, log_transform_power_columns
+from eeg_features import (
+    EEGFeatureExtractor,
+    apply_notch_filter,
+    apply_bandpass_filter,
+    apply_baseline_correction,
+    apply_zscore_normalization,
+    log_transform_power_columns
+)
 
 
 class BCIPredictor:
@@ -35,6 +42,17 @@ class BCIPredictor:
         self.p300_window_s = self.bundle.get("p300_window_s", (0.5, 1.2))
         self.apply_baseline = self.bundle.get("apply_baseline_correction", True)
         self.baseline_window_s = self.bundle.get("baseline_window_s", (0.0, 0.5))
+
+        # Filtros y ventaneo según data_loader.py
+        self.apply_notch = getattr(config, "APPLY_NOTCH_FILTER", True)
+        self.notch_freq = getattr(config, "NOTCH_FREQ", 60.0)
+        self.apply_bandpass = getattr(config, "APPLY_BANDPASS_FILTER", True)
+        self.lowcut = getattr(config, "BANDPASS_LOWCUT", 0.5)
+        self.highcut = getattr(config, "BANDPASS_HIGHCUT", 40.0)
+        self.apply_zscore = getattr(config, "APPLY_ZSCORE_NORMALIZATION", True)
+        self.use_win_size = getattr(config, "USE_WIN_SIZE", True)
+        self.window_size = getattr(config, "WINDOW_SIZE", 192)
+        self.window_overlap = getattr(config, "WINDOW_OVERLAP", 0.89)
 
         self.extractor = EEGFeatureExtractor(fs=self.fs)
 
@@ -53,25 +71,47 @@ class BCIPredictor:
 
     def _signals_to_feature_vector(self, signals):
         """signals: (n_channels, n_samples) -> vector alineado con feature_columns del modelo."""
-        # Misma correccion de linea base usada en entrenamiento (pre-estimulo)
+        signals = np.array(signals, dtype=float, copy=True)
+
+        # 0) Filtro Notch (60 Hz)
+        if self.apply_notch:
+            signals = apply_notch_filter(signals, self.fs, notch_freq=self.notch_freq)
+
+        # 1) Filtro Paso de Banda (0.5 a 40 Hz)
+        if self.apply_bandpass:
+            signals = apply_bandpass_filter(signals, self.fs, lowcut=self.lowcut, highcut=self.highcut)
+
+        # 2) Correccion de linea base
         if self.apply_baseline:
             signals = apply_baseline_correction(signals, self.fs, self.baseline_window_s)
 
+        # 3) Normalizacion Z-score
+        if self.apply_zscore:
+            signals = apply_zscore_normalization(signals)
+
+        # 4) Recorte a ventana P300
         if self.use_p300_window_only:
             signals = self._crop_p300(signals)
+
+        n_samples = signals.shape[1]
+        if self.use_win_size:
+            w_size = min(self.window_size, n_samples)
+            w_overlap = self.window_overlap
+        else:
+            w_size = n_samples
+            w_overlap = 0.0
 
         feat_df = self.extractor.extract_features(
             signals,
             channel_names=self.channel_names,
             available_channel_names=self.channel_names,
-            window_size=signals.shape[1],
-            overlap=0.0,
+            window_size=w_size,
+            overlap=w_overlap,
         )
         feat_row = feat_df.mean(axis=0, numeric_only=True).to_frame().T
 
-        # Mismo log-transform de columnas de potencia (_Abs/_energy) usado en
-        # entrenamiento, si el bundle indica que se aplico.
-        if self.bundle.get("log_transform_power", False):
+        # Mismo log-transform de columnas de potencia (_Abs/_energy) usado en entrenamiento
+        if self.bundle.get("log_transform_power", True):
             feat_row = log_transform_power_columns(feat_row, feat_row.columns)
 
         # Alinear exactamente con las columnas usadas en entrenamiento

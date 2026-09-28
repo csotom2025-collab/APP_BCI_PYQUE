@@ -39,6 +39,8 @@ class RecordingShowedWindow(QWidget):
 
         self.checkbox_notch = QCheckBox("Aplicar filtro Notch")
         self.checkbox_baseline = QCheckBox("Eliminar línea base")
+        self.checkbox_zcore = QCheckBox("Z core ")
+                
 
         self.checkbox_overlay_ploting = QCheckBox("Sobreponer señales")
 
@@ -57,6 +59,7 @@ class RecordingShowedWindow(QWidget):
         self.grid_layout.addWidget(QLabel("Opciones de procesamiento:"), 5, 0, 1, 3)
         self.grid_layout.addWidget(self.checkbox_notch, 6, 0)
         self.grid_layout.addWidget(self.checkbox_baseline, 6, 1)
+        self.grid_layout.addWidget(self.checkbox_zcore, 6, 2)
         self.grid_layout.addWidget(QLabel("Opciones de visualización:"), 7, 0, 1, 3)
         self.grid_layout.addWidget(self.checkbox_overlay_ploting, 8, 0, 1, 3)
         self.grid_layout.addWidget(QPushButton("Cerrar Ventana"), 9, 0, 1, 3)
@@ -100,20 +103,21 @@ class RecordingShowedWindow(QWidget):
         capture_number = filename.split('_')[2].split('.')[0]
         use_notch = self.checkbox_notch.isChecked()
         clear_baseline = self.checkbox_baseline.isChecked()
+        use_zcore = self.checkbox_zcore.isChecked()
         overlay_plotting = self.checkbox_overlay_ploting.isChecked()
         # print("using_notch",use_notch)
         # print("clear_baseline", clear_baseline)
         # print("overlay_plotting", overlay_plotting)
         # print("mostrando ")
         if overlay_plotting:
-            self.graficar_captura_sobrepuesta(user,letter,capture_number,apply_notch=use_notch,clear_baseline=clear_baseline,file_path=file_path)
+            self.graficar_captura_sobrepuesta(user,letter,capture_number,apply_notch=use_notch,clear_baseline=clear_baseline,use_zcore=use_zcore,file_path=file_path)
         else:
-            self.graficar_captura(user,letter,capture_number,apply_notch=use_notch,clear_baseline=clear_baseline,file_path=file_path)
+            self.graficar_captura(user,letter,capture_number,apply_notch=use_notch,clear_baseline=clear_baseline,use_zcore=use_zcore,file_path=file_path)
 
     def close_window(self):
         self.close()
         plt.close('all')
-    def graficar_captura(self,user, letter, capture_number, apply_notch=False, clear_baseline=False,file_path=None):
+    def graficar_captura(self,user, letter, capture_number, apply_notch=False, clear_baseline=False, use_zcore=False, file_path=None):
         """
         Grafica una captura específica del usuario
         
@@ -123,6 +127,7 @@ class RecordingShowedWindow(QWidget):
             capture_number: Número de captura
             apply_notch: Si es True, aplica filtro notch a 50 Hz para eliminar ruido de línea
             clear_baseline: Si es True, elimina la línea base de las señales
+            use_zcore: Si es True, aplica normalización Z-score a las señales
         """
         try:
             plt.style.use('dark_background')
@@ -200,7 +205,7 @@ class RecordingShowedWindow(QWidget):
             print(f"❌ Error al procesar el archivo: {e}")
             return False
 
-    def graficar_captura_sobrepuesta(self,user, letter, capture_number, apply_notch=False, clear_baseline=False,file_path=None):
+    def graficar_captura_sobrepuesta(self,user, letter, capture_number, apply_notch=False, clear_baseline=False, use_zcore=False, file_path=None):
         """
         Grafica una captura específica del usuario en una nueva ventana sin bloquear.
         
@@ -210,6 +215,7 @@ class RecordingShowedWindow(QWidget):
             capture_number: Número de captura
             apply_notch: Si es True, aplica filtro notch a 50 Hz para eliminar ruido de línea
             clear_baseline: Si es True, elimina la línea base de las señales
+            use_zcore: Si es True, aplica normalización Z-score a las señales
         """
         try:
             # Activar el modo interactivo de matplotlib para evitar bloqueos globales
@@ -251,7 +257,7 @@ class RecordingShowedWindow(QWidget):
             # CRUCIAL: Crear una NUEVA ventana (Figura) única para esta llamada
             # =========================================================================
             fig = plt.figure(figsize=(11, 6)) 
-            fig.canvas.manager.set_window_title(f'Señales EEG - {user} {letter} #{capture_number} { "con notch" if apply_notch else ""} {"sin linea base" if clear_baseline else ""}')
+            fig.canvas.manager.set_window_title(f'Señales EEG - {user} {letter} #{capture_number} { "con notch" if apply_notch else ""} {"sin linea base" if clear_baseline else ""} { "con Z-score" if use_zcore else ""}')
             
             # Graficar los canales en la figura actual
             for idx, column in enumerate(channels):
@@ -273,10 +279,14 @@ class RecordingShowedWindow(QWidget):
                     # Restamos el promedio a toda la señal
                     signal_data = signal_data - baseline_mean
                 
+                # Aplicar normalización Z-score
+                if use_zcore:
+                    signal_data = (signal_data - np.mean(signal_data)) / np.std(signal_data)
+                
                 
                 plt.plot(df['Tm'], signal_data, linewidth=0.8, color=color_array[idx], label=column)
             
-            plt.title(f'Señales EEG - {user} {letter} #{capture_number} { "con notch" if apply_notch else ""} {"sin linea base" if clear_baseline else ""}', fontsize=14)
+            plt.title(f'Señales EEG - {user} {letter} #{capture_number} { "con notch" if apply_notch else ""} {"sin linea base" if clear_baseline else ""} { "con Z-score" if use_zcore else ""}', fontsize=14)
             plt.grid(True, alpha=0.3)
             plt.legend(loc='upper right')
             

@@ -59,15 +59,15 @@ class CaptureWindow(QWidget):
         self.n_times_edit_line = QLineEdit()
         self.n_times_edit_line.setText("1")
 
-        self.grid_button = QPushButton("Mostrar Grid")
+        self.grid_button = QPushButton("Mostrar Teclado")
         self.grid_button.clicked.connect(self.show_grid)
-        self.grid_button_hide = QPushButton("ocultar Grid")
+        self.grid_button_hide = QPushButton("ocultar Teclado")
         self.grid_button_hide.clicked.connect(self.hide_grid)
 
 
         # self.layout.addWidget(QLabel("Seleccionar usuario:"), 0, 0)
         # self.layout.addWidget(self.combo_box_users, 0, 1)
-        self.layout.addWidget(QLabel("Numero de Usuario User:"), 0, 0)
+        self.layout.addWidget(QLabel("Id de Usuario :"), 0, 0)
         self.layout.addWidget(self.user_id, 0, 1)
         self.layout.addWidget(self.button_new_user, 0, 2)
         # self.layout.addWidget(QLabel("Ruta de guardado:"), 1, 0)
@@ -76,13 +76,13 @@ class CaptureWindow(QWidget):
         self.layout.addWidget(self.combo_box_character_type, 2, 1)
         self.layout.addWidget(QLabel("Caracter :"), 3, 0)
         self.layout.addWidget(self.combo_box_character, 3, 1)
-        self.layout.addWidget(QLabel("Duracion grabacion"), 4, 0)
+        self.layout.addWidget(QLabel("Duracion de grabación :"), 4, 0)
         self.layout.addWidget(self.duration_recording_edit_line,4,1)
         # self.layout.addWidget(self.button_start_capture, 5, 0, 1, 2)
         self.layout.addWidget(self.button_simulation, 7, 0, 1, 2)
         self.layout.addWidget(self.grid_button, 8, 0, 1, 1)
         self.layout.addWidget(self.grid_button_hide, 8, 1, 1, 1)
-        self.layout.addWidget(QLabel("Veces:"), 6, 0, 1, 1)
+        self.layout.addWidget(QLabel("Numero de veces  :"), 6, 0, 1, 1)
         self.layout.addWidget(self.n_times_edit_line, 6, 1, 1, 1)
         self.setLayout(self.layout)
         self.move(300, 350)
@@ -128,7 +128,9 @@ class CaptureWindow(QWidget):
             return
 
         user_name = user_name.strip()
-
+        if "_" in user_name or " " in user_name:
+            QMessageBox.warning(self, "Nombre inválido", "El nombre del usuario no puede contener espacios ni guiones bajos.")
+            return
         if not user_name.startswith("User") :
             user_name = "User" + user_name
 

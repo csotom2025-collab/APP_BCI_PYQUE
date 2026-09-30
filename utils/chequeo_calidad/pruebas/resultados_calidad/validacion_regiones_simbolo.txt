@@ -1,0 +1,16 @@
+VALIDACIÓN - RANKING REGIONES POR SÍMBOLO
+======================================================================
+
+Archivo: C:\tmp_bci\resultados_calidad\matriz_simbolo_region_abs_r_mediana.csv
+Símbolos: 39
+Regiones: Frontal, Fronto-central, Temporal, Parietal, Occipital
+
+VALIDACIONES CORRECTAS:
+- Archivo existente
+- Columna clase presente
+- Todas las regiones presentes
+- No hay regiones adicionales
+- No hay símbolos duplicados
+- No hay NaN
+- Valores numéricos
+- Valores dentro de [0, 1]

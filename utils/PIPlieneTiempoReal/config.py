@@ -48,7 +48,7 @@ RANDOM_STATE=42
 # Duracion del trial en segundos, segun tu protocolo (0.0 - 2.0s)
 TRIAL_DURATION_S = 2.0
 
-# Ventana de interes P300 dentro del trial (0.5 - 1.2s). Se usa opcionalmente
+# Ventana de interes P300 dentro del trial (0.5 - 2.0s). Se usa opcionalmente
 # para recortar la señal antes de extraer caracteristicas.
 P300_WINDOW_S = (0.5, 2.0)
 
@@ -63,8 +63,8 @@ APPLY_BASELINE_CORRECTION = True
 
 # Si True, se recorta cada trial a la ventana P300_WINDOW_S antes de extraer
 # caracteristicas (recomendado: la respuesta discriminativa esta ahi).
-# Si False, se usa el trial completo (0 - 2.0s).
-USE_P300_WINDOW_ONLY = False
+# Si False, se usa el trial completo (0.5 - 2.0s).
+USE_P300_WINDOW_ONLY = True
 
 
 # Parametros de ventaneo para extract_features. Con window_size = n_samples del
@@ -76,14 +76,15 @@ WINDOW_OVERLAP = 0.89
 # Parametros de ventaneo para extract_features.  para definir el tamaño de la ventana  
 USE_WIN_SIZE = True
 
-
-WINDOW_SIZE=192
+# Tamño de 192 en caso de no usar p300 para 4 ventana en los 2 seg   
+# Tamño de 142 en caso de usar p300 para 4 ventanas de 0.5 a 2.0 seg 
+WINDOW_SIZE=142
 
 
 # ---------------------------------------------------------------------------
 # Salidas
 # ---------------------------------------------------------------------------
-OUTPUT_DIR = "D:/EEG_Python/PIPlieneTiempoReal/OutputOPt_14_Canales_Sub4ven"
+OUTPUT_DIR = "D:/EEG_Python/PIPlieneTiempoReal/OutputOPt_14_Canales_Sub4ven_P300"
 FEATURES_CSV = os.path.join(OUTPUT_DIR, "features_dataset.csv")
 RESULTS_CSV = os.path.join(OUTPUT_DIR, "resultados_modelos.csv")
 FIGURES_DIR = os.path.join(OUTPUT_DIR, "figures")

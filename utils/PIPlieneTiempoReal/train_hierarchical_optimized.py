@@ -17,6 +17,7 @@ Protocolo asumido:
 - fs=128 Hz
 """
 
+from datetime import datetime
 from sklearn.ensemble import RandomForestClassifier
 import os
 import json
@@ -32,7 +33,7 @@ from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.pipeline import Pipeline
 from sklearn.feature_selection import SelectKBest, f_classif
-from sklearn.model_selection import StratifiedKFold, cross_val_predict, cross_val_score
+from sklearn.model_selection import StratifiedKFold, cross_val_predict
 from sklearn.neural_network import MLPClassifier
 from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
@@ -155,7 +156,7 @@ def plot_confusion_matrix(y_true, y_pred, labels, title, out_path):
 
     plt.figure(figsize=(fig_size, fig_size))
     sns.heatmap(cm_norm, xticklabels=labels, yticklabels=labels,
-                cmap="magma", vmin=0, vmax=1, cbar=True, square=True)
+                cmap="GnBu", vmin=0, vmax=1, cbar=True, square=True)
     plt.xlabel("Predicción")
     plt.ylabel("Real")
     plt.title(title)
@@ -169,7 +170,11 @@ def plot_confusion_matrix(y_true, y_pred, labels, title, out_path):
 
 def evaluate_combination(df_subset, feature_cols, group_name, clf_name, clf,
                         n_components, k_best=None, cv_splits=5, verbose=True):
-    """Evalúa 1 combinación: retorna accuracy_mean, f1_macro_mean, y_pred_oof, label_encoder, y_true"""
+    """Evalúa una combinación con una sola CV y reutiliza sus predicciones OOF.
+
+    Retorna accuracy_mean, accuracy_std, f1_macro_mean, f1_macro_std,
+    y_pred_oof, label_encoder y y_true.
+    """
     
     le = LabelEncoder()
     y = le.fit_transform(df_subset["label"].astype(str))
@@ -188,9 +193,15 @@ def evaluate_combination(df_subset, feature_cols, group_name, clf_name, clf,
     pipe = build_pipeline_hierarchical(clf, n_components, X.shape[1], k_best)
     
     try:
-        acc = cross_val_score(pipe, X, y, cv=skf, scoring="accuracy", n_jobs=-1)
-        f1 = cross_val_score(pipe, X, y, cv=skf, scoring="f1_macro", n_jobs=-1)
         y_pred_oof = cross_val_predict(pipe, X, y, cv=skf, n_jobs=-1)
+
+        fold_acc = []
+        fold_f1 = []
+        for _, test_idx in skf.split(X, y):
+            fold_acc.append(accuracy_score(y[test_idx], y_pred_oof[test_idx]))
+            fold_f1.append(f1_score(y[test_idx], y_pred_oof[test_idx], average="macro"))
+        acc = np.asarray(fold_acc)
+        f1 = np.asarray(fold_f1)
         
         if verbose:
             print(f"  {group_name:12s} × {clf_name:22s} | "
@@ -456,8 +467,12 @@ def main():
         # Paso 1-4: Evaluación exhaustiva (solo para este usuario)
         print(f"\n2) Evaluando TODAS las combinaciones para {usuario}...")
         print("   Esto puede tomar 5-15 minutos por usuario...")
+        ini=datetime.now()  
+        print("Incio de evaluacion exhaustiva",ini)
         results_df, best_per_group = evaluate_all_hierarchical(df_usuario, verbose=False)
-        
+        fin=datetime.now()
+        print("Fin de evaluacion exhaustiva",fin)
+        print("Tiempo de evaluacion exhaustiva",fin-ini)
         # Guardar tabla por usuario
         usuario_dir = os.path.join(config.OUTPUT_DIR, usuario)
         os.makedirs(usuario_dir, exist_ok=True)
@@ -502,6 +517,9 @@ def main():
             "log_transform_power": True,
             "use_flash_segmentation": True,
             "n_flashes": 2,  # 2 flashes por grupo en protocolo real
+            # Umbral mínimo de confianza para la Etapa 1 (super-clase).
+            # 0.0 = nunca rechazar (default). Configurable en inferencia con set_min_group_confidence().
+            "min_group_confidence": 0.0,
         }
         
         out_bundle = os.path.join(usuario_models_dir, "hierarchical_bundle_optimizado.joblib")

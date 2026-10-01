@@ -1,0 +1,38 @@
+{
+  "version": "1.0.0",
+  "fecha_utc": "2026-10-01T18:55:10.303773+00:00",
+  "captures": "D:\\APP_BCI_PYQUE\\captures",
+  "salida": "D:\\APP_BCI_PYQUE\\resultados_filtro",
+  "archivos": 10482,
+  "A_utilizables": 7063,
+  "B_modificados": 1129,
+  "C_regrabar": 2290,
+  "motivos_C": {
+    "etiqueta_invalida": 24,
+    "clase_incoherente_con_carpeta": 29,
+    "canales_distintos_de_los_14": 1752,
+    "registros_insuficientes": 181,
+    "nodos_utiles": 6,
+    "duplicado_exacto_de": 1,
+    "carpeta_desconocida": 300
+  },
+  "parametros": {
+    "FS": 128.0,
+    "N_MUESTRAS_MIN": 256,
+    "DC_TOL_UV": 600.0,
+    "VENTANA_BASE": 97,
+    "A_SEG_UV": 120.0,
+    "Z_SEG": 8.0,
+    "HISTERESIS": 0.5,
+    "MARGEN_MUESTRAS": 3,
+    "FUSION_HUECO": 6,
+    "A_DERIVA_UV": 300.0,
+    "RUN_PLANO_MIN": 26,
+    "RUN_PLANO_NODO": 128,
+    "NIVELES_MIN_NODO": 8,
+    "SIGMA_NODO_MAX_UV": 100.0,
+    "MAX_FRAC_RECORTE_NODO": 0.5,
+    "MIN_NODOS_UTILES": 7
+  },
+  "convencion_recorte": "muestras anomalas del nodo = celda vacia (NaN); filas y tiempo intactos"
+}

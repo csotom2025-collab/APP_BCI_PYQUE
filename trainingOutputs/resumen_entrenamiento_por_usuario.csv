@@ -1,0 +1,2 @@
+usuario,n_trials,mejor_nivel,mejor_grupo,mejor_feature_set,mejor_clasificador,accuracy_mean,f1_macro_mean
+UserMartinEpoc,4632,por_grupo,Letters,Frecuencias_Est,SVM_RBF,0.8726984126984128,0.8729116392619197

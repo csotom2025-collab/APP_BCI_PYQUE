@@ -9,17 +9,23 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from models.pipeline_completo_lda import PipelineCompletoLDA
-
+from models.oldTraining.pipeline_completo_lda import PipelineCompletoLDA
+from models.newTraining.data_loader import build_dataset
+from models.newTraining.train_hierarchical_optimized import  train_optimized_hierarchical
 class controllerTraining():
     def __init__(self):
         pass
 
-    def train_model(self,user,dataPath,modelType):
+    def train_model(self,user,dataPath,modelType,
+                    output_dir="trainingOutputs",
+                    commandTypes=["Letters","Numbers","Controls"],
+                    channels=None,fs=None,use_p300window=False,apply_baseline_correction=True,
+                    seed=42):
         if not os.path.exists(dataPath):
             print("no existe la ruta")
             return
-        if modelType== "LDA":
+        print(modelType)
+        if modelType== "mamagievo":
             print("lda")
             self.pipeline_lda = PipelineCompletoLDA(base_output_dir="resultsALL/")
             self.pipeline_lda.separar_archivos_csv(usuario=user)
@@ -34,8 +40,20 @@ class controllerTraining():
             self.pipeline_lda.entrenar_todos_los_modelos(usuario=user, save_plots=True, show_plots=True,save_models=True,model_format = 'joblib')
             
             print("LDA")
-        if modelType == "CNN":
-            print("cnn")
+        if modelType == "lda":
+            print("empezando a entrenar el eñ modelo con lo nuevo")
+            print(f"canaless {channels} fs {fs} use_p300window {use_p300window} apply_baseline_correction {apply_baseline_correction}, output_dir {output_dir},user {user}, dataPath {dataPath}, commandTypes {commandTypes}")
+            print("tiposde comando",commandTypes)
+            dataset = build_dataset(base_dir=dataPath, usuarios=[user], tp_comandos=commandTypes, verbose=True)
+            path_features_csv = os.path.join(output_dir, "features_dataset.csv")
+            dataset.to_csv(path_features_csv, index=False)
+            print(f"\nDataset guardado en: {path_features_csv}")
+            print(f"Shape: {dataset.shape}")
+            print(f"Clases (labels) encontradas: {sorted(dataset['label'].unique())}")
+            train_optimized_hierarchical(output_dir=output_dir,channels = channels,fs=fs,
+                                         use_p300window=use_p300window,apply_baseline_correction=apply_baseline_correction,verbose=True,semilla=seed)
+
+
         #df = self.create_df(dataPath)
 
 

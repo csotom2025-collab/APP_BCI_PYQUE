@@ -20,10 +20,10 @@ if __package__:
         procesar_trabajo,
     )
 else:
-    from models.DivisorTiempos import SeparacionTiempos
-    from models.GetCaracteristiacas import FeatureExtractor
-    from models.clasificador_lda import LDAClassifierTrainer, get_default_models
-    from models.optimizacion_lda import (
+    from models.oldTraining.DivisorTiempos import SeparacionTiempos
+    from models.oldTraining.GetCaracteristiacas import FeatureExtractor
+    from models.oldTraining.clasificador_lda import LDAClassifierTrainer, get_default_models
+    from models.oldTraining.optimizacion_lda import (
         discover_structure,
         procesar_lda_general,
         procesar_lda_caracteristicas,

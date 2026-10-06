@@ -44,7 +44,16 @@ class controllerTraining():
             print("empezando a entrenar el eñ modelo con lo nuevo")
             print(f"canaless {channels} fs {fs} use_p300window {use_p300window} apply_baseline_correction {apply_baseline_correction}, output_dir {output_dir},user {user}, dataPath {dataPath}, commandTypes {commandTypes}")
             print("tiposde comando",commandTypes)
-            dataset = build_dataset(base_dir=dataPath, usuarios=[user], tp_comandos=commandTypes, verbose=True)
+            dataset = build_dataset(
+                base_dir=dataPath,
+                usuarios=[user],
+                tp_comandos=commandTypes,
+                verbose=True,
+                FS=fs,
+                channel_names=channels,
+                apply_baseline=apply_baseline_correction,
+                use_p300_window_only=use_p300window,
+            )
             path_features_csv = os.path.join(output_dir, "features_dataset.csv")
             dataset.to_csv(path_features_csv, index=False)
             print(f"\nDataset guardado en: {path_features_csv}")

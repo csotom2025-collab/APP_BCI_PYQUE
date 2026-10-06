@@ -137,7 +137,7 @@ class controllerSaveCapture:
 
         #print("fulpath: ",full_path)
         if os.path.exists(self.full_path):
-            lita = os.listdir(path_user)
+            lita = [f for f in os.listdir(path_user) if f.endswith(".csv")]  # only csv files
             lista_separada = [file.split('_') for file in lita]
             lista_label = [f for f in lista_separada if f[1] == character]
             nums = [int(file[-1][:-4]) for file in lista_label]

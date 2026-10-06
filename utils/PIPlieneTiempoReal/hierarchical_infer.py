@@ -115,6 +115,10 @@ class HierarchicalBCIPredictor:
         # Si el grupo predicho tiene confianza < este valor, se retorna RECHAZO
         self.min_group_confidence = self.bundle.get("min_group_confidence", 0.0)
 
+        # Umbral de confianza mínima para la Etapa 1 (super-clase)
+        # Si el grupo predicho tiene confianza < este valor, se retorna RECHAZO
+        self.min_group_confidence = self.bundle.get("min_group_confidence", 0.0)
+
         self.extractor = EEGFeatureExtractor(fs=self.fs)
 
         print(f"Modelo jerarquico monousuario cargado: usuario='{self.usuario}'")
@@ -126,6 +130,10 @@ class HierarchicalBCIPredictor:
               f"({len(self.super_feature_cols)} features)")
         for grupo, b in self.group_bundles.items():
             n_clases = len(b["label_encoder"].classes_)
+            print(f"  {grupo:10s}: f1_cv={b.get('f1_macro_cv', 0.0):.3f} "
+                  f"| feature_set='{b.get('feature_set', 'N/A')}' "
+                  f"({len(self.group_feature_cols[grupo])} features) "
+                  f"({n_clases} clases)")
             print(f"  {grupo:10s}: f1_cv={b.get('f1_macro_cv', 0.0):.3f} "
                   f"| feature_set='{b.get('feature_set', 'N/A')}' "
                   f"({len(self.group_feature_cols[grupo])} features) "
@@ -181,6 +189,9 @@ class HierarchicalBCIPredictor:
 
     def _signals_to_features(self, signals, return_artifact_info=False):
         """
+        signals: (n_channels, n_samples) -> DataFrame con TODAS las features extraídas.
+        Extrae el conjunto COMPLETO de features (unión de todos los feature sets).
+        Cada nivel de la cascada luego selecciona sus propias columnas con reindex.
         signals: (n_channels, n_samples) -> DataFrame con TODAS las features extraídas.
         Extrae el conjunto COMPLETO de features (unión de todos los feature sets).
         Cada nivel de la cascada luego selecciona sus propias columnas con reindex.
@@ -296,6 +307,10 @@ class HierarchicalBCIPredictor:
           - Etapa 1 (super-clase): usa SOLO las features del mejor feature_set del super-modelo.
           - Etapa 2 (sub-grupo): usa SOLO las features del mejor feature_set del modelo especializado.
         Esto evita ruido de features irrelevantes en cada nivel.
+        Cascada jerárquica con feature sets independientes por nivel:
+          - Etapa 1 (super-clase): usa SOLO las features del mejor feature_set del super-modelo.
+          - Etapa 2 (sub-grupo): usa SOLO las features del mejor feature_set del modelo especializado.
+        Esto evita ruido de features irrelevantes en cada nivel.
         """
         feat_dfs = []
         artefactos = []
@@ -306,6 +321,7 @@ class HierarchicalBCIPredictor:
             artefactos.append(es_art)
             picos.append(pico)
 
+        # DataFrame con TODAS las features extraídas (unión de todos los feature sets)
         # DataFrame con TODAS las features extraídas (unión de todos los feature sets)
         all_feats = pd.concat(feat_dfs, ignore_index=True)
 
@@ -370,6 +386,10 @@ class HierarchicalBCIPredictor:
         comando_final, comando_probas, comando_ventanas = self._predict_with_bundle(
             group_bundle, group_feats
         )
+        group_feats = all_feats.reindex(columns=self.group_feature_cols[grupo_pred])
+        comando_final, comando_probas, comando_ventanas = self._predict_with_bundle(
+            group_bundle, group_feats
+        )
 
         detalle = {
             "color_predicho": color_pred,
@@ -379,6 +399,7 @@ class HierarchicalBCIPredictor:
             "comando_probabilidades": comando_probas,
             "n_repeticiones_usadas": len(lista_signals),
             "n_ventanas": len(all_feats),
+            "rechazado": False,
             "rechazado": False,
             "ventanas": [
                 {
@@ -401,6 +422,9 @@ class HierarchicalBCIPredictor:
             "picos_maximos_uV": picos,
             "es_artefacto": any(artefactos) if artefactos else False,
             "pico_maximo_uV": max(picos) if picos else 0.0,
+            # Feature sets usados en cada etapa (para trazabilidad)
+            "super_feature_set": self.super_bundle.get("feature_set", "N/A"),
+            "grupo_feature_set": group_bundle.get("feature_set", "N/A"),
             # Feature sets usados en cada etapa (para trazabilidad)
             "super_feature_set": self.super_bundle.get("feature_set", "N/A"),
             "grupo_feature_set": group_bundle.get("feature_set", "N/A"),
@@ -442,9 +466,25 @@ class HierarchicalBCIPredictor:
         self.min_group_confidence = threshold
         print(f"[Umbral de confianza] min_group_confidence = {threshold:.3f}")
 
+    def set_min_group_confidence(self, threshold: float):
+        """
+        Configura el umbral mínimo de confianza para aceptar la predicción de grupo (Etapa 1).
+        Si la confianza del grupo predicho es menor que 'threshold', se retorna 'RECHAZO'.
+
+        Args:
+            threshold: float en [0.0, 1.0]. 
+                       0.0 = nunca rechazar (comportamiento por defecto).
+                       0.5 = rechazar si el modelo no supera el 50% de confianza en el grupo.
+        """
+        if not 0.0 <= threshold <= 1.0:
+            raise ValueError(f"El umbral debe estar en [0.0, 1.0], recibido: {threshold}")
+        self.min_group_confidence = threshold
+        print(f"[Umbral de confianza] min_group_confidence = {threshold:.3f}")
+
 
 def main():
     if len(sys.argv) < 3:
+        print("Uso: python hierarchical_infer.py <usuario> ruta/a/grabacion.csv [umbral_confianza]")
         print("Uso: python hierarchical_infer.py <usuario> ruta/a/grabacion.csv [umbral_confianza]")
         sys.exit(1)
 
@@ -452,7 +492,12 @@ def main():
     csv_path = sys.argv[2]
     umbral = float(sys.argv[3]) if len(sys.argv) > 3 else 0.0
 
+    umbral = float(sys.argv[3]) if len(sys.argv) > 3 else 0.0
+
     predictor = HierarchicalBCIPredictor(usuario=usuario)
+    if umbral > 0.0:
+        predictor.set_min_group_confidence(umbral)
+
     if umbral > 0.0:
         predictor.set_min_group_confidence(umbral)
 
@@ -477,7 +522,12 @@ def main():
         print("\nTop 5 probabilidades de comando (dentro del grupo elegido):")
         for cmd, p in list(detalle["comando_probabilidades"].items())[:5]:
             print(f"  {cmd}: {p:.3f}")
+    if not detalle.get('rechazado'):
+        print("\nTop 5 probabilidades de comando (dentro del grupo elegido):")
+        for cmd, p in list(detalle["comando_probabilidades"].items())[:5]:
+            print(f"  {cmd}: {p:.3f}")
 
 
 if __name__ == "__main__":
     main()
+

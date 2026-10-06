@@ -1,29 +1,39 @@
 import os
+import sys
 import pandas as pd
 import joblib
 
-from models.pipeline_completo_lda import PipelineCompletoLDA
+import models.newTraining.lda_utils as lda_utils_module
+from models.newTraining.lda_utils import SafeLDA
+from models.oldTraining.pipeline_completo_lda import PipelineCompletoLDA
+from models.newTraining.BCIpredictorhierarchical import HierarchicalBCIPredictor
+sys.modules["lda_utils"] = lda_utils_module
+
 class PredictorController:
     def __init__(self, model=None):
         self.model = model
-        
-    def predict(self, path):
-        file_path = path
+        self.bci_predictor = None
+        self.model_path = None
+
+
+    def predict(self,user, recording_path):
+        self.bci_predictor = HierarchicalBCIPredictor(usuario=user,model_path=self.model_path)
+        file_path = recording_path
         if not os.path.exists(file_path):
             print(f"Error: El archivo no se encuentra en la ruta {file_path}")
             return
-        if not self.model:
-            print("Error: No se ha cargado ningún modelo para la predicción.")
-            return
-        print(f"Prediciendo con el modelo {self.model} usando el archivo {file_path}")
-        self.get_prediction(file_path)
+        print(f"Prediciendo con el modelo {self.model_path} usando el archivo {file_path}")
+        return self.get_predictionBCIHierarchichal(file_path)
 
     def set_model_path(self, model_path):
         if not os.path.exists(model_path):
             print(f"Error: El modelo no se encuentra en la ruta {model_path}")
             return
+        self.model_path = model_path
         self.model = joblib.load(model_path)
         print(f"Modelo cargado desde {model_path}")
+
+
     def get_prediction(self,path_file):
         file = pd.read_csv(path_file)
         print("archivio_entreado",file.shape)
@@ -39,3 +49,8 @@ class PredictorController:
         print(resultados)
 
         return
+    def get_predictionBCIHierarchichal(self,path_file):
+        comando, detalle = self.bci_predictor.predict_from_csv(path_file)
+        print("Predicción obtenida del archivo:", path_file)
+        print(comando)
+        return comando

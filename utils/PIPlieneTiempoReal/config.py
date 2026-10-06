@@ -83,7 +83,7 @@ WINDOW_SIZE=142
 # ---------------------------------------------------------------------------
 # Salidas
 # ---------------------------------------------------------------------------
-OUTPUT_DIR = "D:/EEG_Python/PIPlieneTiempoReal/OutputOPt_14_Canales_Sub4ven_P300"
+OUTPUT_DIR = "trainingOutputs"
 FEATURES_CSV = os.path.join(OUTPUT_DIR, "features_dataset.csv")
 RESULTS_CSV = os.path.join(OUTPUT_DIR, "resultados_modelos.csv")
 FIGURES_DIR = os.path.join(OUTPUT_DIR, "figures")

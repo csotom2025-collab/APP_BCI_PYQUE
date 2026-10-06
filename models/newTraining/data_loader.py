@@ -91,8 +91,16 @@ def build_dataset(base_dir=None, usuarios=None, tp_comandos=None, verbose=True,
     tp_comandos = tp_comandos or config.TP_COMANDOS
     fs = FS or config.FS
     channel_names = channel_names or config.CHANNEL_NAMES
-    apply_baseline = apply_baseline or config.APPLY_BASELINE_CORRECTION
-    use_p300_window_only = use_p300_window_only or config.USE_P300_WINDOW_ONLY
+    apply_baseline = (
+        config.APPLY_BASELINE_CORRECTION
+        if apply_baseline is None
+        else apply_baseline
+    )
+    use_p300_window_only = (
+        config.USE_P300_WINDOW_ONLY
+        if use_p300_window_only is None
+        else use_p300_window_only
+    )
     use_win_size = use_win_size or config.USE_WIN_SIZE
     window_size = window_size or config.WINDOW_SIZE
     window_overlap = window_overlap or config.WINDOW_OVERLAP

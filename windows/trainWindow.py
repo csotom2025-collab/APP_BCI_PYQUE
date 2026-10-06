@@ -1,6 +1,7 @@
 import os
 import sys
-from PyQt6.QtCore import QSize, Qt
+import traceback
+from PyQt6.QtCore import QSize, Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import (
     QApplication,
@@ -8,7 +9,9 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QGridLayout,
     QGroupBox,
+    QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QMessageBox,
     QPushButton,
@@ -45,6 +48,25 @@ CHANNEL_CONNECTIONS = (
     ("F8", "T8"), ("T7", "P7"), ("P7", "O1"), ("O1", "O2"),
     ("O2", "P8"), ("P8", "T8"),
 )
+
+
+class TrainingThread(QThread):
+    completed = pyqtSignal()
+    failed = pyqtSignal(str)
+
+    def __init__(self, training_args, parent=None):
+        super().__init__(parent)
+        self.training_args = training_args
+
+    def run(self):
+        try:
+            controllerTraining().train_model(**self.training_args)
+        except Exception as error:
+            error_traceback = traceback.format_exc()
+            print(error_traceback, file=sys.stderr)
+            self.failed.emit(str(error))
+        else:
+            self.completed.emit()
 
 
 class ChannelNodeCheckBox(QCheckBox):
@@ -155,30 +177,34 @@ class TrainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        self.training_thread = None
         self.setup_ui()
-        # self.data = {'user':'pathUser', 'MVP':'pathMVP', 'anodaUser':'pathAnodaUser'}
-        # self.show_users()
         self.models= ['lstm', 'lda', 'svm', 'random_forest', 'xgboost']
         self.show_models()
         self.show_users()
         
     def setup_ui(self):
         self.setWindowTitle("Ventana de Entrenamiento")
-        layout = QVBoxLayout()
-        self.grid_layout = QGridLayout()
+        self.resize(1000, 590)
+        main_layout = QVBoxLayout()
+        main_layout.addWidget(QLabel("Ventana de Entrenamiento"))
 
+        content_layout = QHBoxLayout()
+        left_layout = QVBoxLayout()
         self.user_combobox = QComboBox()
         self.combo_box_models = QComboBox()
         self.button_start_training = QPushButton("Iniciar entrenamiento")
         self.button_start_training.clicked.connect(self.start_training)
+        self.button_start_training.setMinimumHeight(48)
 
-        layout.addWidget(QLabel("Ventana de Entrenamiento"))
-        self.grid_layout.addWidget(QLabel("Seleccione usuario:"), 0, 0)
-        self.grid_layout.addWidget(self.user_combobox, 0, 1)
-        self.grid_layout.addWidget(QLabel("Selecciona un modelo:"), 1, 0)
-        self.grid_layout.addWidget(self.combo_box_models, 1, 1)
-
-        layout.addLayout(self.grid_layout)
+        training_group = QGroupBox("Entrenamiento")
+        training_layout = QGridLayout(training_group)
+        training_layout.addWidget(QLabel("Seleccione usuario:"), 0, 0)
+        training_layout.addWidget(self.user_combobox, 0, 1)
+        training_layout.addWidget(QLabel("Selecciona un modelo:"), 1, 0)
+        training_layout.addWidget(self.combo_box_models, 1, 1)
+        training_layout.addWidget(self.button_start_training, 2, 0, 1, 2)
+        left_layout.addWidget(training_group)
 
         signal_group = QGroupBox("Configuración de señal")
         signal_layout = QGridLayout(signal_group)
@@ -209,16 +235,7 @@ class TrainWindow(QMainWindow):
         signal_layout.addWidget(self.fs_spinbox, 2, 1)
         signal_layout.addWidget(QLabel("Semilla (Seed):"), 3, 0)
         signal_layout.addWidget(self.seed_spinbox, 3, 1)
-        layout.addWidget(signal_group)
-
-        channels_group = QGroupBox("Canales EEG (Emotiv)")
-        channels_layout = QVBoxLayout(channels_group)
-        self.channel_map = ChannelMapWidget(training_config.CHANNEL_NAMES)
-        self.channel_checkboxes = self.channel_map.checkboxes
-        channels_layout.addWidget(
-            self.channel_map, alignment=Qt.AlignmentFlag.AlignHCenter
-        )
-        channels_layout.addWidget(QLabel("Azul: incluido    Gris: excluido"))
+        left_layout.addWidget(signal_group)
 
         command_group = QGroupBox("Tipos de Comando")
         command_layout = QGridLayout(command_group)
@@ -229,12 +246,42 @@ class TrainWindow(QMainWindow):
             checkbox.setChecked(True)
             self.command_checkboxes[command_type] = checkbox
             command_layout.addWidget(checkbox, 0, index % 3)
-        layout.addWidget(channels_group)
-        layout.addWidget(command_group)
-        layout.addWidget(self.button_start_training)
+        left_layout.addWidget(command_group)
+        left_layout.addStretch()
+        content_layout.addLayout(left_layout, 1)
+
+        right_layout = QVBoxLayout()
+        channels_group = QGroupBox("Canales EEG")
+        channels_layout = QVBoxLayout(channels_group)
+        self.channel_map = ChannelMapWidget(training_config.CHANNEL_NAMES)
+        self.channel_checkboxes = self.channel_map.checkboxes
+        channels_layout.addWidget(
+            self.channel_map, alignment=Qt.AlignmentFlag.AlignHCenter
+        )
+        channels_layout.addWidget(QLabel("Azul: incluido    Gris: excluido"))
+        manual_channels_label = QLabel(
+            "O escribe los nombres de los canales separados por comas:"
+        )
+        manual_channels_label.setWordWrap(True)
+        manual_channels_label.setMaximumWidth(400)
+        channels_layout.addWidget(manual_channels_label)
+        self.channels_input = QLineEdit()
+        self.channels_input.setPlaceholderText("Ejemplo: F3, FC5, Pz, Oz")
+        self.channels_input.setToolTip(
+            "Si escribes canales aquí, reemplazarán la selección del diagrama. "
+            "Los nombres deben coincidir con las columnas de los archivos CSV."
+        )
+        channels_layout.addWidget(self.channels_input)
+        right_layout.addWidget(channels_group)
+        right_layout.addStretch()
+        content_layout.addLayout(right_layout, 1)
+
+        main_layout.addLayout(content_layout)
+        self.training_status_label = QLabel("")
+        main_layout.addWidget(self.training_status_label)
 
         self.central_widget = QWidget()
-        self.central_widget.setLayout(layout)
+        self.central_widget.setLayout(main_layout)
         self.setCentralWidget(self.central_widget)
         self.move(200, 200)
 
@@ -273,6 +320,13 @@ class TrainWindow(QMainWindow):
 
         self.user_combobox.addItems(users)
     def getSelectedChannels(self):
+        manual_channels = self.channels_input.text().strip()
+        if manual_channels:
+            channels = [channel.strip() for channel in manual_channels.split(",")]
+            if any(not channel for channel in channels):
+                return []
+            return list(dict.fromkeys(channels))
+
         return [
             channel
             for channel, checkbox in self.channel_checkboxes.items()
@@ -295,33 +349,85 @@ class TrainWindow(QMainWindow):
         ]
     def getSelectedSeed(self):
         return self.seed_spinbox.value()
-    def start_training(self):
-        user = self.get_user()
-        path = "captures" 
-        model = self.get_model()
 
-        if not self.getSelectedChannels():
+    def start_training(self):
+        if self.training_thread is not None:
+            return
+
+        user = self.get_user()
+        if not user:
+            QMessageBox.warning(self, "Usuario requerido", "Selecciona un usuario.")
+            return
+
+        path = "captures"
+        model = self.get_model()
+        channels = self.getSelectedChannels()
+        command_types = self.getCommandTypes()
+
+        if not channels:
             QMessageBox.warning(
                 self,
                 "Canales requeridos",
-                "Selecciona al menos un canal EEG para entrenar el modelo.",
+                "Selecciona al menos un canal o revisa la lista separada por comas.",
             )
             return
 
         print(f"Entrenando modelo {model} con los datos de {user} que se encuentran en la ruta: {path}")
-        training_controller = controllerTraining()
-        training_controller.train_model(
-            user,
-            path,
-            model,
-            output_dir="trainingOutputs",
-            commandTypes=self.getCommandTypes(),
-            channels=self.getSelectedChannels(),
-            fs=self.getSelectedFs(),
-            use_p300window=self.getUseP300Window(),
-            apply_baseline_correction=self.getApplyBaselineCorrection(),
-            seed=self.getSelectedSeed()
+        if not command_types:
+            QMessageBox.warning(
+                self,
+                "Comandos requeridos",
+                "Selecciona al menos un tipo de comando para entrenar.",
+            )
+            return
+
+        training_args = {
+            "user": user,
+            "dataPath": path,
+            "modelType": model,
+            "output_dir": "trainingOutputs",
+            "commandTypes": command_types,
+            "channels": channels,
+            "fs": self.getSelectedFs(),
+            "use_p300window": self.getUseP300Window(),
+            "apply_baseline_correction": self.getApplyBaselineCorrection(),
+            "seed": self.getSelectedSeed(),
+        }
+        self.button_start_training.setEnabled(False)
+        self.training_status_label.setText("Entrenamiento en curso...")
+        self.training_thread = TrainingThread(training_args, self)
+        self.training_thread.completed.connect(self._on_training_completed)
+        self.training_thread.failed.connect(self._on_training_failed)
+        self.training_thread.finished.connect(self._on_training_thread_finished)
+        self.training_thread.start()
+
+    def _on_training_completed(self):
+        self.training_status_label.setText("Entrenamiento completado.")
+
+    def _on_training_failed(self, error_message):
+        self.training_status_label.setText("El entrenamiento terminó con errores.")
+        QMessageBox.critical(
+            self,
+            "Error de entrenamiento",
+            f"{error_message}\n\nConsulta la salida de la aplicación para más detalles.",
         )
+
+    def _on_training_thread_finished(self):
+        self.button_start_training.setEnabled(True)
+        if self.training_thread is not None:
+            self.training_thread.deleteLater()
+            self.training_thread = None
+
+    def closeEvent(self, event):
+        if self.training_thread is not None and self.training_thread.isRunning():
+            QMessageBox.information(
+                self,
+                "Entrenamiento en curso",
+                "Espera a que termine el entrenamiento antes de cerrar esta ventana.",
+            )
+            event.ignore()
+            return
+        event.accept()
 
 
 if __name__ == "__main__":

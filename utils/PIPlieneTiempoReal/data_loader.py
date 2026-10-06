@@ -20,8 +20,6 @@ from eeg_features import (
     apply_baseline_correction,
     apply_notch_filter,
     apply_bandpass_filter,
-    apply_ica_artifact_removal,
-    apply_car_rereference,
     apply_zscore_normalization
 )
 
@@ -69,7 +67,7 @@ def _load_signal_csv(path, channel_names):
 
 
 def _crop_p300_window(signals, fs):
-    """Recorta la señal a la ventana P300 (0.5 - 1.2s) si esta activado en config."""
+    """Recorta la señal a la ventana P300 (0.5 - 2.0s) si esta activado en config."""
     start = int(config.P300_WINDOW_S[0] * fs)
     end = int(config.P300_WINDOW_S[1] * fs)
     end = min(end, signals.shape[1])
@@ -91,7 +89,8 @@ def build_dataset(base_dir=None, usuarios=None, tp_comandos=None, verbose=True):
     extractor = EEGFeatureExtractor(fs=config.FS)
     rows = []
     n_ok, n_fail = 0, 0
-
+    limiteCom=40
+    canfile=0
     for usuario in usuarios:
         for tp in tp_comandos:
             carpeta = os.path.join(base_dir, usuario, tp)
@@ -106,8 +105,16 @@ def build_dataset(base_dir=None, usuarios=None, tp_comandos=None, verbose=True):
             if tp=="Controls":
                 bef='↩'
             trialn=-1
+            canfile=0
             for path in archivos:
                 letra, trial = _parse_filename(path, usuario)
+                
+                if canfile>limiteCom:
+                    print("Limite de comando",letra, "alcanzado. Se continuara con la lectura del siguiente comando.")
+                    canfile=0
+                    trialn=-1
+                    bef=letra
+                    continue
                 if letra is None:
                     if verbose:
                         print(f"[AVISO] No se pudo parsear el nombre: {path}")
@@ -116,7 +123,11 @@ def build_dataset(base_dir=None, usuarios=None, tp_comandos=None, verbose=True):
                     if(letra!=bef):
                         trialn=-1
                         bef=letra
+                        canfile=0
+                        print("Cambio de comando",letra, "en usuario", usuario, "tpComando", tp)
                 try:
+                    canfile+=1
+
                     signals = _load_signal_csv(path, config.CHANNEL_NAMES)
 
                     # --- PREPROCESAMIENTO ---

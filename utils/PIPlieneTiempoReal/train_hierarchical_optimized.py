@@ -17,6 +17,7 @@ Protocolo asumido:
 - fs=128 Hz
 """
 
+from datetime import datetime
 from sklearn.ensemble import RandomForestClassifier
 import os
 import json
@@ -32,7 +33,7 @@ from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.pipeline import Pipeline
 from sklearn.feature_selection import SelectKBest, f_classif
-from sklearn.model_selection import StratifiedKFold, cross_val_predict, cross_val_score
+from sklearn.model_selection import StratifiedKFold, cross_val_predict
 from sklearn.neural_network import MLPClassifier
 from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
@@ -45,12 +46,40 @@ import config
 from eeg_features import get_feature_sets, log_transform_power_columns
 
 
+GREEN_COMMANDS = [
+    "A", "C", "F", "R", "V", "I", "M", "J", "L", "Q", "U", "B", "X",
+    "4", "0", "2", "8", "W", "6", "⟵",
+]
+BLUE_COMMANDS = [
+    "S", "G", "E", "T", "Z", "N", "Y", "O", "P", "Ñ", "D", "H", "1",
+    "7", "K", "5", "───", "3", "9", "↩",
+]
+COLOR_BY_COMMAND = {
+    **{command: "Green" for command in GREEN_COMMANDS},
+    **{command: "Blue" for command in BLUE_COMMANDS},
+}
+
+
 def normalize_string_columns(df, columns):
     """Convierte columnas de metadatos a texto para evitar mezclas int/str en LabelEncoder."""
     for col in columns:
         if col in df.columns:
             df[col] = df[col].map(lambda x: "" if pd.isna(x) else str(x))
     return df
+
+
+def add_color_labels(df):
+    """Agrega la etiqueta Green/Blue a partir del comando de cada trial."""
+    df_color = df.copy()
+    commands = df_color["label"].astype(str)
+    unknown_commands = sorted(set(commands) - COLOR_BY_COMMAND.keys())
+    if unknown_commands:
+        raise ValueError(
+            "Hay comandos sin clasificación de color: "
+            f"{unknown_commands}. Actualiza GREEN_COMMANDS o BLUE_COMMANDS."
+        )
+    df_color["label"] = commands.map(COLOR_BY_COMMAND)
+    return df_color
 
 
 # ===========================================================================================
@@ -155,7 +184,7 @@ def plot_confusion_matrix(y_true, y_pred, labels, title, out_path):
 
     plt.figure(figsize=(fig_size, fig_size))
     sns.heatmap(cm_norm, xticklabels=labels, yticklabels=labels,
-                cmap="magma", vmin=0, vmax=1, cbar=True, square=True)
+                cmap="GnBu", vmin=0, vmax=1, cbar=True, square=True)
     plt.xlabel("Predicción")
     plt.ylabel("Real")
     plt.title(title)
@@ -169,7 +198,11 @@ def plot_confusion_matrix(y_true, y_pred, labels, title, out_path):
 
 def evaluate_combination(df_subset, feature_cols, group_name, clf_name, clf,
                         n_components, k_best=None, cv_splits=5, verbose=True):
-    """Evalúa 1 combinación: retorna accuracy_mean, f1_macro_mean, y_pred_oof, label_encoder, y_true"""
+    """Evalúa una combinación con una sola CV y reutiliza sus predicciones OOF.
+
+    Retorna accuracy_mean, accuracy_std, f1_macro_mean, f1_macro_std,
+    y_pred_oof, label_encoder y y_true.
+    """
     
     le = LabelEncoder()
     y = le.fit_transform(df_subset["label"].astype(str))
@@ -188,9 +221,15 @@ def evaluate_combination(df_subset, feature_cols, group_name, clf_name, clf,
     pipe = build_pipeline_hierarchical(clf, n_components, X.shape[1], k_best)
     
     try:
-        acc = cross_val_score(pipe, X, y, cv=skf, scoring="accuracy", n_jobs=-1)
-        f1 = cross_val_score(pipe, X, y, cv=skf, scoring="f1_macro", n_jobs=-1)
         y_pred_oof = cross_val_predict(pipe, X, y, cv=skf, n_jobs=-1)
+
+        fold_acc = []
+        fold_f1 = []
+        for _, test_idx in skf.split(X, y):
+            fold_acc.append(accuracy_score(y[test_idx], y_pred_oof[test_idx]))
+            fold_f1.append(f1_score(y[test_idx], y_pred_oof[test_idx], average="macro"))
+        acc = np.asarray(fold_acc)
+        f1 = np.asarray(fold_f1)
         
         if verbose:
             print(f"  {group_name:12s} × {clf_name:22s} | "
@@ -211,7 +250,7 @@ def evaluate_all_hierarchical(df, verbose=True):
     Evalúa TODAS las combinaciones:
     - 6 clasificadores
     - 7 feature_sets (Estadísticas, Frecuencias_Abs/Rel/Est, Wavelets, Todas)
-    - 4 niveles (super-clase + Letters + Numbers + Controls)
+    - 5 niveles (color + super-clase + Letters + Numbers + Controls)
     
     Retorna: DataFrame con resultados, dict con mejores modelos por grupo
     """
@@ -220,6 +259,58 @@ def evaluate_all_hierarchical(df, verbose=True):
     results = []
     best_per_group = {}
     
+    # ============ COLOR (Green/Blue - 2 clases) ============
+    if verbose:
+        print("\n" + "="*100)
+        print("EVALUANDO: COLOR (Green/Blue - 2 clases)")
+        print("="*100)
+
+    df_color = add_color_labels(df)
+    feature_cols_all = [c for c in df.columns if c not in
+                       ["usuario", "tpComando", "letra", "trial", "label"]]
+    df_color[feature_cols_all] = log_transform_power_columns(
+        df_color[feature_cols_all], feature_cols_all
+    )
+    feature_sets = get_feature_sets(feature_cols_all)
+
+    best_f1_color = -1
+    for set_name, cols in feature_sets.items():
+        if verbose:
+            print(f"\n{set_name} ({len(cols)} features):")
+        for clf_name, clf in classifiers.items():
+            acc_m, acc_s, f1_m, f1_s, y_pred, le, y_true = evaluate_combination(
+                df_color, cols, "color", clf_name, clf,
+                n_components=1, k_best=250, cv_splits=5, verbose=verbose
+            )
+            if acc_m is not None:
+                results.append({
+                    "nivel": "color",
+                    "grupo": "Green/Blue",
+                    "n_clases": 2,
+                    "feature_set": set_name,
+                    "n_features": len(cols),
+                    "clasificador": clf_name,
+                    "accuracy_mean": acc_m,
+                    "accuracy_std": acc_s,
+                    "f1_macro_mean": f1_m,
+                    "f1_macro_std": f1_s,
+                })
+                if f1_m > best_f1_color:
+                    best_f1_color = f1_m
+                    best_per_group["color"] = {
+                        "feature_set": set_name,
+                        "cols": cols,
+                        "clasificador": clf_name,
+                        "clf": clf,
+                        "n_components": 1,
+                        "f1_macro": f1_m,
+                        "accuracy_mean": acc_m,
+                        "accuracy_std": acc_s,
+                        "label_encoder": le,
+                        "y_true": y_true,
+                        "y_pred": y_pred,
+                    }
+
     # ============ SUPER-CLASE (Letters/Numbers/Controls - 3 clases) ============
     if verbose:
         print("\n" + "="*100)
@@ -339,9 +430,37 @@ def evaluate_all_hierarchical(df, verbose=True):
 # PASO 5: ENTRENAR MODELOS GANADORES
 # ===========================================================================================
 def train_final_models(df, best_per_group):
-    """Reentrena los 4 modelos ganadores (super + 3 grupos) sobre TODO el dataset de cada nivel"""
+    """Reentrena los 5 modelos ganadores (color, super + 3 grupos)."""
     
     final_bundles = {}
+
+    # Color
+    print("\n" + "="*100)
+    print("ENTRENANDO MODELO FINAL: COLOR")
+    print("="*100)
+    df_color = add_color_labels(df)
+    color_info = best_per_group["color"]
+
+    le_color = LabelEncoder()
+    y_color = le_color.fit_transform(df_color["label"].astype(str))
+    X_color = df_color[color_info["cols"]].to_numpy()
+    X_color = np.nan_to_num(X_color, nan=0.0, posinf=0.0, neginf=0.0)
+
+    pipe_color = build_pipeline_hierarchical(
+        color_info["clf"], color_info["n_components"],
+        X_color.shape[1], k_best=250
+    )
+    pipe_color.fit(X_color, y_color)
+
+    final_bundles["color"] = {
+        "pipeline": pipe_color,
+        "label_encoder": le_color,
+        "feature_columns": color_info["cols"],
+        "feature_set": color_info["feature_set"],
+        "clasificador": color_info["clasificador"],
+        "f1_macro_cv": float(color_info["f1_macro"]),
+    }
+    print(f"✓ Color entrenado ({len(le_color.classes_)} clases, f1_cv={color_info['f1_macro']:.3f})")
     
     # Super-clase
     print("\n" + "="*100)
@@ -456,8 +575,12 @@ def main():
         # Paso 1-4: Evaluación exhaustiva (solo para este usuario)
         print(f"\n2) Evaluando TODAS las combinaciones para {usuario}...")
         print("   Esto puede tomar 5-15 minutos por usuario...")
+        ini=datetime.now()  
+        print("Incio de evaluacion exhaustiva",ini)
         results_df, best_per_group = evaluate_all_hierarchical(df_usuario, verbose=False)
-        
+        fin=datetime.now()
+        print("Fin de evaluacion exhaustiva",fin)
+        print("Tiempo de evaluacion exhaustiva",fin-ini)
         # Guardar tabla por usuario
         usuario_dir = os.path.join(config.OUTPUT_DIR, usuario)
         os.makedirs(usuario_dir, exist_ok=True)
@@ -478,7 +601,7 @@ def main():
                   f"clf={info['clasificador']:22s} | f1_cv={info['f1_macro']:.3f}")
         
         # Paso 5: Entrenar modelos finales para este usuario
-        print(f"\n3) Entrenando 4 modelos finales para {usuario}...")
+        print(f"\n3) Entrenando 5 modelos finales para {usuario}...")
         final_bundles = train_final_models(df_usuario, best_per_group)
         
         # Guardar bundle final POR USUARIO
@@ -487,6 +610,7 @@ def main():
         
         hierarchy_bundle = {
             "usuario": usuario,
+            "color": final_bundles["color"],
             "super_clase": final_bundles["super_clase"],
             "por_grupo": {
                 "Letters": final_bundles["Letters"],
@@ -502,6 +626,9 @@ def main():
             "log_transform_power": True,
             "use_flash_segmentation": True,
             "n_flashes": 2,  # 2 flashes por grupo en protocolo real
+            # Umbral mínimo de confianza para la Etapa 1 (super-clase).
+            # 0.0 = nunca rechazar (default). Configurable en inferencia con set_min_group_confidence().
+            "min_group_confidence": 0.0,
         }
         
         out_bundle = os.path.join(usuario_models_dir, "hierarchical_bundle_optimizado.joblib")

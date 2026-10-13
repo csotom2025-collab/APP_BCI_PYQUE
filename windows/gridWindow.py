@@ -19,7 +19,15 @@ GRID = [
     ["F", "Z", "J", "Ñ", "X","K", "W","↩"]
     
 ]
-
+MAPA_CONTROLES = {
+    "\\u27f5": "BORRAR (⟵)",      
+    "\u27f5":  "BORRAR (⟵)",      
+    "\\u21a9": "ENTER (↩)",       
+    "\u21a9":  "ENTER (↩)",       
+    "\\u2500\\u2500\\u2500": "ESPACIO (───)",     
+    "\u2500\u2500\u2500":  "ESPACIO (───)",
+    "───":     "ESPACIO (───)"
+}
 greenComd = ["A", "C", "F", "R", "V","I","M","J","L","Q","U",'B',"X","4", "0","2","8","W","6","⟵"]
 blueComd  = ["S","G","E","T","Z","N","Y","O","P","Ñ","D","H","1","7","K","5","───","3","9","↩"]
 
@@ -275,7 +283,10 @@ class OutputLine(QWidget):
     def set_text(self, text):
         self.label.setText(text)
     def add_character(self, char):
+        print("Agregando carácter al output:", char)
         current = self.label.text()
+        if current == "None":
+            current = ""
         self.label.setText(current + char)
         
 
@@ -416,7 +427,7 @@ class KeyboardWindow(QWidget):
         # Aumentar el tamaño de fuente en 20%
         original_font = button.font()
         larger_font = QFont(original_font)
-        larger_font.setPointSize(int(original_font.pointSize() * 1.16))
+        larger_font.setPointSize(int(original_font.pointSize() * 1.36))
         button.setFont(larger_font)
         # Restaurar el tema actual después del flash
         QTimer.singleShot(int(duration * 1000), lambda: self.reapply_button_theme(button))
@@ -497,9 +508,9 @@ class KeyboardWindow(QWidget):
         return f'#17d831'
 
     def add_character(self, char):
-        if char == "ESP":
+        if char in MAPA_CONTROLES and MAPA_CONTROLES[char] == "ESPACIO (───)":
             char = " "
-        elif char == "BORR":
+        elif char in MAPA_CONTROLES and MAPA_CONTROLES[char] == "BORRAR (⟵)":
             current = self.output_line.label.text()
             self.output_line.set_text(current[:-1])  # Eliminar el último carácter
             return

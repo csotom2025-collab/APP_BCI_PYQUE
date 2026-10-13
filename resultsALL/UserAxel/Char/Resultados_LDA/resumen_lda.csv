@@ -1,0 +1,8 @@
+grupo,n_features,n_clases,n_comp_lda,var_acum,cv_acc,cv_std,top_comp
+Estadisticas,84,10,9,1.0,0.171,0.0261,"LD1, LD2, LD3, LD4, LD5"
+Frecuencias_Abs,70,10,9,1.0,0.1461,0.0313,"LD1, LD2, LD3, LD4, LD5"
+Frecuencias_Rel,70,10,9,1.0,0.1495,0.0134,"LD1, LD2, LD3, LD4, LD5"
+Frecuencias_Est,210,10,9,1.0,0.1694,0.029,"LD1, LD3, LD2, LD4, LD5"
+Wavelets,168,10,9,1.0,0.1694,0.0197,"LD1, LD2, LD3, LD4, LD7"
+Frecuencias_Todas,350,10,9,1.0,0.1246,0.0217,"LD2, LD1, LD3, LD4, LD5"
+TODAS,602,10,9,1.0,0.1097,0.0281,"LD1, LD2, LD3, LD4, LD6"

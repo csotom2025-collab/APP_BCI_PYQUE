@@ -144,7 +144,7 @@ def prueba_determinismo_y_seguridad():
     correr(base); h2 = sha(os.path.join(base, "out", "manifiesto_archivos.csv")); m2 = sha(os.path.join(base, "out", "B_modificados/U/Letters/U_A_0.csv"))
     ok("dos corridas -> salidas identicas", h1 == h2 and m1 == m2)
     try:
-        qf.main(["--captures", cap, "--out", os.path.join(cap, "dentro"), "--silencioso"]); ok("salida dentro de entrada rechazada", False)
+        qf.main(["U", "--captures", cap, "--out", os.path.join(cap, "dentro"), "--silencioso"]); ok("salida dentro de entrada rechazada", False)
     except SystemExit:
         ok("salida dentro de entrada rechazada", True)
     shutil.rmtree(base)

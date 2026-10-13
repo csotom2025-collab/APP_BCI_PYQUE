@@ -1,0 +1,22 @@
+{
+  "version": "2.0.0",
+  "fecha_utc": "2026-10-13T21:07:40.030197+00:00",
+  "captures": "C:\\Users\\usuario\\Desktop\\APP_BCI_PYQUE\\captures",
+  "salida": "C:\\Users\\usuario\\Desktop\\APP_BCI_PYQUE\\utils\\chequeo_calidad\\UserPony",
+  "usuario": "UserPony",
+  "archivos": 1202,
+  "A": 655,
+  "B": 256,
+  "C": 291,
+  "codigos_C": {
+    "ANOMALIA_EXTENSA": 184,
+    "CANAL_INVALIDO": 30,
+    "REFERENCIA_CONTAMINADA": 22,
+    "ATENUACION_EXCESIVA": 56,
+    "REFERENCIA_INESTABLE": 17,
+    "AMPLITUD_BAJA_RELATIVA": 2,
+    "ESTRUCTURA": 37
+  },
+  "segmentos_corregidos": 336,
+  "muestras_modificadas": 19231
+}

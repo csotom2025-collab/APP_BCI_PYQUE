@@ -76,7 +76,7 @@ class EEGFeatureExtractor:
                 sel_idxs = list(dict.fromkeys(sel_idxs))
         if not sel_idxs:
             raise ValueError("No se encontraron indices de canal validos para extraer caracteristicas.")
-
+        
         step_size = int(window_size * (1 - overlap))
         if step_size <= 0:
             step_size = max(1, window_size // 2)
@@ -88,6 +88,7 @@ class EEGFeatureExtractor:
         for window_idx in range(n_windows):
             start = window_idx * step_size
             end = start + window_size
+            
             window_features = {}
             for channel_idx in sel_idxs:
                 channel_data = signals[channel_idx, start:end]
@@ -177,30 +178,28 @@ class EEGFeatureExtractor:
                 else:
                     try:
                         max_level = pywt.dwt_max_level(len(channel_data), 'db4')
-                        level = min(5, max_level)
+                        # Bajamos el límite a 4 de forma ideal para ventanas de 192 muestras
+                        level = min(4, max_level) 
+                        
                         coeffs = pywt.wavedec(channel_data, 'db4', level=level)
                         energies = [float(np.sum(np.asarray(c)**2)) for c in coeffs]
                         total_w_energy = sum(energies) if sum(energies) > 0 else 1.0
 
-                        window_features[f'{cname}_wA5_energy'] = energies[0] if level >= 5 else 0.0
-                        window_features[f'{cname}_wA5_rel'] = (energies[0] / total_w_energy) if level >= 5 else 0.0
-                        # estadisticas con la Walveltes (Aproximacion nivel 5 o mayor)
-                        if level >= 5:
-                            wA5 = np.asarray(coeffs[0])
-                            window_features[f'{cname}_wA5_std'] = float(np.std(wA5))
-                            window_features[f'{cname}_wA5_mean'] = float(np.mean(wA5))
-                            window_features[f'{cname}_wA5_var'] = float(np.var(wA5))
-                            window_features[f'{cname}_wA5_rms'] = float(np.sqrt(np.mean(wA5**2)))
-                            window_features[f'{cname}_wA5_skewness'] = float(stats.skew(wA5))
-                            window_features[f'{cname}_wA5_kurtosis'] = float(stats.kurtosis(wA5))
-                        else:
-                            window_features[f'{cname}_wA5_std'] = 0.0
-                            window_features[f'{cname}_wA5_mean'] = 0.0
-                            window_features[f'{cname}_wA5_var'] = 0.0
-                            window_features[f'{cname}_wA5_rms'] = 0.0
-                            window_features[f'{cname}_wA5_skewness'] = 0.0
-                            window_features[f'{cname}_wA5_kurtosis'] = 0.0
+                        # Adaptamos las llaves para registrar el nivel efectivo real (wA4)
+                        window_features[f'{cname}_wA4_energy'] = energies[0]
+                        window_features[f'{cname}_wA4_rel'] = (energies[0] / total_w_energy)
                         
+                        # Estadísticas con la Wavelet de Aproximación (Nivel efectivo real)
+                        wA_approx = np.asarray(coeffs[0])
+                        window_features[f'{cname}_wA4_std'] = float(np.std(wA_approx))
+                        window_features[f'{cname}_wA4_mean'] = float(np.mean(wA_approx))
+                        window_features[f'{cname}_wA4_var'] = float(np.var(wA_approx))
+                        window_features[f'{cname}_wA4_rms'] = float(np.sqrt(np.mean(wA_approx**2)))
+                        window_features[f'{cname}_wA4_skewness'] = float(stats.skew(wA_approx))
+                        window_features[f'{cname}_wA4_kurtosis'] = float(stats.kurtosis(wA_approx))
+                        
+                        # Rellenamos de forma dinámica los detalles (wD1 a wD5)
+                        # Si lvl supera el nivel calculado (ej. nivel 5), se guardará automáticamente como 0.0
                         for lvl in range(1, 6):
                             if lvl <= level:
                                 idx = level - lvl + 1
@@ -211,41 +210,55 @@ class EEGFeatureExtractor:
                                 rel = 0.0
                             window_features[f'{cname}_wD{lvl}_energy'] = e
                             window_features[f'{cname}_wD{lvl}_rel'] = rel
-                    except Exception:
+                            
+                    except Exception as e:
+                        print(f"[ERROR] Falló extracción Wavelet en canal {cname}: {e}")
                         for lvl in range(1, 6):
                             window_features[f'{cname}_wD{lvl}_energy'] = 0.0
                             window_features[f'{cname}_wD{lvl}_rel'] = 0.0
-                        window_features[f'{cname}_wA5_energy'] = 0.0
-                        window_features[f'{cname}_wA5_rel'] = 0.0
-                        window_features[f'{cname}_wA5_std'] = 0.0
-                        window_features[f'{cname}_wA5_mean'] = 0.0
-                        window_features[f'{cname}_wA5_var'] = 0.0
-                        window_features[f'{cname}_wA5_rms'] = 0.0
-                        window_features[f'{cname}_wA5_skewness'] = 0.0
-                        window_features[f'{cname}_wA5_kurtosis'] = 0.0
+                        window_features[f'{cname}_wA4_energy'] = 0.0
+                        window_features[f'{cname}_wA4_rel'] = 0.0
+                        window_features[f'{cname}_wA4_std'] = 0.0
+                        window_features[f'{cname}_wA4_mean'] = 0.0
+                        window_features[f'{cname}_wA4_var'] = 0.0
+                        window_features[f'{cname}_wA4_rms'] = 0.0
+                        window_features[f'{cname}_wA4_skewness'] = 0.0
+                        window_features[f'{cname}_wA4_kurtosis'] = 0.0
 
-                # --- Welch PSD: estadisticas en bandas beta y gamma ---
+
+                # --- Welch PSD: Optimizado para Ventanas de 1.5s (192 muestras) ---
                 try:
-                    welch_freqs, welch_psd = signal.welch(
-                        channel_data, fs=self.fs,
-                        nperseg=min(len(channel_data), max(32, len(channel_data) // 4))
-                    )
-                    welch_delta_mask = (welch_freqs >= 0.5) & (welch_freqs <= 4)
-                    welch_theta_mask = (welch_freqs > 4) & (welch_freqs <= 8)
-                    welch_alpha_mask = (welch_freqs > 8) & (welch_freqs <= 14)
-                    welch_beta_mask  = (welch_freqs > 14) & (welch_freqs <= 30)
-                    welch_gamma_mask = (welch_freqs > 30)
+                    longitud_datos = len(channel_data)
+                    nperseg_optimo = min(longitud_datos, 128)
+                    noverlap_optimo = nperseg_optimo // 2 # 50% de solapamiento interno para Welch
 
-                    welch_mask=[
-                        ('delta',welch_delta_mask),
-                        ('theta',welch_theta_mask),
-                        ('alpha',welch_alpha_mask),
-                        ('beta',welch_beta_mask),
-                        ('gamma',welch_gamma_mask)                        
+                    welch_freqs, welch_psd = signal.welch(
+                        channel_data, 
+                        fs=self.fs,
+                        window='hamming',
+                        nperseg=nperseg_optimo,
+                        noverlap=noverlap_optimo
+                    )
+                    
+                    # Máscaras de frecuencia estándar clínicas
+                    welch_delta_mask = (welch_freqs >= 0.5) & (welch_freqs <= 4.0)
+                    welch_theta_mask = (welch_freqs > 4.0)  & (welch_freqs <= 8.0)
+                    welch_alpha_mask = (welch_freqs > 8.0)  & (welch_freqs <= 14.0)
+                    welch_beta_mask  = (welch_freqs > 14.0) & (welch_freqs <= 30.0)
+                    # Limitamos gamma a 40 Hz ya que tu filtro pasa banda corta ahí
+                    welch_gamma_mask = (welch_freqs > 30.0) & (welch_freqs <= 40.0) 
+
+                    welch_mask = [
+                        ('delta', welch_delta_mask),
+                        ('theta', welch_theta_mask),
+                        ('alpha', welch_alpha_mask),
+                        ('beta',  welch_beta_mask),
+                        ('gamma', welch_gamma_mask)                        
                     ]
                     
                     for band_name, band_mask in welch_mask:
-                        if band_mask.any():
+                        # Aseguramos que la banda tenga al menos 2 puntos para poder calcular estadísticas válidas
+                        if band_mask.any() and np.sum(band_mask) >= 2:
                             psd_band = welch_psd[band_mask]
                             window_features[f'{cname}_welch_{band_name}_power']    = float(np.sum(psd_band))
                             window_features[f'{cname}_welch_{band_name}_mean']     = float(np.mean(psd_band))
@@ -255,12 +268,15 @@ class EEGFeatureExtractor:
                             window_features[f'{cname}_welch_{band_name}_skewness'] = float(stats.skew(psd_band))
                             window_features[f'{cname}_welch_{band_name}_kurtosis'] = float(stats.kurtosis(psd_band))
                         else:
+                            # Reemplazamos np.nan por 0.0 de forma segura para no romper el SafeLDA ni el Scaler
                             for stat in ('power', 'mean', 'std', 'var', 'rms', 'skewness', 'kurtosis'):
-                                window_features[f'{cname}_welch_{band_name}_{stat}'] = np.nan
-                except Exception:
+                                window_features[f'{cname}_welch_{band_name}_{stat}'] = 0.0
+                except Exception as e:
+                    print(f"[ERROR] Falló Welch PSD en canal {cname}: {e}")
                     for band_name in ('delta', 'theta', 'alpha', 'beta', 'gamma'):
                         for stat in ('power', 'mean', 'std', 'var', 'rms', 'skewness', 'kurtosis'):
-                            window_features[f'{cname}_welch_{band_name}_{stat}'] = np.nan
+                            window_features[f'{cname}_welch_{band_name}_{stat}'] = 0.0
+
 
             features.append(window_features)
         return pd.DataFrame(features)
@@ -310,9 +326,11 @@ def get_feature_sets(all_cols):
     Agrupa las columnas de caracteristicas en subconjuntos tematicos
     (estadisticas, frecuencia absoluta/relativa, wavelets, etc.)
     """
-    wA_keys = ["wA5","wA5_std","wA5_rms","wA5_skewness","wA5_kurtosis"]
-    wD_keys = ["wD1", "wD2", "wD3", "wD4", "wD5"]
+    # Actualiza esta línea específica en tu script de entrenamiento jerárquico:
+    wA_keys = ["wA4", "wA4_std", "wA4_rms", "wA4_skewness", "wA4_kurtosis", "wA4_energy", "wA4_rel"]
+    wD_keys = ["wD1", "wD2", "wD3", "wD4", "wD5"] 
     wav_keys = wA_keys + wD_keys
+
 
     sets = {
         "Estadisticas_Tm": [c for c in all_cols if any(k in c for k in

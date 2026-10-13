@@ -14,8 +14,7 @@ de clasificar (es lo que mejora la SNR en P300 y lo que más sube accuracy).
 
 import numpy as np
 import pandas as pd
-from utils.PIPlieneTiempoReal.eeg_features import EEGFeatureExtractor
-
+from eeg_features import EEGFeatureExtractor
 
 def calculate_flash_times(fs=128, num_flashes=5, flash_duration=125, isi_duration=75,
                           total_duration=2.0, start_offset=0.2):

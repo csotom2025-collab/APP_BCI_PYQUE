@@ -1,13 +1,11 @@
 """
-ENTRENAMIENTO JERÁRQUICO COMPLETO CON OPTIMIZACIÓN DE 2 NIVELES DE LDA
+ENTRENAMIENTO JERÁRQUICO CON COLOR Y MODELOS LDA POR COLOR
 
 Flujo:
-1. Evalúa TODAS las combinaciones (6 clf × 7 feature_sets × 4 grupos) con CV
+1. Evalúa combinaciones de clasificadores y features con validación cruzada
 2. Guarda tabla completa de resultados (evaluacion_jerarquica_completa.csv)
-3. Identifica ganador por cada grupo (super-clase, Letters, Numbers, Controls)
-4. Entrena los 4 modelos ganadores con LDA optimizado en 2 niveles:
-   - Nivel 1 (Super-clase): LDA optimizado para separar 3 grupos principales
-   - Nivel 2 (Por grupo): LDA optimizado dentro de cada grupo especializado
+3. Identifica modelos ganadores para color, super-grupo y comando fino por color
+4. Entrena la cascada: color → super-grupo del color → comando fino del color/grupo
 5. Guarda bundle final listo para tiempo real (hierarchical_bundle_optimizado.joblib)
 
 Protocolo asumido:
@@ -41,8 +39,22 @@ from sklearn.metrics import confusion_matrix, accuracy_score, f1_score
 # pyrefly: ignore [missing-import]
 from xgboost import XGBClassifier 
 from models.newTraining.lda_utils import SafeLDA
-import models.newTraining.config
+import models.newTraining.config as config
 from models.newTraining.eeg_features import get_feature_sets, log_transform_power_columns
+
+
+GREEN_COMMANDS = [
+    "A", "C", "F", "R", "V", "I", "M", "J", "L", "Q", "U", "B", "X",
+    "4", "0", "2", "8", "W", "6", "⟵",
+]
+BLUE_COMMANDS = [
+    "S", "G", "E", "T", "Z", "N", "Y", "O", "P", "Ñ", "D", "H", "1",
+    "7", "K", "5", "───", "3", "9", "↩",
+]
+COLOR_BY_COMMAND = {
+    **{command: "Green" for command in GREEN_COMMANDS},
+    **{command: "Blue" for command in BLUE_COMMANDS},
+}
 
 
 def normalize_string_columns(df, columns):
@@ -51,6 +63,20 @@ def normalize_string_columns(df, columns):
         if col in df.columns:
             df[col] = df[col].map(lambda x: "" if pd.isna(x) else str(x))
     return df
+
+
+def add_color_labels(df):
+    """Agrega el color de cada comando sin reemplazar su etiqueta fina."""
+    df_color = df.copy()
+    commands = df_color["label"].astype(str)
+    unknown_commands = sorted(set(commands) - COLOR_BY_COMMAND.keys())
+    if unknown_commands:
+        raise ValueError(
+            "Hay comandos sin clasificación de color: "
+            f"{unknown_commands}. Actualiza GREEN_COMMANDS o BLUE_COMMANDS."
+        )
+    df_color["color"] = commands.map(COLOR_BY_COMMAND)
+    return df_color
 
 
 # ===========================================================================================
@@ -221,7 +247,7 @@ def evaluate_all_hierarchical(df, verbose=True, seed=42):
     Evalúa TODAS las combinaciones:
     - 6 clasificadores
     - 7 feature_sets (Estadísticas, Frecuencias_Abs/Rel/Est, Wavelets, Todas)
-    - 4 niveles (super-clase + Letters + Numbers + Controls)
+    - color global y etapas super/fina entrenadas por separado para cada color
     
     Retorna: DataFrame con resultados, dict con mejores modelos por grupo
     """
@@ -229,35 +255,101 @@ def evaluate_all_hierarchical(df, verbose=True, seed=42):
     classifiers = build_classifiers(40,seed=seed)  # 40 clases totales (27 letras + 10 números + 3 controles)
     results = []
     best_per_group = {}
-    
-    # ============ SUPER-CLASE (Letters/Numbers/Controls - 3 clases) ============
+
+    # ============ COLOR (Green/Blue - 2 clases) ============
     if verbose:
         print("\n" + "="*100)
-        print("EVALUANDO: SUPER-CLASE (Letters/Numbers/Controls - 3 clases)")
+        print("EVALUANDO: COLOR (Green/Blue - 2 clases)")
         print("="*100)
-    
-    df_super = df.copy()
-    df_super["label"] = df_super["tpComando"]
-    feature_cols_all = [c for c in df.columns if c not in 
+
+    df_color = add_color_labels(df)
+    feature_cols_all = [c for c in df.columns if c not in
                        ["usuario", "tpComando", "letra", "trial", "label"]]
-    df_super[feature_cols_all] = log_transform_power_columns(df_super[feature_cols_all], feature_cols_all)
+    df_color_stage = df_color.copy()
+    df_color_stage["label"] = df_color_stage["color"]
+    df_color_stage[feature_cols_all] = log_transform_power_columns(
+        df_color_stage[feature_cols_all], feature_cols_all
+    )
     feature_sets = get_feature_sets(feature_cols_all)
-    
-    best_f1_super = -1
+
+    best_f1_color = -1
     for set_name, cols in feature_sets.items():
         if verbose:
             print(f"\n{set_name} ({len(cols)} features):")
         for clf_name, clf in classifiers.items():
             acc_m, acc_s, f1_m, f1_s, y_pred, le, y_true = evaluate_combination(
-                df_super, cols, "super", clf_name, clf,
-                n_components=2,  # 3 clases -> máx 2 componentes LDA
-                k_best=250, cv_splits=5, verbose=verbose
+                df_color_stage, cols, "color", clf_name, clf,
+                n_components=1, k_best=250, cv_splits=5, verbose=verbose
             )
-            if acc_m is not None:
+            if acc_m is None:
+                continue
+            results.append({
+                "nivel": "color",
+                "grupo": "Green/Blue",
+                "n_clases": 2,
+                "feature_set": set_name,
+                "n_features": len(cols),
+                "clasificador": clf_name,
+                "accuracy_mean": acc_m,
+                "accuracy_std": acc_s,
+                "f1_macro_mean": f1_m,
+                "f1_macro_std": f1_s,
+            })
+            if f1_m > best_f1_color:
+                best_f1_color = f1_m
+                best_per_group["color"] = {
+                    "feature_set": set_name,
+                    "cols": cols,
+                    "clasificador": clf_name,
+                    "clf": clf,
+                    "n_components": 1,
+                    "f1_macro": f1_m,
+                    "accuracy_mean": acc_m,
+                    "accuracy_std": acc_s,
+                    "label_encoder": le,
+                    "y_true": y_true,
+                    "y_pred": y_pred,
+                }
+
+    if "color" not in best_per_group:
+        raise RuntimeError(
+            "No se pudo evaluar el nivel de color; verifica que existan muestras "
+            "suficientes para Green y Blue."
+        )
+
+    # Entrena y evalúa cada super-grupo y sus comandos solo dentro de un color.
+    for color in ("Green", "Blue"):
+        df_color_group = df_color[df_color["color"] == color].reset_index(drop=True)
+        if df_color_group.empty:
+            raise ValueError(f"No hay muestras disponibles para el color {color}.")
+
+        if verbose:
+            print("\n" + "="*100)
+            print(f"EVALUANDO SUPER-GRUPO SOLO PARA {color}")
+            print("="*100)
+
+        df_super = df_color_group.copy()
+        df_super["label"] = df_super["tpComando"]
+        df_super[feature_cols_all] = log_transform_power_columns(
+            df_super[feature_cols_all], feature_cols_all
+        )
+        feature_sets = get_feature_sets(feature_cols_all)
+        super_key = f"super_clase_{color}"
+        best_f1 = -1
+
+        for set_name, cols in feature_sets.items():
+            for clf_name, clf in classifiers.items():
+                acc_m, acc_s, f1_m, f1_s, y_pred, le, y_true = evaluate_combination(
+                    df_super, cols, f"super-{color}", clf_name, clf,
+                    n_components=2, k_best=250, cv_splits=5, verbose=verbose
+                )
+                if acc_m is None:
+                    continue
                 results.append({
-                    "nivel": "super_clase",
+                    "nivel": "super_clase_por_color",
+                    "color": color,
                     "grupo": "Letters/Numbers/Controls",
-                    "n_clases": 3,
+                    "n_clases": len(le.classes_),
                     "feature_set": set_name,
                     "n_features": len(cols),
                     "clasificador": clf_name,
@@ -266,9 +358,9 @@ def evaluate_all_hierarchical(df, verbose=True, seed=42):
                     "f1_macro_mean": f1_m,
                     "f1_macro_std": f1_s,
                 })
-                if f1_m > best_f1_super:
-                    best_f1_super = f1_m
-                    best_per_group["super_clase"] = {
+                if f1_m > best_f1:
+                    best_f1 = f1_m
+                    best_per_group[super_key] = {
                         "feature_set": set_name,
                         "cols": cols,
                         "clasificador": clf_name,
@@ -281,37 +373,65 @@ def evaluate_all_hierarchical(df, verbose=True, seed=42):
                         "y_true": y_true,
                         "y_pred": y_pred,
                     }
-    
-    # ============ GRUPOS ESPECIALIZADOS (Letters, Numbers, Controls) ============
-    for grupo in ["Letters", "Numbers", "Controls"]:
-        if verbose:
-            print("\n" + "="*100)
-            print(f"EVALUANDO: {grupo}")
-            print("="*100)
-        
-        df_grupo = df[df["tpComando"] == grupo].reset_index(drop=True)
-        feature_cols_grupo = [c for c in df_grupo.columns if c not in 
-                             ["usuario", "tpComando", "letra", "trial", "label"]]
-        df_grupo[feature_cols_grupo] = log_transform_power_columns(df_grupo[feature_cols_grupo], feature_cols_grupo)
-        feature_sets = get_feature_sets(feature_cols_grupo)
-        
-        n_clases = df_grupo["label"].nunique()
-        n_comp = max(1, min(n_clases - 1, 50))  # LDA components (máx n_clases - 1)
-        
-        best_f1_grupo = -1
-        for set_name, cols in feature_sets.items():
-            if verbose:
-                print(f"\n{set_name} ({len(cols)} features):")
-            for clf_name, clf in classifiers.items():
-                acc_m, acc_s, f1_m, f1_s, y_pred, le, y_true = evaluate_combination(
-                    df_grupo, cols, grupo, clf_name, clf,
-                    n_components=n_comp, k_best=250, cv_splits=5, verbose=verbose
+
+        if super_key not in best_per_group:
+            raise RuntimeError(
+                f"No se pudo evaluar el clasificador de super-grupo para {color}; "
+                "verifica que haya suficientes muestras por grupo."
+            )
+
+        for grupo in ("Letters", "Numbers", "Controls"):
+            df_fine = df_color_group[
+                df_color_group["tpComando"] == grupo
+            ].reset_index(drop=True)
+            if df_fine.empty:
+                raise ValueError(f"No hay muestras para la combinación {color}/{grupo}.")
+
+            fine_key = f"{color}_{grupo}"
+            fine_classes = sorted(df_fine["label"].astype(str).unique())
+            if len(fine_classes) == 1:
+                fixed_label = fine_classes[0]
+                print(
+                    f"  {color}/{grupo}: solo existe la clase {ascii(fixed_label)}; "
+                    "se usará una salida fija, sin evaluación multiclase."
                 )
-                if acc_m is not None:
+                best_per_group[fine_key] = {
+                    "fixed_label": fixed_label,
+                    "feature_set": "N/A",
+                    "cols": [],
+                    "clasificador": "Salida fija",
+                    "f1_macro": None,
+                    "y_true": None,
+                    "y_pred": None,
+                }
+                continue
+
+            if verbose:
+                print("\n" + "="*100)
+                print(f"EVALUANDO COMANDOS FINOS: {color}/{grupo}")
+                print("="*100)
+
+            df_fine[feature_cols_all] = log_transform_power_columns(
+                df_fine[feature_cols_all], feature_cols_all
+            )
+            feature_sets = get_feature_sets(feature_cols_all)
+            n_components = max(1, min(len(fine_classes) - 1, 50))
+            best_f1 = -1
+
+            for set_name, cols in feature_sets.items():
+                for clf_name, clf in classifiers.items():
+                    acc_m, acc_s, f1_m, f1_s, y_pred, le, y_true = evaluate_combination(
+                        df_fine, cols, f"{color}-{grupo}", clf_name, clf,
+                        n_components=n_components, k_best=250,
+                        cv_splits=5, verbose=verbose
+                    )
+                    if acc_m is None:
+                        continue
                     results.append({
-                        "nivel": "por_grupo",
+                        "nivel": "comando_fino_por_color_grupo",
+                        "color": color,
                         "grupo": grupo,
-                        "n_clases": n_clases,
+                        "n_clases": len(le.classes_),
                         "feature_set": set_name,
                         "n_features": len(cols),
                         "clasificador": clf_name,
@@ -320,14 +440,14 @@ def evaluate_all_hierarchical(df, verbose=True, seed=42):
                         "f1_macro_mean": f1_m,
                         "f1_macro_std": f1_s,
                     })
-                    if f1_m > best_f1_grupo:
-                        best_f1_grupo = f1_m
-                        best_per_group[grupo] = {
+                    if f1_m > best_f1:
+                        best_f1 = f1_m
+                        best_per_group[fine_key] = {
                             "feature_set": set_name,
                             "cols": cols,
                             "clasificador": clf_name,
                             "clf": clf,
-                            "n_components": n_comp,
+                            "n_components": n_components,
                             "f1_macro": f1_m,
                             "accuracy_mean": acc_m,
                             "accuracy_std": acc_s,
@@ -335,6 +455,13 @@ def evaluate_all_hierarchical(df, verbose=True, seed=42):
                             "y_true": y_true,
                             "y_pred": y_pred,
                         }
+
+            if fine_key not in best_per_group:
+                raise RuntimeError(
+                    f"No se pudo evaluar el modelo fino para {color}/{grupo}; "
+                    "verifica que cada comando tenga suficientes muestras."
+                )
+
     
     if not results:
         raise RuntimeError(
@@ -349,68 +476,80 @@ def evaluate_all_hierarchical(df, verbose=True, seed=42):
 # PASO 5: ENTRENAR MODELOS GANADORES
 # ===========================================================================================
 def train_final_models(df, best_per_group):
-    """Reentrena los 4 modelos ganadores (super + 3 grupos) sobre TODO el dataset de cada nivel"""
-    
-    final_bundles = {}
-    
-    # Super-clase
-    print("\n" + "="*100)
-    print("ENTRENANDO MODELO FINAL: SUPER-CLASE")
-    print("="*100)
-    df_super = df.copy()
-    df_super["label"] = df_super["tpComando"]
-    super_info = best_per_group["super_clase"]
-    
-    le_super = LabelEncoder()
-    y_super = le_super.fit_transform(df_super["label"].astype(str))
-    X_super = df_super[super_info["cols"]].to_numpy()
-    X_super = np.nan_to_num(X_super, nan=0.0, posinf=0.0, neginf=0.0)
-    
-    pipe_super = build_pipeline_hierarchical(
-        super_info["clf"], super_info["n_components"], 
-        X_super.shape[1], k_best=250
-    )
-    pipe_super.fit(X_super, y_super)
-    
-    final_bundles["super_clase"] = {
-        "pipeline": pipe_super,
-        "label_encoder": le_super,
-        "feature_columns": super_info["cols"],
-        "feature_set": super_info["feature_set"],
-        "clasificador": super_info["clasificador"],
-        "f1_macro_cv": float(super_info["f1_macro"]),
-    }
-    print(f"✓ Super-clase entrenado ({len(le_super.classes_)} clases, f1_cv={super_info['f1_macro']:.3f})")
-    
-    # Grupos especializados
-    for grupo in ["Letters", "Numbers", "Controls"]:
-        print(f"\nENTRENANDO MODELO FINAL: {grupo}")
-        print("-" * 100)
-        
-        df_grupo = df[df["tpComando"] == grupo].reset_index(drop=True)
-        grupo_info = best_per_group[grupo]
-        
-        le_grupo = LabelEncoder()
-        y_grupo = le_grupo.fit_transform(df_grupo["label"].astype(str))
-        X_grupo = df_grupo[grupo_info["cols"]].to_numpy()
-        X_grupo = np.nan_to_num(X_grupo, nan=0.0, posinf=0.0, neginf=0.0)
-        
-        pipe_grupo = build_pipeline_hierarchical(
-            grupo_info["clf"], grupo_info["n_components"],
-            X_grupo.shape[1], k_best=250
+    """Entrena los modelos de color y los modelos super/fino separados por color."""
+
+    df_color = add_color_labels(df)
+    df_color_stage = df_color.copy()
+    df_color_stage["label"] = df_color_stage["color"]
+
+    def fit_bundle(df_subset, model_info):
+        if "fixed_label" in model_info:
+            return {
+                "fixed_label": model_info["fixed_label"],
+                "feature_columns": [],
+                "feature_set": "N/A",
+                "clasificador": "Salida fija",
+                "f1_macro_cv": None,
+            }
+
+        le = LabelEncoder()
+        y = le.fit_transform(df_subset["label"].astype(str))
+        X = df_subset[model_info["cols"]].to_numpy()
+        X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+        pipeline = build_pipeline_hierarchical(
+            model_info["clf"], model_info["n_components"], X.shape[1], k_best=250
         )
-        pipe_grupo.fit(X_grupo, y_grupo)
-        
-        final_bundles[grupo] = {
-            "pipeline": pipe_grupo,
-            "label_encoder": le_grupo,
-            "feature_columns": grupo_info["cols"],
-            "feature_set": grupo_info["feature_set"],
-            "clasificador": grupo_info["clasificador"],
-            "f1_macro_cv": float(grupo_info["f1_macro"]),
+        pipeline.fit(X, y)
+        return {
+            "pipeline": pipeline,
+            "label_encoder": le,
+            "feature_columns": model_info["cols"],
+            "feature_set": model_info["feature_set"],
+            "clasificador": model_info["clasificador"],
+            "f1_macro_cv": (
+                float(model_info["f1_macro"])
+                if model_info.get("f1_macro") is not None else None
+            ),
         }
-        print(f"✓ {grupo} entrenado ({len(le_grupo.classes_)} clases, f1_cv={grupo_info['f1_macro']:.3f})")
-    
+
+    print("\n" + "="*100)
+    print("ENTRENANDO MODELO FINAL: COLOR")
+    print("="*100)
+    final_bundles = {
+        "color": fit_bundle(df_color_stage, best_per_group["color"]),
+        "por_color": {},
+    }
+
+    for color in ("Green", "Blue"):
+        print(f"\nENTRENANDO MODELOS SOLO PARA COLOR: {color}")
+        df_color_subset = df_color[df_color["color"] == color].reset_index(drop=True)
+
+        df_super = df_color_subset.copy()
+        df_super["label"] = df_super["tpComando"]
+        hierarchy = {
+            "super_clase": fit_bundle(
+                df_super, best_per_group[f"super_clase_{color}"]
+            ),
+            "por_grupo": {},
+        }
+
+        for grupo in ("Letters", "Numbers", "Controls"):
+            df_fine = df_color_subset[
+                df_color_subset["tpComando"] == grupo
+            ].reset_index(drop=True)
+            fine_bundle = fit_bundle(
+                df_fine, best_per_group[f"{color}_{grupo}"]
+            )
+            hierarchy["por_grupo"][grupo] = fine_bundle
+            if "fixed_label" in fine_bundle:
+                print(f"  OK {grupo}: salida fija {ascii(fine_bundle['fixed_label'])}")
+            else:
+                print(
+                    f"  OK {grupo}: {len(fine_bundle['label_encoder'].classes_)} "
+                    f"comandos, f1_cv={fine_bundle['f1_macro_cv']:.3f}"
+                )
+        final_bundles["por_color"][color] = hierarchy
+
     return final_bundles
 
 
@@ -446,7 +585,7 @@ def train_optimized_hierarchical(output_dir=None,channels = None,fs=None,use_p30
     apply_baseline_correction = apply_baseline_correction if apply_baseline_correction is not None else config.APPLY_BASELINE_CORRECTION
     semilla = semilla if semilla is not None else config.RANDOM_STATE
     print("\n" + "="*100)
-    print("ENTRENAMIENTO JERÁRQUICO COMPLETO CON OPTIMIZACIÓN DE 2 NIVELES DE LDA")
+    print("ENTRENAMIENTO JERÁRQUICO: COLOR → SUPER-GRUPO → COMANDO FINO")
     print("POR USUARIO")
     print("="*100)
     
@@ -498,11 +637,14 @@ def train_optimized_hierarchical(output_dir=None,channels = None,fs=None,use_p30
         print(f"\n   GANADOR POR CADA GRUPO ({usuario}):")
         print("   " + "-" * 96)
         for grupo, info in best_per_group.items():
+            if info.get("fixed_label") is not None:
+                print(f"   {grupo:20s} | salida fija={ascii(info['fixed_label'])}")
+                continue
             print(f"   {grupo:20s} | feature_set={info['feature_set']:18s} | "
                   f"clf={info['clasificador']:22s} | f1_cv={info['f1_macro']:.3f}")
         
         # Paso 5: Entrenar modelos finales para este usuario
-        print(f"\n3) Entrenando 4 modelos finales para {usuario}...")
+        print(f"\n3) Entrenando modelos finales por color para {usuario}...")
         final_bundles = train_final_models(df_usuario, best_per_group)
         
         # Guardar bundle final POR USUARIO
@@ -511,12 +653,8 @@ def train_optimized_hierarchical(output_dir=None,channels = None,fs=None,use_p30
         
         hierarchy_bundle = {
             "usuario": usuario,
-            "super_clase": final_bundles["super_clase"],
-            "por_grupo": {
-                "Letters": final_bundles["Letters"],
-                "Numbers": final_bundles["Numbers"],
-                "Controls": final_bundles["Controls"],
-            },
+            "color": final_bundles["color"],
+            "por_color": final_bundles["por_color"],
             "channel_names": channels,
             "fs": fs,
             "use_p300_window_only": use_p300window,
@@ -564,10 +702,12 @@ def train_optimized_hierarchical(output_dir=None,channels = None,fs=None,use_p30
     for usuario in usuarios:
         print(f"\n{usuario}:")
         print(f"  - outputs/{usuario}/evaluacion_jerarquica_completa.csv")
-        print(f"  - outputs/figures/{usuario}/cm_super_clase.png")
-        print(f"  - outputs/figures/{usuario}/cm_Letters.png")
-        print(f"  - outputs/figures/{usuario}/cm_Numbers.png")
-        print(f"  - outputs/figures/{usuario}/cm_Controls.png")
+        print(f"  - outputs/figures/{usuario}/cm_color.png")
+        print(f"  - outputs/figures/{usuario}/cm_super_clase_Green.png")
+        print(f"  - outputs/figures/{usuario}/cm_super_clase_Blue.png")
+        print(f"  - outputs/figures/{usuario}/cm_Green_Letters.png")
+        print(f"  - outputs/figures/{usuario}/cm_Blue_Letters.png")
+        print("  - outputs/figures/{usuario}/cm_{Green,Blue}_{Letters,Numbers,Controls}.png")
         print(f"  - outputs/models/{usuario}/hierarchical_bundle_optimizado.joblib")
     
     print(f"\nPara usar en tiempo real (POR USUARIO):")

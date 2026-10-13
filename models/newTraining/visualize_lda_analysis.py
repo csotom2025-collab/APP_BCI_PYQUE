@@ -332,31 +332,40 @@ def plot_lda_projections(df_usuario, bundle, out_dir, usuario):
     # ── 4. CONTROLS ─────────────────────────────────────────────────────────
     ax_c = fig.add_subplot(gs[1, 1])
     ctrl_b = bundle["por_grupo"]["Controls"]
-    df_c = df_usuario[df_usuario["tpComando"] == "Controls"].reset_index(drop=True)
-    df_c["label"] = _normalize_label_series(df_c["label"])
-    fc_c = ctrl_b["feature_columns"]
-    df_c = df_c.copy()
-    df_c[fc_c] = log_transform_power_columns(df_c[fc_c], fc_c)
+    if "fixed_label" in ctrl_b:
+        ax_c.text(
+            0.5, 0.5,
+            f"Una sola clase: {ascii(ctrl_b['fixed_label'])}\n"
+            "Salida fija; no aplica proyección LDA",
+            ha="center", va="center", color="white", transform=ax_c.transAxes
+        )
+        ax_c.set_title("Controls", color="white", fontsize=10)
+    else:
+        df_c = df_usuario[df_usuario["tpComando"] == "Controls"].reset_index(drop=True)
+        df_c["label"] = _normalize_label_series(df_c["label"])
+        fc_c = ctrl_b["feature_columns"]
+        df_c = df_c.copy()
+        df_c[fc_c] = log_transform_power_columns(df_c[fc_c], fc_c)
 
-    le_c = LabelEncoder()
-    y_c = le_c.fit_transform(df_c["label"])
-    X_c = np.nan_to_num(df_c[fc_c].to_numpy(), nan=0.0)
+        le_c = LabelEncoder()
+        y_c = le_c.fit_transform(df_c["label"])
+        X_c = np.nan_to_num(df_c[fc_c].to_numpy(), nan=0.0)
 
-    X_lda_c = _lda2d_from_bundle(ctrl_b, X_c, y_c, le_c.classes_)
-    if X_lda_c is None:
-        X_lda_c = _fit_lda2d_fresh(X_c, y_c, n_components=2, k_best=250)
+        X_lda_c = _lda2d_from_bundle(ctrl_b, X_c, y_c, le_c.classes_)
+        if X_lda_c is None:
+            X_lda_c = _fit_lda2d_fresh(X_c, y_c, n_components=2, k_best=250)
 
-    pal_c = [PALETTE_CONTROLS[i % len(PALETTE_CONTROLS)]
-             for i in range(len(le_c.classes_))]
-    _scatter_lda(ax_c, X_lda_c, y_c, le_c.classes_, pal_c,
-                 f"Controls  ·  {ctrl_b['feature_set']}\n"
-                 f"Clf: {ctrl_b['clasificador']}  |  "
-                 f"f1={ctrl_b.get('f1_macro_cv', 0):.3f}",
-                 show_ellipses=True, show_centroids=True, alpha=0.75)
-    handles_c = [mpatches.Patch(facecolor=pal_c[i], label=cls)
-                 for i, cls in enumerate(le_c.classes_)]
-    ax_c.legend(handles=handles_c, fontsize=9, loc="upper right",
-                framealpha=0.2, labelcolor="white")
+        pal_c = [PALETTE_CONTROLS[i % len(PALETTE_CONTROLS)]
+                 for i in range(len(le_c.classes_))]
+        _scatter_lda(ax_c, X_lda_c, y_c, le_c.classes_, pal_c,
+                     f"Controls  ·  {ctrl_b['feature_set']}\n"
+                     f"Clf: {ctrl_b['clasificador']}  |  "
+                     f"f1={ctrl_b.get('f1_macro_cv', 0):.3f}",
+                     show_ellipses=True, show_centroids=True, alpha=0.75)
+        handles_c = [mpatches.Patch(facecolor=pal_c[i], label=cls)
+                     for i, cls in enumerate(le_c.classes_)]
+        ax_c.legend(handles=handles_c, fontsize=9, loc="upper right",
+                    framealpha=0.2, labelcolor="white")
 
     out_path = os.path.join(out_dir, f"lda_projections_{usuario}.png")
     plt.savefig(out_path, dpi=160, bbox_inches="tight", facecolor="#0D0D0D")
@@ -859,41 +868,71 @@ def main():
         out_dir = os.path.join(config.FIGURES_DIR, usuario)
         os.makedirs(out_dir, exist_ok=True)
 
-        print(f"\n4) Generando figuras en: {out_dir}")
+        if "por_color" in bundle:
+            plotting_views = []
+            for color, hierarchy in bundle["por_color"].items():
+                fine_models = hierarchy["por_grupo"].values()
+                commands = {
+                    command
+                    for model in fine_models
+                    for command in (
+                        [model["fixed_label"]]
+                        if "fixed_label" in model
+                        else model["label_encoder"].classes_
+                    )
+                }
+                df_color = df_usuario[
+                    df_usuario["label"].astype(str).isin(commands)
+                ].reset_index(drop=True)
+                color_results = results_df[
+                    (results_df["nivel"] == "color")
+                    | (results_df["color"] == color)
+                ]
+                color_bundle = {
+                    "super_clase": hierarchy["super_clase"],
+                    "por_grupo": hierarchy["por_grupo"],
+                }
+                color_dir = os.path.join(out_dir, color)
+                os.makedirs(color_dir, exist_ok=True)
+                plotting_views.append(
+                    (df_color, color_bundle, color_results, color_dir,
+                     f"{usuario}_{color}")
+                )
+        else:
+            plotting_views = [(df_usuario, bundle, results_df, out_dir, usuario)]
 
-        # Figura 1: Proyecciones LDA
-        print("   -> Proyecciones LDA 2D ...")
-        try:
-            plot_lda_projections(df_usuario, bundle, out_dir, usuario)
-        except Exception as e:
-            print(f"   [ERROR] LDA projections: {e}")
-            import traceback; traceback.print_exc()
+        for df_plot, bundle_plot, results_plot, plot_dir, plot_user in plotting_views:
+            print(f"\n4) Generando figuras para {plot_user}: {plot_dir}")
 
-        # Figura 2: Feature Winner Analysis
-        print("   -> Analisis de Feature Set ganador ...")
-        try:
-            plot_feature_winner_analysis(results_df, bundle, out_dir, usuario)
-        except Exception as e:
-            print(f"   [ERROR] Feature winner: {e}")
-            import traceback; traceback.print_exc()
+            print("   -> Proyecciones LDA 2D ...")
+            try:
+                plot_lda_projections(df_plot, bundle_plot, plot_dir, plot_user)
+            except Exception as e:
+                print(f"   [ERROR] LDA projections: {e}")
+                import traceback; traceback.print_exc()
 
-        # Figura 3: Curvas de Aprendizaje
-        print("   -> Curvas de Aprendizaje (puede tardar ~2-5 min) ...")
-        try:
-            plot_learning_curves(df_usuario, bundle, results_df, out_dir, usuario)
-        except Exception as e:
-            print(f"   [ERROR] Learning curves: {e}")
-            import traceback; traceback.print_exc()
+            print("   -> Analisis de Feature Set ganador ...")
+            try:
+                plot_feature_winner_analysis(results_plot, bundle_plot, plot_dir, plot_user)
+            except Exception as e:
+                print(f"   [ERROR] Feature winner: {e}")
+                import traceback; traceback.print_exc()
 
-        # Figura 4: Panel Resumen Ejecutivo
-        print("   -> Panel resumen ejecutivo ...")
-        try:
-            plot_executive_summary(bundle, results_df, out_dir, usuario)
-        except Exception as e:
-            print(f"   [ERROR] Executive summary: {e}")
-            import traceback; traceback.print_exc()
+            print("   -> Curvas de Aprendizaje ...")
+            try:
+                plot_learning_curves(df_plot, bundle_plot, results_plot, plot_dir, plot_user)
+            except Exception as e:
+                print(f"   [ERROR] Learning curves: {e}")
+                import traceback; traceback.print_exc()
 
-        print(f"\n  Todas las figuras guardadas en: {out_dir}")
+            print("   -> Panel resumen ejecutivo ...")
+            try:
+                plot_executive_summary(bundle_plot, results_plot, plot_dir, plot_user)
+            except Exception as e:
+                print(f"   [ERROR] Executive summary: {e}")
+                import traceback; traceback.print_exc()
+
+            print(f"\n  Todas las figuras guardadas en: {plot_dir}")
 
     print("\n" + "="*90)
     print("VISUALIZACION COMPLETADA")

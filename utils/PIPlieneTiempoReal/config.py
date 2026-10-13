@@ -15,7 +15,8 @@ BASE_DIR = "D:/APP_BCI_PYQUE/captures"
 TP_COMANDOS = ["Letters", "Numbers", "Controls"]
 
 # Usuarios a incluir en el dataset (agrega todos los que tengas grabados)
-USUARIOS = ["UserJorge","UserPony","UserCMSM","UserMar","UserMartinEpoc"] 
+USUARIOS = ["UserJorge","UserPony","UserCMSM","UserMar","UserMartinEpoc","UserArcane"] 
+#"UserJorge","UserPony","UserCMSM","UserMar","UserMartinEpoc","UserArcane"
 # ---------------------------------------------------------------------------
 # Vocabulario de "letra" por cada tpComando (nombre usado en el archivo)
 # ---------------------------------------------------------------------------
@@ -63,7 +64,7 @@ APPLY_BASELINE_CORRECTION = True
 # Si True, se recorta cada trial a la ventana P300_WINDOW_S antes de extraer
 # caracteristicas (recomendado: la respuesta discriminativa esta ahi).
 # Si False, se usa el trial completo (0.5 - 2.0s).
-USE_P300_WINDOW_ONLY = True
+USE_P300_WINDOW_ONLY = False
 
 
 # Parametros de ventaneo para extract_features. Con window_size = n_samples del
@@ -77,13 +78,13 @@ USE_WIN_SIZE = True
 
 # Tamño de 192 en caso de no usar p300 para 4 ventana en los 2 seg   
 # Tamño de 142 en caso de usar p300 para 4 ventanas de 0.5 a 2.0 seg 
-WINDOW_SIZE=142
+WINDOW_SIZE=192
 
 
 # ---------------------------------------------------------------------------
 # Salidas
 # ---------------------------------------------------------------------------
-OUTPUT_DIR = "trainingOutputs"
+OUTPUT_DIR = "trainingOutputsVen4Con3"
 FEATURES_CSV = os.path.join(OUTPUT_DIR, "features_dataset.csv")
 RESULTS_CSV = os.path.join(OUTPUT_DIR, "resultados_modelos.csv")
 FIGURES_DIR = os.path.join(OUTPUT_DIR, "figures")

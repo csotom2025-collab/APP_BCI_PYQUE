@@ -1,0 +1,16 @@
+﻿archivo,usuario,clase,trial,canal,muestra,tm,tiempo_ms,valor_original,valor_corregido,delta,ganancia,razon_q,amplitud_local_uv,referencia_uv,id_segmento,criterio
+UserArcane/Letters/UserArcane_A_20.csv,UserArcane,A,20,T7,209,1825084.905385971,1632.81,3876.9273,3876.928,0.0007,0.999887,3.133,23.445,7.483,T7-1,q_max=6.68>q_deteccion=6.08 y A=86uV>piso=30uV
+UserArcane/Letters/UserArcane_A_20.csv,UserArcane,A,20,T7,210,1825092.591524124,1640.62,3877.1703,3877.1747,0.0044,0.999276,3.858,27.185,7.046,T7-1,q_max=6.68>q_deteccion=6.08 y A=86uV>piso=30uV
+UserArcane/Letters/UserArcane_A_20.csv,UserArcane,A,20,T7,211,1825102.4610996249,1648.44,3876.8205,3876.835,0.0145,0.997736,4.504,30.522,6.777,T7-1,q_max=6.68>q_deteccion=6.08 y A=86uV>piso=30uV
+UserArcane/Letters/UserArcane_A_20.csv,UserArcane,A,20,T7,212,1825107.6266765597,1656.25,3876.4375,3876.4688,0.0313,0.995378,5.05,33.473,6.628,T7-1,q_max=6.68>q_deteccion=6.08 y A=86uV>piso=30uV
+UserArcane/Letters/UserArcane_A_20.csv,UserArcane,A,20,T7,213,1825120.56350708,1664.06,3876.5306,3876.5772,0.0466,0.99302,5.518,36.287,6.575,T7-1,q_max=6.68>q_deteccion=6.08 y A=86uV>piso=30uV
+UserArcane/Letters/UserArcane_A_20.csv,UserArcane,A,20,T7,214,1825124.585866928,1671.88,3876.886,3876.9399,0.0539,0.99148,6.137,39.048,6.362,T7-1,q_max=6.68>q_deteccion=6.08 y A=86uV>piso=30uV
+UserArcane/Letters/UserArcane_A_20.csv,UserArcane,A,20,T7,215,1825131.5553188324,1679.69,3877.1149,3877.1706,0.0557,0.990869,6.214,41.538,6.684,T7-1,q_max=6.68>q_deteccion=6.08 y A=86uV>piso=30uV
+UserArcane/Letters/UserArcane_A_20.csv,UserArcane,A,20,T7,216,1825139.6086215973,1687.5,3876.8299,3876.8889,0.059,0.990756,6.373,43.86,6.882,T7-1,q_max=6.68>q_deteccion=6.08 y A=86uV>piso=30uV
+UserArcane/Letters/UserArcane_A_20.csv,UserArcane,A,20,T7,217,1825147.572517395,1695.31,3876.4309,3876.4936,0.0627,0.990756,6.676,46.444,6.957,T7-1,q_max=6.68>q_deteccion=6.08 y A=86uV>piso=30uV
+UserArcane/Letters/UserArcane_A_20.csv,UserArcane,A,20,T7,218,1825155.67278862,1703.12,3876.1536,3876.2175,0.0639,0.990949,6.551,48.98,7.477,T7-1,q_max=6.68>q_deteccion=6.08 y A=86uV>piso=30uV
+UserArcane/Letters/UserArcane_A_20.csv,UserArcane,A,20,T7,219,1825163.5279655457,1710.94,3874.3299,3874.4017,0.0718,0.991912,6.558,50.919,7.765,T7-1,q_max=6.68>q_deteccion=6.08 y A=86uV>piso=30uV
+UserArcane/Letters/UserArcane_A_20.csv,UserArcane,A,20,T7,220,1825170.533657074,1718.75,3866.7329,3866.8313,0.0984,0.99403,5.933,53.982,9.099,T7-1,q_max=6.68>q_deteccion=6.08 y A=86uV>piso=30uV
+UserArcane/Letters/UserArcane_A_20.csv,UserArcane,A,20,T7,221,1825183.611869812,1726.56,3851.1416,3851.2466,0.105,0.996726,3.171,61.82,19.497,T7-1,q_max=6.68>q_deteccion=6.08 y A=86uV>piso=30uV
+UserArcane/Letters/UserArcane_A_20.csv,UserArcane,A,20,T7,222,1825186.5320205688,1734.38,3829.1367,3829.1992,0.0625,0.998845,2.223,73.961,33.275,T7-1,q_max=6.68>q_deteccion=6.08 y A=86uV>piso=30uV
+UserArcane/Letters/UserArcane_A_20.csv,UserArcane,A,20,T7,223,1825194.5815086365,1742.19,3809.6914,3809.7056,0.0142,0.999807,1.892,86.233,45.587,T7-1,q_max=6.68>q_deteccion=6.08 y A=86uV>piso=30uV

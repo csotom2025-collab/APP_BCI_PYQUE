@@ -58,11 +58,6 @@ import pandas as pd
 from scipy import ndimage
 
 VERSION = "2.0.0"
-REPORT_FILENAMES = (
-    "correcciones_B.csv", "correcciones_B_muestras.csv", "regrabar_archivos_C.csv",
-    "quality_report.csv", "resumen_usuario_clase.csv", "resumen.json", "parametros_usados.json",
-)
-
 CANALES = ["F3", "FC5", "AF3", "F7", "T7", "P7", "O1",
            "O2", "P8", "T8", "F8", "AF4", "FC6", "F4"]
 ALIAS_TIEMPO = ("Tm", "Time", "time", "TIME")
@@ -576,6 +571,7 @@ def sha256_archivo(ruta: str) -> str:
 
 
 def descubrir_archivos(raiz: str) -> list[str]:
+    print(f"Descubriendo archivos CSV bajo {raiz} ...")
     out = []
     for dp, dn, fn in os.walk(raiz):
         dn[:] = sorted(d for d in dn if d.lower() not in CARPETAS_EXCLUIDAS)
@@ -591,6 +587,39 @@ def descubrir_archivos(raiz: str) -> list[str]:
                 continue
             out.append(os.path.join(rel_dir, n).replace("\\", "/"))
     return sorted(out)
+
+
+def validar_usuario(usuario: str) -> str:
+    usuario = usuario.strip()
+    if (
+        not usuario or usuario in {".", ".."}
+        or "/" in usuario or "\\" in usuario or os.path.splitdrive(usuario)[0]
+    ):
+        raise ValueError("El usuario debe ser el nombre de una sola carpeta dentro de captures/.")
+    return usuario
+
+
+def carpeta_reportes_usuario(salida: str, usuario: str) -> str:
+    usuario = validar_usuario(usuario)
+    salida = os.path.abspath(salida)
+    if os.path.basename(os.path.normpath(salida)).casefold() == usuario.casefold():
+        return salida
+    return os.path.join(salida, usuario)
+
+
+def rutas_de_usuario(captures: str, usuario: str) -> list[str]:
+    """Return CSV paths under exactly one top-level user directory."""
+    usuario = validar_usuario(usuario)
+    carpeta_usuario = os.path.join(captures, usuario)
+    if os.path.islink(carpeta_usuario) or not os.path.isdir(carpeta_usuario):
+        raise FileNotFoundError(f"No existe la carpeta del usuario dentro de captures/: {carpeta_usuario}")
+    rutas = [
+        usuario + "/" + ruta
+        for ruta in descubrir_archivos(carpeta_usuario)
+    ]
+    if not rutas:
+        raise FileNotFoundError(f"No se encontraron archivos CSV para el usuario {usuario!r}.")
+    return rutas
 
 
 def parsear_nombre(rel: str):
@@ -743,23 +772,25 @@ def evaluar_archivo(ruta_abs: str, rel: str, cfg: Config):
 # ===========================================================================
 def procesar(captures: str, salida: str, cfg: Config, trials_objetivo: int = 30,
              limite: int | None = None, verbose: bool = True,
-             overwrite_reports: bool = False) -> dict:
+             overwrite_reports: bool = False, usuario: str | None = None) -> dict:
+    del overwrite_reports
     cfg.validar()
     captures = os.path.abspath(captures)
-    salida = os.path.abspath(salida)
+    print(captures)
+    if usuario is not None:
+        salida = carpeta_reportes_usuario(salida, usuario)
+    else:
+        salida = os.path.abspath(salida)
     cap_norm, out_norm = os.path.normcase(captures), os.path.normcase(salida)
     if out_norm == cap_norm or out_norm.startswith(cap_norm + os.sep) or cap_norm.startswith(out_norm + os.sep):
         raise ValueError("captures y carpeta de reportes no pueden anidarse; no se escribirá dentro de las señales.")
     if not os.path.isdir(captures):
         raise FileNotFoundError(f"No existe la carpeta captures: {captures}")
-    existing_reports = [os.path.join(salida, name) for name in REPORT_FILENAMES
-                        if os.path.exists(os.path.join(salida, name))]
-    if existing_reports and not overwrite_reports:
-        raise FileExistsError(
-            "Ya existen reportes; no se reemplazan por defecto. Use una subcarpeta nueva dentro de chequeo_calidad/ "
-            "o indique --overwrite-reports: " + ", ".join(existing_reports)
-        )
-    rutas = descubrir_archivos(captures)
+    rutas = (
+        rutas_de_usuario(captures, usuario)
+        if usuario is not None else descubrir_archivos(captures)
+    )
+
     if limite:
         rutas = rutas[:limite]
     if verbose:
@@ -896,6 +927,7 @@ def procesar(captures: str, salida: str, cfg: Config, trials_objetivo: int = 30,
                 cods[c] = cods.get(c, 0) + 1
     resumen = {"version": VERSION, "fecha_utc": datetime.now(timezone.utc).isoformat(),
                "captures": os.path.abspath(captures), "salida": os.path.abspath(salida),
+               "usuario": usuario,
                "archivos": int(len(qr)), "A": int(cuenta.get("A", 0)), "B": int(cuenta.get("B", 0)),
                "C": int(cuenta.get("C", 0)), "codigos_C": cods,
                "segmentos_corregidos": len(b_rows), "muestras_modificadas": len(bs_rows)}
@@ -909,12 +941,18 @@ def procesar(captures: str, salida: str, cfg: Config, trials_objetivo: int = 30,
 # ===========================================================================
 # CALIBRACIÓN con EEG real (ejecutar sobre capturas reales; no se ejecutó aquí)
 # ===========================================================================
-def calibrar(captures: str, salida_json: str, cfg: Config, limite: int | None = None) -> dict:
+def calibrar(captures: str, salida_json: str, cfg: Config, limite: int | None = None,
+             usuario: str | None = None) -> dict:
     """Mide la distribución VENTANA-A-VENTANA de ln(q) en registros sin canales inválidos
     y propone inflacion_sigma_ventana y z_deteccion. Es el dato que falta para fijar
     definitivamente los umbrales (sólo hay métricas por archivo, no por ventana)."""
     lq_all, escalas = [], []
-    rutas = descubrir_archivos(captures)[:limite] if limite else descubrir_archivos(captures)
+    rutas = (
+        rutas_de_usuario(captures, usuario)
+        if usuario is not None else descubrir_archivos(captures)
+    )
+    if limite:
+        rutas = rutas[:limite]
     m = np.array([cfg.escala_canal[c] for c in CANALES])
     for rel in rutas:
         i = evaluar_archivo(os.path.join(captures, rel), rel, cfg)
@@ -932,7 +970,7 @@ def calibrar(captures: str, salida_json: str, cfg: Config, limite: int | None = 
         raise SystemExit("sin registros válidos para calibrar")
     lq = np.concatenate(lq_all)
     s_win = float(sigma_robusta(lq[:, None])[0])
-    out = {"n_ventanas": int(lq.size), "sigma_log_ventana_robusta": round(s_win, 4),
+    out = {"usuario": usuario, "n_ventanas": int(lq.size), "sigma_log_ventana_robusta": round(s_win, 4),
            "inflacion_sigma_ventana_sugerida": round(s_win / cfg.sigma_log_archivo, 3),
            "percentiles_ln_q": {str(p): round(float(np.percentile(lq, p)), 4) for p in (50, 90, 99, 99.9, 99.99)},
            "q_equivalente": {str(p): round(float(np.exp(np.percentile(lq, p))), 3) for p in (99, 99.9, 99.99)},
@@ -962,25 +1000,29 @@ def default_captures_dir() -> str:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Control de calidad EEG: A sólo se reporta, B sobrescribe el original en captures/, C sólo se reporta.")
-    ap.add_argument("--captures", default=None, help="carpeta de señales; predeterminado: la carpeta captures/ más cercana en los ancestros del script")
-    ap.add_argument("--out", default=None, help="carpeta de reportes (por defecto, la carpeta de este script, chequeo_calidad/)")
+    ap.add_argument("usuario", help="nombre exacto de la carpeta del usuario dentro de captures/")
+    ap.add_argument("--captures", default=default_captures_dir(), help="raíz captures/; predeterminado: la carpeta captures/ más cercana en los ancestros del script")
+    ap.add_argument("--out", default=None, help="carpeta base de reportes; se crea dentro una subcarpeta con el usuario")
     ap.add_argument("--config", help="JSON con parámetros (ver parametros_usados.json)")
     ap.add_argument("--set", action="append", default=[], metavar="clave=valor", help="sobrescribe un parámetro")
     ap.add_argument("--trials-objetivo", type=int, default=30)
     ap.add_argument("--calibrar", action="store_true", help="solo calcula la distribución ventana-a-ventana (EEG real)")
     ap.add_argument("--limite", type=int)
     ap.add_argument("--silencioso", action="store_true")
-    ap.add_argument("--overwrite-reports", action="store_true", help="permite reemplazar reportes existentes; no restaura ni respalda archivos B originales")
+    ap.add_argument("--overwrite-reports", action="store_true", help="Compatibilidad: los reportes siempre se reemplazan; no restaura respaldos de señales B.")
     a = ap.parse_args(argv)
     d = {}
+
     if a.config:
         d.update(json.load(open(a.config, encoding="utf-8")))
     for kv in a.set:
         k, v = kv.split("=", 1)
         d[k] = json.loads(v)
     cfg = Config.desde_dict(d)
-    entrada = os.path.abspath(a.captures) if a.captures else default_captures_dir()
+    entrada = os.path.abspath(a.captures)
     salida = os.path.abspath(a.out) if a.out else os.path.dirname(os.path.abspath(__file__))
+    print(f"Salida: {salida}")
+    salida = carpeta_reportes_usuario(salida, a.usuario)
     if salida == entrada or salida.startswith(entrada + os.sep) or entrada.startswith(salida + os.sep):
         raise SystemExit("ERROR: captures y carpeta de reportes no pueden anidarse; el destino de reportes debe quedar fuera de captures.")
     if not os.path.isdir(entrada):
@@ -988,13 +1030,12 @@ def main(argv=None) -> int:
     if a.calibrar:
         os.makedirs(salida, exist_ok=True)
         calibration_path = os.path.join(salida, "calibracion_sugerida.json")
-        if os.path.exists(calibration_path) and not a.overwrite_reports:
-            ap.error(f"Ya existe {calibration_path}; elija otra --out o indique --overwrite-reports.")
-        print(json.dumps(calibrar(entrada, calibration_path, cfg, a.limite), indent=2))
+        print(json.dumps(calibrar(entrada, calibration_path, cfg, a.limite, a.usuario), indent=2))
         return 0
     try:
         r = procesar(entrada, salida, cfg, a.trials_objetivo, a.limite,
-                     not a.silencioso, overwrite_reports=a.overwrite_reports)
+                     not a.silencioso, overwrite_reports=a.overwrite_reports,
+                     usuario=a.usuario)
     except (OSError, ValueError) as exc:
         ap.error(str(exc))
     if not a.silencioso:

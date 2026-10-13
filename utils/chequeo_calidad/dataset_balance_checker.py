@@ -87,9 +87,6 @@ def discover_one(root: Path, names: set[str], explicit: str | Path | None, label
     candidates = direct
     if not candidates:
         candidates = sorted(p for p in root.rglob("*") if p.is_file() and p.name.casefold() in names)
-    if not candidates:
-        report_dir = Path(__file__).resolve().parent
-        candidates = [report_dir / name for name in sorted(names) if (report_dir / name).is_file()]
     # Multiple quality reports are common in a work tree; never guess which
     # classification snapshot the caller intended.
     unique = sorted(set(p.resolve() for p in candidates))
@@ -234,12 +231,22 @@ def exact_candidates(root: Path, filename: str) -> list[Path]:
     return matches
 
 
-def locate_physical(root: Path, filename: str) -> tuple[Path | None, str]:
+def locate_physical(
+    root: Path,
+    filename: str,
+    *,
+    basename_root: Path | None = None,
+    user_prefix: str | None = None,
+) -> tuple[Path | None, str]:
     parts, error = safe_relative_parts(filename)
     if parts is None:
         return None, f"RUTA_INSEGURA: {error}"
+    if user_prefix and parts[0] == user_prefix:
+        parts = parts[1:]
+        if not parts:
+            return None, "RUTA_INSEGURA: la ruta sólo identifica la carpeta del usuario"
     if len(parts) == 1:
-        matches = exact_candidates(root, parts[0])
+        matches = exact_candidates(basename_root or root, parts[0])
         if len(matches) > 1:
             return None, f"AMBIGUO: {len(matches)} archivos con el mismo nombre exacto"
         if not matches:
@@ -339,9 +346,29 @@ def _candidate_root(captures: Path, explicit: str | Path | None, default_root: b
     return None
 
 
+def _root_for_user(root: Path, usuario: str) -> tuple[Path, str | None]:
+    if root.name.casefold() == usuario.casefold():
+        return root, usuario
+    user_root = root / usuario
+    if user_root.is_dir() and not user_root.is_symlink():
+        return user_root, usuario
+    return root, None
+
+
+def default_captures_dir() -> Path:
+    """Find the nearest project captures/ directory above this script."""
+    directory = Path(__file__).resolve().parent
+    for parent in (directory, *directory.parents):
+        candidate = parent / "captures"
+        if candidate.is_dir():
+            return candidate
+    return directory / "captures"
+
+
 def run(
     captures: str | Path,
     *,
+    usuario: str | None = None,
     quality_report: str | Path | None = None,
     c_blacklist: str | Path | None = None,
     a_valid: str | Path | None = None,
@@ -352,21 +379,42 @@ def run(
     overwrite: bool = False,
     out: TextIO = sys.stdout,
 ) -> dict[str, int | str]:
+    del overwrite
     if minimum < 1:
         raise ValueError("--minimum debe ser un entero positivo.")
     capture_root = Path(captures).expanduser().resolve(strict=True)
     if not capture_root.is_dir():
         raise NotADirectoryError(f"--captures no es una carpeta: {capture_root}")
-    report_path = discover_one(capture_root, QUALITY_REPORT_NAMES, quality_report, "quality report", "quality-report", True)
-    c_path = discover_one(capture_root, C_BLACKLIST_NAMES, c_blacklist, "lista C", "c-blacklist", False)
+    if usuario is None or not usuario.strip():
+        raise ValueError("Se debe indicar un usuario.")
+    usuario = usuario.strip()
+    user_parts, user_error = safe_relative_parts(usuario)
+    if user_parts is None or len(user_parts) != 1 or user_parts[0] != usuario:
+        raise ValueError(f"El nombre de usuario debe ser una sola carpeta: {user_error or usuario!r}.")
+    user_capture_root = capture_root / usuario
+    if user_capture_root.is_symlink() or not user_capture_root.is_dir():
+        raise FileNotFoundError(f"No existe la carpeta del usuario en --captures: {user_capture_root}")
+    destination = Path(output_dir).expanduser().resolve()
+    if destination.name.casefold() != usuario.casefold():
+        destination = destination / usuario
+    report_path = discover_one(destination, QUALITY_REPORT_NAMES, quality_report, "quality report", "quality-report", True)
+    c_path = discover_one(destination, C_BLACKLIST_NAMES, c_blacklist, "lista C", "c-blacklist", False)
     records = load_quality_report(report_path)
     c_records = load_c_blacklist(c_path)
+    available_users = {record.usuario for record in records}
+    available_users.update(record.usuario for record in c_records)
+    if usuario not in available_users:
+        raise ValueError(
+            f"No se encontró el usuario {usuario!r} en el quality report ni en la lista C."
+        )
+    records = [record for record in records if record.usuario == usuario]
+    c_records = [record for record in c_records if record.usuario == usuario]
     records = merge_c_blacklist(records, c_records)
     c_history = [(record.usuario, record.clase) for record in c_records]
     # quality_filter now leaves A and overwrites B in the original captures tree.
     # Separate roots remain available for legacy datasets via explicit options.
-    a_root = _candidate_root(capture_root, a_valid, True)
-    b_root = _candidate_root(capture_root, b_corrected, True)
+    a_root = _candidate_root(user_capture_root, a_valid, True)
+    b_root = _candidate_root(user_capture_root, b_corrected, True)
 
     users = {r.usuario for r in records}
     users.update(user for user, _ in c_history)
@@ -418,17 +466,20 @@ def run(
         if classification == "C":
             balance.c += 1
             continue
-        physical_root = a_root if classification == "A" else b_root
-        if physical_root is None:
+        configured_root = a_root if classification == "A" else b_root
+        if configured_root is None:
             reason = "CARPETA_B_CORREGIDOS_NO_INDICADA"
             physical = None
         else:
+            physical_root, user_prefix = _root_for_user(configured_root, usuario)
             # Duplicate quality rows for the same logical trial count once.
             # If paths differ, inspect only exact paths and accept at most one.
             physical = None
             reasons: list[str] = []
             for record in sorted(group, key=lambda r: r.archivo):
-                found, loc_reason = locate_physical(physical_root, record.archivo)
+                found, loc_reason = locate_physical(
+                    physical_root, record.archivo, user_prefix=user_prefix
+                )
                 if found is None:
                     reasons.append(loc_reason)
                     continue
@@ -507,17 +558,9 @@ def run(
             "clases_incompletas": incomplete, "total_grabaciones_faltantes": missing_total,
         })
 
-    destination = Path(output_dir).expanduser().resolve()
-    for protected_root in {capture_root, a_root, b_root} - {None}:
+    for protected_root in {capture_root, user_capture_root, a_root, b_root} - {None}:
         if is_inside(destination, protected_root):
             raise ValueError(f"--output-dir debe estar fuera de las carpetas de EEG para no modificarlas: {destination}")
-    output_names = [
-        "reporte_balance_dataset.csv", "regrabar_resumen.csv", "regrabar_por_usuario.csv",
-        "matriz_usuario_clase.csv", "dataset_balance_incidencias.csv",
-    ]
-    existing_outputs = [destination / name for name in output_names if (destination / name).exists()]
-    if existing_outputs and not overwrite:
-        raise FileExistsError("Ya existen reportes de salida; no se sobrescriben. Use otra carpeta o --overwrite: " + ", ".join(map(str, existing_outputs)))
     destination.mkdir(parents=True, exist_ok=True)
     write_csv(destination / "reporte_balance_dataset.csv", BALANCE_FIELDS, balance_rows)
     write_csv(destination / "regrabar_resumen.csv", REGRABAR_FIELDS, regrab_rows)
@@ -575,17 +618,21 @@ def run(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Cuenta A físicamente disponibles y B corregidos por usuario/clase; nunca reanaliza calidad EEG."
+        description="Analiza un usuario: cuenta A físicamente disponibles y B corregidos por clase; nunca reanaliza calidad EEG."
     )
-    parser.add_argument("--captures", required=True, help="Raíz de las señales A/B disponibles; por defecto ambas clases se buscan aquí.")
-    parser.add_argument("--quality-report", help="CSV de quality_filter.py (si se omite, se busca bajo --captures y luego junto al checker).")
-    parser.add_argument("--c-blacklist", help="Lista C para conservar usuarios/clases con C eliminados; se busca bajo --captures y junto al checker.")
+    parser.add_argument("usuario", help="Nombre exacto del usuario (carpeta dentro de captures/).")
+    parser.add_argument(
+        "--captures", default=str(default_captures_dir()),
+        help="Raíz de las señales A/B disponibles (predeterminado: captures/ del proyecto).",
+    )
+    parser.add_argument("--quality-report", help="CSV del usuario (si se omite, se busca en la carpeta de reportes de ese usuario).")
+    parser.add_argument("--c-blacklist", help="Lista C del usuario; se busca en la carpeta de reportes de ese usuario.")
     parser.add_argument("--a-valid", help="Raíz explícita de A válidos; predeterminado: --captures.")
     parser.add_argument("--b-corrected", help="Raíz explícita de B corregidos si están separados; predeterminado: --captures.")
     parser.add_argument("--expected-classes", nargs="+", help="Clases esperadas, separadas por espacios o comas; incluye clases sin archivos.")
     parser.add_argument("--minimum", type=int, default=30, help="Mínimo por usuario/clase (predeterminado: 30).")
-    parser.add_argument("--output-dir", default=None, help="Carpeta para los CSV de salida (predeterminado: carpeta chequeo_calidad junto al checker).")
-    parser.add_argument("--overwrite", action="store_true", help="Permite reemplazar reportes previos en --output-dir; no modifica capturas.")
+    parser.add_argument("--output-dir", default=None, help="Carpeta base de reportes; se crea dentro una subcarpeta con el usuario.")
+    parser.add_argument("--overwrite", action="store_true", help="Compatibilidad: los reportes existentes siempre se reemplazan.")
     return parser
 
 
@@ -594,7 +641,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         run(
-            args.captures, quality_report=args.quality_report, c_blacklist=args.c_blacklist,
+            args.captures, usuario=args.usuario,
+            quality_report=args.quality_report, c_blacklist=args.c_blacklist,
             a_valid=args.a_valid, b_corrected=args.b_corrected,
             expected_classes=args.expected_classes, minimum=args.minimum,
             output_dir=args.output_dir or str(Path(__file__).resolve().parent), overwrite=args.overwrite,

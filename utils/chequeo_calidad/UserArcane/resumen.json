@@ -1,0 +1,14 @@
+{
+  "version": "2.0.0",
+  "fecha_utc": "2026-10-13T21:42:21.009126+00:00",
+  "captures": "C:\\Users\\usuario\\Desktop\\APP_BCI_PYQUE\\captures",
+  "salida": "C:\\Users\\usuario\\Desktop\\APP_BCI_PYQUE\\utils\\chequeo_calidad\\UserArcane",
+  "usuario": "UserArcane",
+  "archivos": 719,
+  "A": 717,
+  "B": 2,
+  "C": 0,
+  "codigos_C": {},
+  "segmentos_corregidos": 1,
+  "muestras_modificadas": 15
+}

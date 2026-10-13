@@ -92,7 +92,7 @@ def _metadata(entry: BlacklistEntry) -> dict[str, str]:
     }
 
 
-def load_blacklist(path: Path) -> tuple[list[BlacklistEntry], int]:
+def load_blacklist(path: Path, usuario: str | None = None) -> tuple[list[BlacklistEntry], int]:
     """Read exact target names from the CSV and de-duplicate identical rows.
 
     A CSV without a classification column is trusted as C-only only when its
@@ -102,7 +102,7 @@ def load_blacklist(path: Path) -> tuple[list[BlacklistEntry], int]:
     if not path.is_file():
         raise FileNotFoundError(f"No existe el CSV de lista negra: {path}")
     entries: list[BlacklistEntry] = []
-    seen: set[str] = set()
+    seen: set[tuple[str, str]] = set()
     duplicates = 0
     with path.open("r", encoding="utf-8-sig", newline="") as stream:
         reader = csv.DictReader(stream)
@@ -115,14 +115,22 @@ def load_blacklist(path: Path) -> tuple[list[BlacklistEntry], int]:
                 "El CSV no contiene una columna de nombre de archivo; se esperaba "
                 "'archivo' (o 'file'/'filename')."
             )
+        if usuario is not None and not any(name in headers for name in ("usuario", "user")):
+            raise ValueError(
+                "Para limitar la operación a un usuario, el CSV debe incluir una columna "
+                "'usuario' (o 'user')."
+            )
         trusted_c_list = path.name.casefold() in EXPECTED_BLACKLIST_NAMES
         for row in reader:
             row = {k: (v or "") for k, v in row.items() if k is not None}
             filename = str(row.get(filename_column, "")).strip()
+            user = _value(row, headers, ("usuario", "user"))
+            if usuario is not None and user != usuario:
+                continue
             if not filename:
                 # Keep invalid rows visible in the preview/report.
                 filename = ""
-            key = filename
+            key = (user, filename)
             if key in seen:
                 duplicates += 1
                 continue
@@ -152,7 +160,7 @@ def load_blacklist(path: Path) -> tuple[list[BlacklistEntry], int]:
                     reason_parts.append(v)
             entries.append(BlacklistEntry(
                 filename=filename,
-                user=_value(row, headers, ("usuario", "user")),
+                user=user,
                 task_class=_value(row, headers, ("clase", "task_class")),
                 trial=_value(row, headers, ("trial", "ensayo")),
                 reason=" | ".join(reason_parts),
@@ -218,7 +226,15 @@ def _walk_exact_basename(root: Path, basename: str) -> tuple[list[Path], list[Pa
     return files, directories
 
 
-def _candidate_for(entry: BlacklistEntry, root: Path, blacklist: Path, extensions: set[str]) -> Candidate:
+def _candidate_for(
+    entry: BlacklistEntry,
+    root: Path,
+    blacklist: Path,
+    extensions: set[str],
+    *,
+    usuario: str | None = None,
+    user_directory: Path | None = None,
+) -> Candidate:
     if entry.explicit_classification != "C":
         return Candidate(entry, "NO_ES_C", "El CSV no identifica explícitamente C ni es una lista C reconocida.")
     relative, error = _parse_relative_name(entry.filename)
@@ -238,7 +254,8 @@ def _candidate_for(entry: BlacklistEntry, root: Path, blacklist: Path, extension
         )
 
     if len(relative.parts) == 1:
-        file_matches, dir_matches = _walk_exact_basename(root, relative.name)
+        search_root = user_directory or root
+        file_matches, dir_matches = _walk_exact_basename(search_root, relative.name)
         # More than one exact basename (or a same-name directory) is not
         # uniquely identifiable. Never pick one using user/class/trial.
         if len(file_matches) > 1 or (file_matches and dir_matches):
@@ -249,7 +266,10 @@ def _candidate_for(entry: BlacklistEntry, root: Path, blacklist: Path, extension
             return Candidate(entry, "NO_ENCONTRADO", "No se encontró un archivo con ese nombre exacto.")
         target = file_matches[0]
     else:
-        target = root.joinpath(*relative.parts)
+        if user_directory is not None and relative.parts[0] != usuario:
+            target = user_directory.joinpath(*relative.parts)
+        else:
+            target = root.joinpath(*relative.parts)
         if not target.exists() and not target.is_symlink():
             return Candidate(entry, "NO_ENCONTRADO", "No se encontró esa ruta relativa exacta; no se buscaron nombres alternativos.")
 
@@ -272,6 +292,8 @@ def _candidate_for(entry: BlacklistEntry, root: Path, blacklist: Path, extension
         return Candidate(entry, "RUTA_INSEGURA_NO_ELIMINADA", "El objetivo es un enlace simbólico.")
     if not _is_inside(resolved, root):
         return Candidate(entry, "RUTA_INSEGURA_NO_ELIMINADA", "La ruta resuelta queda fuera de --captures.")
+    if user_directory is not None and not _is_inside(resolved, user_directory):
+        return Candidate(entry, "RUTA_FUERA_DE_USUARIO_NO_ELIMINADA", "La ruta resuelta queda fuera de la carpeta del usuario seleccionado.")
     if resolved == blacklist:
         return Candidate(entry, "ARCHIVO_LISTA_NEGRA_NO_ELIMINADO", "Se impide borrar el propio CSV de lista negra.")
     if not resolved.is_file():
@@ -293,18 +315,21 @@ def _candidate_for(entry: BlacklistEntry, root: Path, blacklist: Path, extension
 def _append_csv(path: Path, fields: list[str], rows: Iterable[dict[str, object]]) -> None:
     rows = list(rows)
     path.parent.mkdir(parents=True, exist_ok=True)
-    if path.exists():
-        with path.open("r", encoding="utf-8", newline="") as stream:
-            existing_header = next(csv.reader(stream), [])
-        if existing_header != fields:
-            raise ValueError(f"El reporte existente tiene un esquema distinto; no se sobrescribe: {path}")
-    write_header = not path.exists() or path.stat().st_size == 0
-    with path.open("a", encoding="utf-8", newline="") as stream:
+    with path.open("w", encoding="utf-8", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=fields, extrasaction="ignore")
-        if write_header:
-            writer.writeheader()
+        writer.writeheader()
         for row in rows:
             writer.writerow({key: row.get(key, "") for key in fields})
+
+
+def _validate_user(usuario: str) -> str:
+    usuario = usuario.strip()
+    if (
+        not usuario or usuario in {".", ".."}
+        or "/" in usuario or "\\" in usuario or PureWindowsPath(usuario).drive
+    ):
+        raise ValueError("El usuario debe ser el nombre de una sola carpeta dentro de --captures.")
+    return usuario
 
 
 def _not_found_row(candidate: Candidate) -> dict[str, str]:
@@ -349,6 +374,7 @@ def run(
     captures: str | Path,
     blacklist: str | Path,
     *,
+    usuario: str,
     delete: bool = False,
     dry_run: bool = False,
     yes: bool = False,
@@ -369,13 +395,25 @@ def run(
     captures_path = Path(captures).expanduser().resolve(strict=True)
     if not captures_path.is_dir():
         raise NotADirectoryError(f"--captures no es una carpeta: {captures_path}")
+    usuario = _validate_user(usuario)
+    user_directory = captures_path / usuario
+    if user_directory.is_symlink() or not user_directory.is_dir():
+        raise FileNotFoundError(f"No existe la carpeta del usuario dentro de --captures: {user_directory}")
     blacklist_path = Path(blacklist).expanduser().resolve(strict=True)
     report_path = Path(report_dir).expanduser().resolve()
+    if report_path.name.casefold() != usuario.casefold():
+        report_path = report_path / usuario
     ext_set = {e.casefold() if e.startswith(".") else f".{e.casefold()}" for e in extensions}
     if not ext_set:
         raise ValueError("Se debe permitir al menos una extensión.")
-    entries, duplicates = load_blacklist(blacklist_path)
-    candidates = [_candidate_for(e, captures_path, blacklist_path, ext_set) for e in entries]
+    entries, duplicates = load_blacklist(blacklist_path, usuario=usuario)
+    candidates = [
+        _candidate_for(
+            entry, captures_path, blacklist_path, ext_set,
+            usuario=usuario, user_directory=user_directory,
+        )
+        for entry in entries
+    ]
     found = [c for c in candidates if c.status == "ENCONTRADO"]
     not_found = [c for c in candidates if c.status == "NO_ENCONTRADO"]
     ambiguous = [c for c in candidates if c.status == "AMBIGUO_NO_ELIMINADO"]
@@ -408,7 +446,7 @@ def run(
         for item in blocked:
             print(f"- {item.entry.filename}: {item.status} — {item.detail}", file=out)
 
-    # Keep an append-only record of absent/ambiguous/unsafe blacklist rows.
+    # Replace the previous preview so each run reports only its current results.
     no_found_rows = [_not_found_row(c) for c in candidates if c.status != "ENCONTRADO"]
     _append_csv(report_path / "archivos_C_no_encontrados.csv", NOT_FOUND_FIELDS, no_found_rows)
 
@@ -429,7 +467,7 @@ def run(
                 "ambiguos": len(ambiguous), "fallidos": 0, "respaldados": 0,
             }
 
-        backup_root = Path(backup_dir).expanduser().resolve() if backup_dir else captures_path.parent / "backup_eliminados"
+        backup_root = Path(backup_dir).expanduser().resolve() if backup_dir else captures_path.parent / "backup_eliminados" / usuario
         delete_rows: list[dict[str, object]] = []
         for candidate in found:
             assert candidate.path is not None
@@ -490,6 +528,7 @@ def run(
     print("RESUMEN DE ELIMINACIÓN", file=out)
     print("=" * 40, file=out)
     print(f"Modo: {mode}", file=out)
+    print(f"Usuario analizado:             {usuario}", file=out)
     print(f"Archivos en lista negra:       {len(entries)}", file=out)
     print(f"Archivos encontrados:          {len(found)}", file=out)
     print(f"Archivos eliminados:           {deleted_count}", file=out)
@@ -503,7 +542,7 @@ def run(
         print("Reporte de eliminaciones:      no generado (DRY-RUN)", file=out)
     print(f"Reporte de no encontrados:     {report_path / 'archivos_C_no_encontrados.csv'}", file=out)
     return {
-        "modo": mode, "en_lista_negra": len(entries), "encontrados": len(found),
+        "modo": mode, "usuario": usuario, "en_lista_negra": len(entries), "encontrados": len(found),
         "eliminados": deleted_count, "no_encontrados": len(not_found),
         "ambiguos": len(ambiguous), "fallidos": failed_count, "respaldados": backed_up_count,
         "bloqueados": len(blocked), "duplicados": duplicates,
@@ -514,19 +553,30 @@ def _positive_extensions(values: list[str]) -> list[str]:
     return values
 
 
+def default_captures_dir() -> Path:
+    """Find the nearest project captures/ directory above this script."""
+    directory = Path(__file__).resolve().parent
+    for parent in (directory, *directory.parents):
+        candidate = parent / "captures"
+        if candidate.is_dir():
+            return candidate
+    return directory / "captures"
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Localiza y elimina únicamente EEG enumerados en una lista C de quality_filter.py."
     )
-    parser.add_argument("--captures", required=True, help="Carpeta raíz de las capturas EEG.")
-    parser.add_argument("--blacklist", help="CSV C generado por quality_filter.py (predeterminado: regrabar_archivos_C.csv junto al script).")
+    parser.add_argument("usuario", help="Nombre exacto de la carpeta del usuario dentro de captures/.")
+    parser.add_argument("--captures", default=str(default_captures_dir()), help="Carpeta raíz de las capturas EEG.")
+    parser.add_argument("--blacklist", help="CSV C del usuario generado por quality_filter.py (predeterminado: chequeo_calidad/<usuario>/regrabar_archivos_C.csv).")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--dry-run", action="store_true", help="Sólo preview. Es el comportamiento predeterminado.")
     mode.add_argument("--delete", action="store_true", help="Solicita confirmación y habilita eliminación física.")
     parser.add_argument("--yes", action="store_true", help="Omite la pregunta interactiva; requiere --delete.")
     parser.add_argument("--backup", action="store_true", help="Respalda y verifica cada archivo antes de eliminarlo.")
     parser.add_argument("--backup-dir", help="Directorio de respaldo; por defecto, sibling backup_eliminados/ fuera de captures.")
-    parser.add_argument("--report-dir", default=None, help="Directorio para los CSV de reportes (predeterminado: carpeta chequeo_calidad junto al script).")
+    parser.add_argument("--report-dir", default=None, help="Carpeta base para reportes; se crea dentro una subcarpeta con el usuario.")
     parser.add_argument("--extensions", nargs="+", default=[".csv"], help="Extensiones EEG permitidas (predeterminado: .csv).")
     return parser
 
@@ -536,11 +586,19 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.yes and not args.delete:
         parser.error("--yes sólo puede usarse junto con --delete.")
-    blacklist = args.blacklist or str(Path(__file__).resolve().parent / "regrabar_archivos_C.csv")
-    report_dir = args.report_dir or str(Path(__file__).resolve().parent)
+    try:
+        usuario = _validate_user(args.usuario)
+    except ValueError as exc:
+        parser.error(str(exc))
+    user_report_dir = Path(args.report_dir or Path(__file__).resolve().parent)
+    if user_report_dir.name.casefold() != usuario.casefold():
+        user_report_dir = user_report_dir / usuario
+    blacklist = args.blacklist or str(user_report_dir / "regrabar_archivos_C.csv")
+    report_dir = str(user_report_dir)
     try:
         run(
-            args.captures, blacklist, delete=args.delete, dry_run=args.dry_run,
+            args.captures, blacklist, usuario=usuario,
+            delete=args.delete, dry_run=args.dry_run,
             yes=args.yes, backup=args.backup, backup_dir=args.backup_dir,
             report_dir=report_dir, extensions=_positive_extensions(args.extensions),
         )

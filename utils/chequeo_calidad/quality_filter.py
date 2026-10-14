@@ -103,7 +103,7 @@ class Config:
     q_objetivo: float = 1.0                # amplitud tras corregir, en unidades de la referencia
     modo_ganancia: str = "segmento"        # "segmento": ganancia constante por zona + rampas (conserva la forma exacta)
                                            # "adaptativa": ganancia por muestra g=f(q) (iguala la envolvente; distorsiona la envolvente)
-    piso_abs_uv: float = 30.0              # REAL: p95 de sigma robusta por canal-archivo (30.6 uV)
+    piso_abs_uv: float = 25.0              # REAL: p95 de sigma robusta por canal-archivo (30.6 uV)
     rampa_muestras: int = 5                # suavizado final de la ganancia
     fusion_hueco: int = 8                  # une zonas separadas <= 8 muestras
     # --- fiabilidad de la referencia (B vs C) ----------------------------
@@ -382,7 +382,7 @@ def analizar_registro(X: np.ndarray, cfg: Config) -> Analisis:
         return _cerrar_C(res, N, C)
 
     Q_det, Q_ini, piso = cfg.q_deteccion, cfg.q_inicio, cfg.piso_abs_uv
-    core = (q > Q_det) & (A > piso)
+    core = (q > Q_det) & (A > piso) | (A > 150.0)
     cand = (q > Q_ini) & (A > piso)
     region = np.zeros((N, C), dtype=bool)
     for j in range(C):

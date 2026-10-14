@@ -1,0 +1,425 @@
+@startuml
+title DIAGRAMA DE CLASES - Sistema Completo BCI / PyQt6
+
+skinparam backgroundColor #FAFBFC
+skinparam shadowing false
+skinparam roundcorner 15
+skinparam class {
+    BackgroundColor #FFFFFF
+    BorderColor #334155
+    ArrowColor #475569
+    FontColor #0F172A
+    AttributeFontColor #334155
+    MethodFontColor #334155
+    HeaderFontColor #0F172A
+}
+
+class MainWindow <<QMainWindow>> {
+    - menu : Menu
+    --
+    + __init__(self)
+    + closeEvent(self, event : QCloseEvent)
+    + close_application(self)
+}
+
+class Menu <<QWidget>> {
+    - signals_window : SignalsWindow
+    - keyboard_window : KeyboardWindow
+    - train_window : TrainWindow
+    - serial_window : SerialConfiguration
+    - capture_window : CaptureWindow
+    - speller_config_window : SpellerConfigurationWindow
+    - recordingShowWindow : RecordingShowedWindow
+    - controller_serial_config : ControllerSerialConfig
+    - controller_keyboard : ControllerKeyboardCapture
+    - controller_save_capture : controllerSaveCapture
+    - predictor_controller : PredictorController
+    --
+    + __init__(self, parent=None)
+    + setup_ui(self)
+    + closeEvent(self, event : QCloseEvent)
+    + quit_application(self)
+    + open_signals_window(self)
+    + open_grid_window(self)
+    + open_train_window(self)
+    + open_capture_window(self)
+    + open_config_serial_window(self)
+    + open_recording_show_window(self)
+}
+
+class SignalsWindow <<QMainWindow>> {
+    - data_queue : Queue[cite: 2, 3]
+    - sixteen_channels : list
+    - apply_filter : bool
+    - overlay_mode : bool
+    - serial_thread : QThread
+    - port : str[cite: 2, 3]
+    - baudrate : int[cite: 2, 3]
+    - sixteen_channels_mode : bool
+    - use_emotiv : bool
+    --
+    + __init__(self)
+    + setup_ui(self)
+    + toggle_test_mode(self, state)
+    + toggle_channels(self, state)
+    + toggle_emotiv(self, state)
+    + set_channel_mode(self, sixteen_mode : bool)
+    + toggle_overlay(self, state)
+    + set_apply_filter(self, state)
+    + on_emotiv_quality(self, quality_dict)
+    + _rebuild_plots(self)
+    + on_plot_update(self, times, all_values, channels)
+    + start_serial(self)[cite: 2, 3]
+    + on_serial_error(self, msg : str)
+    + stop_serial(self)[cite: 2, 3]
+    + process_queue_to_buffer(self)
+    + update_plot(self, row=None)
+    + update_serial_config(self, port, baudrate)[cite: 2, 3]
+    + closeEvent(self, event)
+    + stop_recording(self)[cite: 2, 5, 6]
+    + start_recording(self, duration=2)[cite: 2, 5, 6]
+    + return_recorded_data(self)[cite: 2, 5, 6]
+    + check_registers(self, print_output=True)
+    + printRegisters(self)
+    + checkRegisterLOFF_STATP(self)
+    + print_disconnected_channels(self)
+}
+
+class SerialReader <<QThread>> {
+    - port : str
+    - baudrate : int
+    - data_queue : Queue
+    --
+    + __init__(self, port, baudrate, data_queue, sixteen_mode)
+    + printRegisters(self)
+    + run(self)
+    + stop(self)
+}
+
+class EmotivReader <<QThread>> {
+    - data_queue : Queue
+    - running : bool
+    - cipher
+    - decoder : EmotivPacketDecoder
+    --
+    + __init__(self, data_queue)
+    + run(self)
+    + stop(self)
+}
+
+class EmotivPacketDecoder {
+    - sensors : dict
+    - battery_raw
+    - battery_percent
+    --
+    + __init__(self)
+    + decode(self, raw_data)
+}
+
+class PlottingThread <<QThread>> {
+    - data_buffer
+    - buffer_lock
+    - plots
+    - filter : EEGFilter
+    --
+    + __init__(self, data_buffer, buffer_lock, plots, channels, apply_filter)
+    + run(self)
+    + stop(self)
+    + set_apply_filter(self, apply_filter)
+}
+
+class RecordingThread <<QThread>> {
+    - recording_queue : Queue
+    - filter : EEGFilter
+    - duration
+    --
+    + __init__(self)
+    + start_recording(self, columns_df, duration)
+    + stop_recording(self)
+    + get_recorded_data(self)
+    + get_filtered_recording_df(self)
+    + run(self)
+}
+
+class EEGFilter {
+    - fs : int[cite: 2, 6, 7]
+    - use_notch : bool
+    - use_bandpass : bool
+    --
+    + __init__(self, fs=250, low=0.5, high=40, notch_freq=60, use_bandpass=False, use_notch=True)
+    + apply(self, signal)
+}
+
+class SerialConfiguration <<QWidget>> {
+    - controller_serial_config : ControllerSerialConfig
+    - port : QComboBox
+    - baudrate : QLineEdit
+    --
+    + __init__(self, controller_serial_config : ControllerSerialConfig)
+    + configure_serial(self)
+    + get_port(self)
+    + get_baudrate(self)
+}
+
+class ControllerSerialConfig {
+    - signals_window : SignalsWindow
+    --
+    + __init__(self, signals_window)
+    + update_serial_config(self, port, baudrate)
+}
+
+class KeyboardWindow <<QWidget>> {
+    - training_mode : bool
+    - buttons_list : list
+    - output_line : OutputLine
+    --
+    + __init__(self, training_mode=False)
+    + setup_ui(self)
+    + button_clicked(self, button)
+    + flash_button(self, button, duration=1.0, COLOR="#00FF00")[cite: 4, 5]
+    + add_character(self, char)[cite: 4, 6]
+    + start_paradigm(self, times=5)
+    + show_grid(self)
+    + closeEvent(self, event : QCloseEvent)
+    + quit(self)
+}
+
+class OutputLine <<QWidget>> {
+    - label : QLineEdit
+    --
+    + __init__(self, text)
+    + set_text(self, text)
+    + add_character(self, char)
+}
+
+class ControllerKeyboardCapture {
+    - keyboard_window : KeyboardWindow[cite: 4, 5]
+    - flash_idx : int
+    - flash_list : list
+    --
+    + __init__(self, WindowKeyboard : KeyboardWindow)[cite: 4, 5]
+    + flash_character(self, character, duration=0.5)[cite: 4, 5]
+    + start_simulation(self)
+    + _flash_step(self, flash_time)
+    + hide_grid(self)[cite: 4, 5]
+}
+
+class CaptureWindow <<QWidget>> {
+    - controller_keyboard : ControllerKeyboardCapture
+    - controller_save_capture : controllerSaveCapture
+    - keyboard_window : KeyboardWindow
+    --
+    + __init__(self, ControllerKeyboard=None, ControllerSaveCapture=None)
+    + setup_ui(self)
+    + update_character_options(self)
+    + show_path(self)
+    + load_users(self)
+    + create_user(self)
+    + start_capture(self)
+    + start_n_times(self)
+    + quit(self)
+}
+
+class controllerSaveCapture {
+    - serial_monitor : SignalsWindow[cite: 5, 6]
+    - duration : int
+    --
+    + __init__(self, serial_monitor : SignalsWindow)
+    + save_capture(self, callback=None)[cite: 5, 6]
+    + save_capture_edf(self)
+    + start_capture(self, user, character_type, character, duration, callback=None, online=False)[cite: 5, 6]
+    + start_capture_n_times(self, user, character_type, character, duration, times, controller_keyboard)
+}
+
+class SpellerConfigurationWindow <<QWidget>> {
+    - predict_controller : PredictorController
+    - save_capture_controller : controllerSaveCapture
+    - keyboard_window : KeyboardWindow
+    - user : str
+    - model_name : str
+    - model_path : str
+    --
+    + __init__(self, predict_controller=None, save_capture_controller=None, keyboard_window=None)
+    + setup_ui(self)
+    + save_configuration(self)
+    + start_capture_trial(self)
+    + show_grid(self)
+    + hide_grid(self)
+    + predict_character(self)
+    + start_chess_flashes(self)
+    + quit(self)
+}
+
+class PredictorController {
+    - model
+    - bci_predictor : HierarchicalBCIPredictor
+    - model_path : str
+    --
+    + __init__(self, model=None)
+    + predict(self, user, recording_path)
+    + set_model_path(self, model_path)
+    + get_prediction(self, path_file)
+    + get_predictionBCIHierarchichal(self, path_file)
+}
+
+class HierarchicalBCIPredictor {
+    - extractor : EEGFeatureExtractor
+    - super_bundle : dict
+    - group_bundles : dict
+    - feature_columns : list
+    --
+    + __init__(self, usuario=None, model_path=None, use_flash_segmentation=False)
+    + preprocess_signals(self, signals)
+    + _predict_with_bundle(self, bundle, feat_df)
+    + predict_from_signals(self, signals)
+    + predict_from_repetitions(self, lista_signals)
+    + predict_from_csv_list(self, paths)
+    + predict_from_csv(self, path)
+}
+
+class EEGFeatureExtractor {
+    - fs : int[cite: 6, 7]
+    --
+    + __init__(self, fs)[cite: 6, 7]
+    + {static} safe(name)
+    + extract_features(self, signals, window_size=60, overlap=0.5)[cite: 6, 7]
+}
+
+class TrainWindow <<QMainWindow>> {
+    - training_thread : TrainingThread
+    - models : list
+    - channel_map : ChannelMapWidget
+    - channel_checkboxes : dict
+    --
+    + __init__(self)
+    + setup_ui(self)
+    + show_models(self)
+    + get_model(self)
+    + get_user(self)
+    + get_path(self)
+    + show_users(self)
+    + getSelectedChannels(self)
+    + getSelectedFs(self)
+    + start_training(self)
+    + closeEvent(self, event)
+}
+
+class TrainingThread <<QThread>> {
+    - training_args : dict
+    --
+    + __init__(self, training_args, parent=None)
+    + run(self)
+}
+
+class ChannelMapWidget <<QWidget>> {
+    - checkboxes : dict
+    - channel_labels : dict
+    --
+    + __init__(self, channel_names, parent=None)
+    + sizeHint(self)
+    + resizeEvent(self, event)
+    + paintEvent(self, event)
+}
+
+class ChannelNodeCheckBox <<QCheckBox>> {
+    + __init__(self, channel)
+    + paintEvent(self, event)
+}
+
+class controllerTraining {
+    - pipeline_lda : PipelineCompletoLDA
+    --
+    + __init__(self)
+    + save_model(self, path)
+    + get_label(self, file_name : str)
+    + generate_data_set_by_files(self, path, files)
+    + create_df(self, path)
+}
+
+class SafeLDA {
+    + fit(self, X, y)
+}
+
+class HierarchicalTrainer <<modulo funciones>> {
+    + build_dataset()
+    + train_optimized_hierarchical(channels=None, fs=None, use_p300window=False)
+}
+
+class RecordingShowedWindow <<QWidget>> {
+    - combo_box_users : QComboBox
+    - combo_box_dirs : QComboBox
+    - combo_box_files : QComboBox
+    - checkbox_notch : QCheckBox
+    - checkbox_baseline : QCheckBox
+    - checkbox_zcore : QCheckBox
+    - checkbox_overlay_ploting : QCheckBox
+    --
+    + __init__(self)
+    + setup_ui(self)
+    + load_users(self)
+    + load_dirs(self)
+    + load_files(self)
+    + show_plot(self)
+    + close_window(self)
+    + graficar_captura(self, user, letter, capture_number, apply_notch=False, clear_baseline=False, use_zcore=False, file_path=None)
+    + graficar_captura_sobrepuesta(self, user, letter, capture_number, apply_notch=False, clear_baseline=False, use_zcore=False, file_path=None)
+    + closeEvent(self, event : QCloseEvent)
+}
+
+MainWindow *-- Menu : contiene
+Menu --> SignalsWindow
+Menu --> KeyboardWindow
+Menu --> TrainWindow
+Menu --> SerialConfiguration
+Menu --> CaptureWindow
+Menu --> SpellerConfigurationWindow
+Menu --> RecordingShowedWindow
+Menu --> ControllerSerialConfig
+Menu --> ControllerKeyboardCapture
+Menu --> controllerSaveCapture
+Menu --> PredictorController
+
+SignalsWindow o-- SerialReader : crea/controla
+SignalsWindow o-- EmotivReader : crea/controla
+SignalsWindow o-- PlottingThread : crea/controla
+SignalsWindow o-- RecordingThread : crea/controla
+EmotivReader --> EmotivPacketDecoder : decodifica
+PlottingThread --> EEGFilter
+RecordingThread --> EEGFilter
+
+SerialConfiguration ..> ControllerSerialConfig : configura
+ControllerSerialConfig --> SignalsWindow : aplica puerto/baudrate
+
+KeyboardWindow *-- OutputLine : contiene
+ControllerKeyboardCapture --> KeyboardWindow : flash / hide
+
+CaptureWindow ..> ControllerKeyboardCapture : captura / flash
+CaptureWindow ..> controllerSaveCapture : almacenamiento
+controllerSaveCapture --> SignalsWindow : EEG grabado[cite: 5, 6]
+ControllerKeyboardCapture --> KeyboardWindow
+
+SpellerConfigurationWindow ..> PredictorController : prediccion online
+SpellerConfigurationWindow ..> controllerSaveCapture : trial UNKNOWN
+SpellerConfigurationWindow --> KeyboardWindow : paradigma ajedrez
+PredictorController --> HierarchicalBCIPredictor : inferencia
+HierarchicalBCIPredictor --> EEGFeatureExtractor : caracteristicas
+
+TrainWindow *-- TrainingThread : crea
+TrainWindow *-- ChannelMapWidget : canales
+ChannelMapWidget *-- ChannelNodeCheckBox
+TrainWindow ..> controllerTraining : inicia entrenamiento
+TrainingThread --> controllerTraining : train_model(**args)
+controllerTraining --> SafeLDA
+controllerTraining --> HierarchicalTrainer
+HierarchicalTrainer --> EEGFeatureExtractor
+HierarchicalTrainer --> SafeLDA
+
+legend bottom
+
+|= Relacion |= Significado |
+| *-- | Composicion / contiene |
+| o-- | Agregacion |
+| --> | Utiliza |
+| ..> | Interaccion vista-controlador |
+endlegend
+@enduml

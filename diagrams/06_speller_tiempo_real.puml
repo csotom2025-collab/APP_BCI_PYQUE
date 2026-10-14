@@ -1,0 +1,131 @@
+@startuml
+title DIAGRAMA DE CLASES - Speller y prediccion en tiempo real
+
+skinparam backgroundColor #FAFBFC
+skinparam shadowing false
+skinparam roundcorner 15
+skinparam class {
+    BackgroundColor #FFFFFF
+    BorderColor #334155
+    ArrowColor #475569
+    FontColor #0F172A
+    AttributeFontColor #334155
+    MethodFontColor #334155
+    HeaderFontColor #0F172A
+}
+
+class SpellerConfigurationWindow <<QWidget>> {
+    - predict_controller : PredictorController
+    - save_capture_controller : controllerSaveCapture
+    - keyboard_window : KeyboardWindow
+    '- models_directory : str
+    '- black_screen : BlackScreen
+    - user : str
+    - model_name : str
+    - model_path : str
+    '- new_record_path : str
+    --
+    '+ __init__(self, predict_controller=None, save_capture_controller=None, keyboard_window=None)
+    + setup_ui(self)
+    + save_configuration(self)
+    '+ load_models(self)
+    '+ set_model_path(self, model_path)
+    '+ load_users(self, users=None)
+    + start_capture_trial(self)
+    + show_grid(self)
+    '+ show_grid_after_rest(self)
+    + hide_grid(self)
+    '+ isBlackScreenVisible(self)
+    + predict_character(self)
+    + start_chess_flashes(self)
+    '+ closeEvent(self, event : QCloseEvent)
+    + quit(self)
+}
+
+class PredictorController {
+    - model
+    - bci_predictor : HierarchicalBCIPredictor
+    - model_path : str
+    --
+    + __init__(self, model=None)
+    + predict(self, user, recording_path)
+    + set_model_path(self, model_path)
+    + get_prediction(self, path_file)
+    + get_predictionBCIHierarchichal(self, path_file)
+}
+
+class HierarchicalBCIPredictor {
+    /'- bundle : dict
+    - usuario : str
+    - use_flash_segmentation : bool
+    - channel_names : list
+    - fs : int
+    - use_p300_window_only : bool
+    - p300_window_s
+    - apply_baseline : bool'/
+    - extractor : EEGFeatureExtractor
+    - super_bundle : dict
+    - group_bundles : dict
+    - feature_columns : list
+    --
+    '+ __init__(self, usuario=None, model_path=None, use_flash_segmentation=False)
+    '+ _crop_p300(self, signals)
+    + preprocess_signals(self, signals)
+    '+ _signals_to_features(self, signals, return_artifact_info=False)
+    '+ _signals_to_feature_row(self, signals, return_artifact_info=False)
+    + _predict_with_bundle(self, bundle, feat_df)
+    '+ predict_from_signals(self, signals)
+    '+ predict_from_repetitions(self, lista_signals)
+    + predict_from_csv_list(self, paths)
+    + _load_csv_as_signals(self, path)
+    + predict_from_csv(self, path)
+}
+
+class EEGFeatureExtractor {
+    - fs : int
+    --
+    + __init__(self, fs)
+    + {static} safe(name)
+    + extract_features(self, signals,window_size=60, overlap=0.5)
+}
+
+class controllerSaveCapture {
+    - serial_monitor : SignalsWindow
+    --
+    + start_capture(self, user, character_type, character, duration)
+    + save_capture(self, callback=None)
+}
+
+class KeyboardWindow <<QWidget>> {
+    + start_paradigm(self, times=5)
+    + add_character(self, char)
+    + show_grid(self)
+}
+
+class SignalsWindow <<QMainWindow>> {
+    + start_recording(self, duration=2)
+    + return_recorded_data(self)
+}
+
+SpellerConfigurationWindow ..> PredictorController : prediccion online
+SpellerConfigurationWindow ..> controllerSaveCapture : trial UNKNOWN
+SpellerConfigurationWindow --> KeyboardWindow : paradigma ajedrez
+PredictorController --> HierarchicalBCIPredictor : inferencia
+HierarchicalBCIPredictor --> EEGFeatureExtractor : caracteristicas
+controllerSaveCapture --> SignalsWindow : grabacion EEG
+
+note right of SpellerConfigurationWindow
+Flujo tiempo real:
+1. save_configuration() / set_model_path()
+2. start_capture_trial()
+3. start_chess_flashes() + start_capture(..., online=True)
+4. predict_character()
+5. keyboard_window.add_character(caracter)
+end note
+
+legend bottom
+|= Relacion |= Significado |
+| --> | Utiliza |
+| ..> | Interaccion vista-controlador |
+endlegend
+@enduml

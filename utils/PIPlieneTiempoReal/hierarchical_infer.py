@@ -30,7 +30,7 @@ from eeg_features import (
     log_transform_power_columns
 )
 from p300_segmentation import extract_with_flash_segmentation
-from lda_utils import SafeLDA  # noqa: F401 — necesario para que joblib deserialice SafeLDA correctamente
+from lda_utils import SafeLDA, ZeroThresholdLDA  # noqa: F401 — requerido para deserializar los pipelines LDA
 
 
 class HierarchicalBCIPredictor:
@@ -250,7 +250,8 @@ class HierarchicalBCIPredictor:
     def _predict_with_bundle(self, bundle, feat_df):
         """
         Pasa todas las ventanas (filas de feat_df) al clasificador.
-        Evalúa cada ventana y combina las predicciones mediante soft voting (promedio de probabilidades).
+        Combina los scores LDA binarios con frontera cero; los demás modelos
+        conservan el soft voting por promedio de probabilidades.
         
         Retorna:
             pred_label: clase ganadora global
@@ -283,8 +284,18 @@ class HierarchicalBCIPredictor:
         window_details = []
         if hasattr(pipeline, "predict_proba"):
             all_probas = pipeline.predict_proba(X)  # shape: (n_ventanas, n_clases)
-            avg_probas = np.mean(all_probas, axis=0)  # Soft voting entre las 4 ventanas
-            pred_idx = np.argmax(avg_probas)
+            if isinstance(pipeline.named_steps.get("lda_clf"), ZeroThresholdLDA):
+                avg_score = float(np.mean(pipeline.decision_function(X)))
+                positive_probability = float(
+                    np.exp(-np.logaddexp(0.0, -avg_score))
+                )
+                avg_probas = np.array(
+                    [1.0 - positive_probability, positive_probability]
+                )
+                pred_idx = int(avg_score > 0)
+            else:
+                avg_probas = np.mean(all_probas, axis=0)
+                pred_idx = np.argmax(avg_probas)
             pred_label = clases[pred_idx]
             proba_dict = dict(sorted(zip(clases, avg_probas), key=lambda kv: -kv[1]))
 

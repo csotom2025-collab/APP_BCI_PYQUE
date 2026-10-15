@@ -25,3 +25,13 @@ class SafeLDA(LinearDiscriminantAnalysis):
         if self.n_components is not None and self.n_components > max_comp:
             self.n_components = max_comp
         return super().fit(X, y)
+
+
+class ZeroThresholdLDA(LinearDiscriminantAnalysis):
+    """Binary LDA classifier whose decision boundary is exactly zero."""
+
+    def predict(self, X):
+        if len(self.classes_) != 2:
+            raise ValueError("ZeroThresholdLDA requiere exactamente dos clases.")
+        scores = self.decision_function(X)
+        return self.classes_[(scores > 0).astype(int)]

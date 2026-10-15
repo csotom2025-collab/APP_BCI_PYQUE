@@ -28,7 +28,6 @@ import warnings
 warnings.filterwarnings("ignore")
 
 from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.pipeline import Pipeline
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.model_selection import StratifiedKFold, cross_val_predict
@@ -39,7 +38,7 @@ from sklearn.ensemble import VotingClassifier
 from sklearn.metrics import confusion_matrix, accuracy_score, f1_score
 # pyrefly: ignore [missing-import]
 from xgboost import XGBClassifier 
-from lda_utils import SafeLDA
+from lda_utils import SafeLDA, ZeroThresholdLDA
 import config
 from eeg_features import get_feature_sets, log_transform_power_columns
 
@@ -101,15 +100,35 @@ def build_classifiers(n_classes):
     }
 
 
+def build_binary_lda_classifiers():
+    """Candidatos LDA binarios para elegir solver y shrinkage por validación."""
+    return {
+        "LDA_SVD": ZeroThresholdLDA(solver="svd"),
+        "LDA_LSQR_AUTO": ZeroThresholdLDA(solver="lsqr", shrinkage="auto"),
+        "LDA_LSQR_0.1": ZeroThresholdLDA(solver="lsqr", shrinkage=0.1),
+        "LDA_LSQR_0.5": ZeroThresholdLDA(solver="lsqr", shrinkage=0.5),
+        "LDA_LSQR_0.9": ZeroThresholdLDA(solver="lsqr", shrinkage=0.9),
+        "LDA_EIGEN_AUTO": ZeroThresholdLDA(solver="eigen", shrinkage="auto"),
+        "LDA_EIGEN_0.5": ZeroThresholdLDA(solver="eigen", shrinkage=0.5),
+    }
+
+
+def classifiers_for_group(classifiers, n_classes):
+    """Usa LDA optimizado con umbral cero para grupos binarios."""
+    if n_classes == 2:
+        return build_binary_lda_classifiers()
+    return classifiers
+
+
 # ===========================================================================================
 # PASO 2: PIPELINE CON LDA OPTIMIZADO PARA ARQUITECTURA JERÁRQUICA
 # ===========================================================================================
 def build_pipeline_hierarchical(clf, n_components, n_features_in, k_best=None,
                                  use_double_lda=True):
     """
-    Pipeline dinámico adaptado para evitar fallos en clasificación binaria (Color).
-    Si n_components == 1 (Verde vs Azul), usa 1 solo LDA directo para evitar redundancia.
-    Si n_components >= 2 (Comandos finos), activa la cascada doble.
+    Escala y selecciona características antes del clasificador.
+    ZeroThresholdLDA se ajusta directamente para clasificar con frontera cero;
+    los demás clasificadores conservan la proyección LDA previa.
     """
     steps = [("scaler", StandardScaler())]
 
@@ -122,6 +141,11 @@ def build_pipeline_hierarchical(clf, n_components, n_features_in, k_best=None,
         k_dinamico = max(1, int(n_features_in * 0.8))
         steps.append(("select", SelectKBest(f_classif, k=k_dinamico)))
         effective_features = k_dinamico
+
+    from sklearn.base import clone
+    if isinstance(clf, ZeroThresholdLDA):
+        steps.append(("lda_clf", clone(clf)))
+        return Pipeline(steps)
 
     # Asegurar componentes seguros
     n_comp_safe = min(n_components, effective_features - 1, 200)
@@ -152,7 +176,6 @@ def build_pipeline_hierarchical(clf, n_components, n_features_in, k_best=None,
         steps.append(("lda_simple", SafeLDA(
             solver="eigen", shrinkage="auto", n_components=n_comp_safe)))
 
-    from sklearn.base import clone
     steps.append(("clf", clone(clf)))
 
     return Pipeline(steps)
@@ -256,6 +279,11 @@ def evaluate_all_hierarchical(df, verbose=True):
                        ["usuario", "tpComando", "letra", "trial", "label", "color"]]
     df_for_color = df_color.copy()
     df_for_color["label"] = df_for_color["color"]
+    color_classifiers = (
+        build_binary_lda_classifiers()
+        if df_for_color["label"].nunique() == 2
+        else classifiers
+    )
     df_for_color[feature_cols_all] = log_transform_power_columns(
         df_for_color[feature_cols_all], feature_cols_all
     )
@@ -265,7 +293,7 @@ def evaluate_all_hierarchical(df, verbose=True):
     for set_name, cols in feature_sets.items():
         if verbose:
             print(f"\n{set_name} ({len(cols)} features):")
-        for clf_name, clf in classifiers.items():
+        for clf_name, clf in color_classifiers.items():
             acc_m, acc_s, f1_m, f1_s, y_pred, le, y_true = evaluate_combination(
                 df_for_color, cols, "color", clf_name, clf,
                 n_components=1, k_best=250, cv_splits=5, verbose=verbose
@@ -319,6 +347,9 @@ def evaluate_all_hierarchical(df, verbose=True):
 
         df_super = df_color_group.copy()
         df_super["label"] = df_super["tpComando"]
+        super_classifiers = classifiers_for_group(
+            classifiers, df_super["label"].nunique()
+        )
         df_super[feature_cols_all] = log_transform_power_columns(
             df_super[feature_cols_all], feature_cols_all
         )
@@ -327,7 +358,7 @@ def evaluate_all_hierarchical(df, verbose=True):
         best_f1 = -1
 
         for set_name, cols in feature_sets.items():
-            for clf_name, clf in classifiers.items():
+            for clf_name, clf in super_classifiers.items():
                 acc_m, acc_s, f1_m, f1_s, y_pred, le, y_true = evaluate_combination(
                     df_super, cols, f"super-{color}", clf_name, clf,
                     n_components=2, k_best=250, cv_splits=5, verbose=verbose
@@ -406,10 +437,11 @@ def evaluate_all_hierarchical(df, verbose=True):
             )
             feature_sets = get_feature_sets(feature_cols_all)
             n_components = max(1, min(len(fine_classes) - 1, 50))
+            fine_classifiers = classifiers_for_group(classifiers, len(fine_classes))
             best_f1 = -1
 
             for set_name, cols in feature_sets.items():
-                for clf_name, clf in classifiers.items():
+                for clf_name, clf in fine_classifiers.items():
                     acc_m, acc_s, f1_m, f1_s, y_pred, le, y_true = evaluate_combination(
                         df_fine, cols, f"{color}-{grupo}", clf_name, clf,
                         n_components=n_components, k_best=250,

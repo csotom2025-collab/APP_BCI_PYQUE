@@ -1,0 +1,55 @@
+[escaneo] 6659 CSV candidatos (ignorarSenales excluida)
+[integridad] 500/6659
+[integridad] 1000/6659
+[integridad] 1500/6659
+[integridad] 2000/6659
+[integridad] 2500/6659
+[integridad] 3000/6659
+[integridad] 3500/6659
+[integridad] 4000/6659
+[integridad] 4500/6659
+[integridad] 5000/6659
+[integridad] 5500/6659
+[integridad] 6000/6659
+[integridad] 6500/6659
+[metricas] 367808 filas = 6568 archivos x 14 canales x 4 etapas
+[R] UserAkatzin/Letters: n=299
+[R] UserAkatzin/Numbers: n=301
+[R] UserAkatzin/__TODAS__: n=600
+[R] UserArcane/Controls: n=88
+[R] UserArcane/Letters: n=481
+[R] UserArcane/__TODAS__: n=577
+[R] UserAxel/Letters: n=300
+[R] UserAxel/Numbers: n=290
+[R] UserAxel/__TODAS__: n=590
+[R] UserCMSM/Controls: n=120
+[R] UserCMSM/Letters: n=803
+[R] UserCMSM/Numbers: n=298
+[R] UserCMSM/__TODAS__: n=1224
+[R] UserJorge/Controls: n=87
+[R] UserJorge/Letters: n=783
+[R] UserJorge/Numbers: n=301
+[R] UserJorge/__TODAS__: n=1171
+[R] UserMar/Controls: n=90
+[R] UserMar/Letters: n=212
+[R] UserMar/__TODAS__: n=302
+[R] UserMartinEpoc/Controls: n=90
+[R] UserMartinEpoc/Letters: n=806
+[R] UserMartinEpoc/Numbers: n=299
+[R] UserMartinEpoc/__TODAS__: n=1195
+[R] UserOmar/Letters: n=300
+[R] UserOmar/__TODAS__: n=300
+[R] UserPony/Letters: n=299
+[R] UserPony/Numbers: n=262
+[R] UserPony/__TODAS__: n=561
+
+--- RESUMEN ---
+descubiertos : 6659
+incluidos    : 6568
+excluidos    : 91
+   n_muestras_insuficiente: 91
+filas parquet: 367808
+REQUIERE DECISION: 3
+   - longitud_no_nominal
+   - reconstruccion_de_sesiones
+   - agrupacion_para_R

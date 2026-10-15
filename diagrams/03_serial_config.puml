@@ -1,0 +1,52 @@
+@startuml
+title DIAGRAMA DE CLASES - Configuracion Serial ADS1299
+
+skinparam backgroundColor #FAFBFC
+skinparam shadowing false
+skinparam roundcorner 15
+skinparam class {
+    BackgroundColor #FFFFFF
+    BorderColor #334155
+    ArrowColor #475569
+    FontColor #0F172A
+    AttributeFontColor #334155
+    MethodFontColor #334155
+    HeaderFontColor #0F172A
+}
+
+class SerialConfiguration <<QWidget>> {
+    - controller_serial_config : ControllerSerialConfig
+    - port : QComboBox
+    - baudrate : QLineEdit
+    --
+    + __init__(self, controller_serial_config : ControllerSerialConfig)
+    + configure_serial(self)
+    + get_port(self)
+    + get_baudrate(self)
+}
+
+class ControllerSerialConfig {
+    - signals_window : SignalsWindow
+    --
+    + __init__(self, signals_window)
+    + update_serial_config(self, port, baudrate)
+}
+
+class SignalsWindow <<QMainWindow>> {
+    - port : str
+    - baudrate : int
+    --
+    + update_serial_config(self, port, baudrate)
+    + start_serial(self)
+    + stop_serial(self)
+}
+
+SerialConfiguration ..> ControllerSerialConfig : configura
+ControllerSerialConfig --> SignalsWindow : aplica puerto/baudrate
+
+legend bottom
+|= Relacion |= Significado |
+| --> | Utiliza |
+| ..> | Interaccion vista-controlador |
+endlegend
+@enduml

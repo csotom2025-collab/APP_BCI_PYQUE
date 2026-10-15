@@ -30,7 +30,7 @@ from eeg_features import (
     log_transform_power_columns
 )
 from p300_segmentation import extract_with_flash_segmentation
-from lda_utils import SafeLDA, ZeroThresholdLDA  # noqa: F401 — requerido para deserializar los pipelines LDA
+from lda_utils import SafeLDA, ZeroThresholdClassifier, ZeroThresholdLDA  # noqa: F401 — requerido para deserializar pipelines guardados
 
 
 class HierarchicalBCIPredictor:
@@ -284,7 +284,10 @@ class HierarchicalBCIPredictor:
         window_details = []
         if hasattr(pipeline, "predict_proba"):
             all_probas = pipeline.predict_proba(X)  # shape: (n_ventanas, n_clases)
-            if isinstance(pipeline.named_steps.get("lda_clf"), ZeroThresholdLDA):
+            if (
+                isinstance(pipeline.named_steps.get("clf"), ZeroThresholdClassifier)
+                or isinstance(pipeline.named_steps.get("lda_clf"), ZeroThresholdLDA)
+            ):
                 avg_score = float(np.mean(pipeline.decision_function(X)))
                 positive_probability = float(
                     np.exp(-np.logaddexp(0.0, -avg_score))

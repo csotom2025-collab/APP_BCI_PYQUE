@@ -37,7 +37,9 @@ from sklearn.pipeline import Pipeline
 
 import config
 from eeg_features import get_feature_sets, log_transform_power_columns
-from train_hierarchical_optimized import build_pipeline_hierarchical, build_classifiers
+from train_hierarchical_optimized import (
+    build_pipeline_hierarchical, build_classifiers, classifiers_for_group,
+)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # PALETAS Y ESTILO
@@ -956,7 +958,7 @@ def plot_learning_curves(df_usuario, bundle, results_df, out_dir, usuario):
         n_clases = df_sub["label"].nunique()
         n_comp = cfg["n_comp"] if cfg["n_comp"] else max(1, min(n_clases - 1, 50))
 
-        clf = classifiers.get(clf_name)
+        clf = classifiers_for_group(classifiers, n_clases).get(clf_name)
         if clf is None:
             clf = list(classifiers.values())[0]
 

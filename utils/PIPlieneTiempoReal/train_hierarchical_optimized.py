@@ -28,6 +28,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.base import clone
 from sklearn.pipeline import Pipeline
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.model_selection import StratifiedKFold, cross_val_predict
@@ -38,7 +39,7 @@ from sklearn.ensemble import VotingClassifier
 from sklearn.metrics import confusion_matrix, accuracy_score, f1_score
 # pyrefly: ignore [missing-import]
 from xgboost import XGBClassifier 
-from lda_utils import SafeLDA, ZeroThresholdLDA
+from lda_utils import SafeLDA, ZeroThresholdClassifier
 import config
 from eeg_features import get_feature_sets, log_transform_power_columns
 
@@ -100,23 +101,20 @@ def build_classifiers(n_classes):
     }
 
 
-def build_binary_lda_classifiers():
-    """Candidatos LDA binarios para elegir solver y shrinkage por validación."""
+def build_binary_lda_classifiers(classifiers=None):
+    """Devuelve clasificadores binarios con score de decisión umbralado en cero."""
+    if classifiers is None:
+        classifiers = build_classifiers(40)
     return {
-        "LDA_SVD": ZeroThresholdLDA(solver="svd"),
-        "LDA_LSQR_AUTO": ZeroThresholdLDA(solver="lsqr", shrinkage="auto"),
-        "LDA_LSQR_0.1": ZeroThresholdLDA(solver="lsqr", shrinkage=0.1),
-        "LDA_LSQR_0.5": ZeroThresholdLDA(solver="lsqr", shrinkage=0.5),
-        "LDA_LSQR_0.9": ZeroThresholdLDA(solver="lsqr", shrinkage=0.9),
-        "LDA_EIGEN_AUTO": ZeroThresholdLDA(solver="eigen", shrinkage="auto"),
-        "LDA_EIGEN_0.5": ZeroThresholdLDA(solver="eigen", shrinkage=0.5),
+        name: ZeroThresholdClassifier(classifier)
+        for name, classifier in classifiers.items()
     }
 
 
 def classifiers_for_group(classifiers, n_classes):
-    """Usa LDA optimizado con umbral cero para grupos binarios."""
+    """Aplica un umbral de score cero a los clasificadores binarios."""
     if n_classes == 2:
-        return build_binary_lda_classifiers()
+        return build_binary_lda_classifiers(classifiers)
     return classifiers
 
 
@@ -127,8 +125,8 @@ def build_pipeline_hierarchical(clf, n_components, n_features_in, k_best=None,
                                  use_double_lda=True):
     """
     Escala y selecciona características antes del clasificador.
-    ZeroThresholdLDA se ajusta directamente para clasificar con frontera cero;
-    los demás clasificadores conservan la proyección LDA previa.
+    SafeLDA conserva la proyección LDA previa y los clasificadores binarios
+    aplican su umbral de decisión en cero mediante ZeroThresholdClassifier.
     """
     steps = [("scaler", StandardScaler())]
 
@@ -141,11 +139,6 @@ def build_pipeline_hierarchical(clf, n_components, n_features_in, k_best=None,
         k_dinamico = max(1, int(n_features_in * 0.8))
         steps.append(("select", SelectKBest(f_classif, k=k_dinamico)))
         effective_features = k_dinamico
-
-    from sklearn.base import clone
-    if isinstance(clf, ZeroThresholdLDA):
-        steps.append(("lda_clf", clone(clf)))
-        return Pipeline(steps)
 
     # Asegurar componentes seguros
     n_comp_safe = min(n_components, effective_features - 1, 200)
@@ -280,7 +273,7 @@ def evaluate_all_hierarchical(df, verbose=True):
     df_for_color = df_color.copy()
     df_for_color["label"] = df_for_color["color"]
     color_classifiers = (
-        build_binary_lda_classifiers()
+        build_binary_lda_classifiers(classifiers)
         if df_for_color["label"].nunique() == 2
         else classifiers
     )

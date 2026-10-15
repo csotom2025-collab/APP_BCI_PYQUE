@@ -1,0 +1,42 @@
+@startuml
+title DIAGRAMA DE CLASES - Visualizacion de grabaciones
+
+skinparam backgroundColor #FAFBFC
+skinparam shadowing false
+skinparam roundcorner 15
+skinparam class {
+    BackgroundColor #FFFFFF
+    BorderColor #334155
+    ArrowColor #475569
+    FontColor #0F172A
+    AttributeFontColor #334155
+    MethodFontColor #334155
+    HeaderFontColor #0F172A
+}
+
+class RecordingShowedWindow <<QWidget>> {
+    - combo_box_users : QComboBox
+    - combo_box_dirs : QComboBox
+    - combo_box_files : QComboBox
+    - checkbox_notch : QCheckBox
+    - checkbox_baseline : QCheckBox
+    - checkbox_zcore : QCheckBox
+    - checkbox_overlay_ploting : QCheckBox
+    --
+    + __init__(self)
+    + setup_ui(self)
+    + load_users(self)
+    + load_dirs(self)
+    + load_files(self)
+    + show_plot(self)
+    + close_window(self)
+    + graficar_captura(self, user, letter, capture_number, apply_notch=False, clear_baseline=False, use_zcore=False, file_path=None)
+    + graficar_captura_sobrepuesta(self, user, letter, capture_number, apply_notch=False, clear_baseline=False, use_zcore=False, file_path=None)
+    + closeEvent(self, event : QCloseEvent)
+}
+
+legend bottom
+|= Relacion |= Significado |
+| <<QWidget>> | Interfaz PyQt6 |
+endlegend
+@enduml

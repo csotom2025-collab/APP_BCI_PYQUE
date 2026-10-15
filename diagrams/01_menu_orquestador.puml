@@ -1,0 +1,71 @@
+@startuml
+title DIAGRAMA DE CLASES - Menu / Orquestador
+
+skinparam backgroundColor #FAFBFC
+skinparam shadowing false
+skinparam roundcorner 15
+skinparam class {
+    BackgroundColor #FFFFFF
+    BorderColor #334155
+    ArrowColor #475569
+    FontColor #0F172A
+    AttributeFontColor #334155
+    MethodFontColor #334155
+    HeaderFontColor #0F172A
+}
+
+class MainWindow <<QMainWindow>> {
+    - menu : Menu
+    --
+    + __init__(self)
+    + closeEvent(self, event : QCloseEvent)
+    + close_application(self)
+}
+
+class Menu <<QWidget>> {
+    == Vistas ==
+    - signals_window : SignalsWindow
+    - keyboard_window : KeyboardWindow
+    - train_window : TrainWindow
+    - serial_window : SerialConfiguration
+    - capture_window : CaptureWindow
+    - speller_config_window : SpellerConfigurationWindow
+    - recordingShowWindow : RecordingShowedWindow
+    == Controladores ==
+    - controller_serial_config : ControllerSerialConfig
+    - controller_keyboard : ControllerKeyboardCapture
+    - controller_save_capture : controllerSaveCapture
+    - predictor_controller : PredictorController
+    --
+    + __init__(self, parent=None)
+    + setup_ui(self)
+    + closeEvent(self, event : QCloseEvent)
+    + quit_application(self)
+    + open_signals_window(self)
+    + open_grid_window(self)
+    + open_train_window(self)
+    + open_capture_window(self)
+    + open_config_serial_window(self)
+    + open_recording_show_window(self)
+}
+
+MainWindow *-- Menu : contiene
+Menu --> SignalsWindow
+Menu --> KeyboardWindow
+Menu --> TrainWindow
+Menu --> SerialConfiguration
+Menu --> CaptureWindow
+Menu --> SpellerConfigurationWindow
+Menu --> RecordingShowedWindow
+Menu --> ControllerSerialConfig
+Menu --> ControllerKeyboardCapture
+Menu --> controllerSaveCapture
+Menu --> PredictorController
+
+legend bottom
+|= Relacion |= Significado |
+| *-- | Composicion / contiene |
+| --> | Utiliza |
+| <<QWidget>> | Interfaz PyQt6 |
+endlegend
+@enduml

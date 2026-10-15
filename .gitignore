@@ -12,4 +12,4 @@ __pycache__/
 /utils/mvp
 *.png
 *.edf
-resultsALL/
+resultsALL/utils/chequeo_calidad/pruebas/resultados_calidad/correlaciones_pearson_pares.csv

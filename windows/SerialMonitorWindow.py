@@ -208,22 +208,96 @@ def _emotiv_decrypt_packet(cipher, data):
 
 
 
-    def _emotiv_find_device():
-        devices = hid.enumerate(0x21A1, 0x0001)
+def _emotiv_find_device(timeout_ms=400, min_packets=2):
+    """
+    Busca automáticamente la interfaz HID del Emotiv que realmente
+    está entregando paquetes.
 
-        for dev in devices:
-            if (
-                dev.get("interface_number") == 1
-                and dev.get("usage_page") == 0xFFFF
-            ):
-                print("Interfaz de datos Emotiv seleccionada:")
-                print("Producto:", dev.get("product_string"))
-                print("Interfaz:", dev.get("interface_number"))
-                print("Path:", dev.get("path"))
+    """
+
+    try:
+        devices = hid.enumerate()
+    except Exception as e:
+        print(f"Error enumerando dispositivos HID: {e}")
+        return None
+
+    # Identificar las interfaces que parecen pertenecer a Emotiv.
+    candidates = []
+
+    for dev in devices:
+        product = (dev.get("product_string") or "").lower()
+        manufacturer = (dev.get("manufacturer_string") or "").lower()
+
+        if ("emotiv" in manufacturer or "emotiv" in product or "epoc" in product):
+            if dev.get("path") is not None:
+                candidates.append(dev)
+
+    if not candidates:
+        print("No se encontró ningún dispositivo HID Emotiv.")
+        return None
+
+    #print(f"Se encontraron {len(candidates)} interfaces candidatas.")
+
+    # Probar cada interfaz leyendo paquetes reales.
+    for dev in candidates:
+        path = dev["path"]
+        product = dev.get("product_string") or "Desconocido"
+        interface = dev.get("interface_number", "Desconocida")
+
+        h = hid.device()
+        received_packets = 0
+
+        try:
+            h.open_path(path)
+            h.set_nonblocking(0)
+
+            # print(
+            #     f"Probando interfaz {interface} "
+            #     f"(producto: {product})..."
+            # )
+
+            # Se comprueba la recepción real, no solo que abra.
+            for _ in range(min_packets):
+                data = h.read(
+                    EMOTIV_PACKET_SIZE,
+                    timeout_ms=timeout_ms
+                )
+
+                if len(data) == EMOTIV_PACKET_SIZE:
+                    received_packets += 1
+                else:
+                    break
+
+            if received_packets >= min_packets:
+                # print("Interfaz de datos encontrada.")
+                # print(f"Producto: {product}")
+                # print(f"Interfaz: {interface}")
+                # print(f"Paquetes recibidos: {received_packets}")
+
+                # # Devolver el dispositivo, no el manejador abierto.
                 return dev
 
-        print("No se encontró la interfaz de datos Emotiv (MI_01).")
-        return None
+            # print(
+            #     f"Interfaz {interface}: "
+            #     f"solo recibió {received_packets} paquetes válidos."
+            # )
+
+        except Exception as e:
+            print(f"No se pudo probar la interfaz {interface}: {e}")
+
+        finally:
+            try:
+                h.close()
+            except Exception:
+                pass
+
+    print(
+        "No se encontró una interfaz que entregue paquetes. "
+        "Comprueba que el Emotiv esté conectado y transmitiendo."
+    )
+    return None
+
+
 
 
 
@@ -262,8 +336,8 @@ class EmotivReader(QThread):
 
     def run(self):
         device_info = _emotiv_find_device()
-        print("Device info:", device_info)
-        print("Device info path:", device_info["path"])
+        # print("Device info:", device_info)
+        # print("Device info path:", device_info["path"])
 
         if device_info is None:
             self.error_signal.emit("No se encontro la diadema Emotiv EPOC+ conectada (revisa el USB/dongle).")

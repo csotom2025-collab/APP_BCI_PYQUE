@@ -207,13 +207,24 @@ def _emotiv_decrypt_packet(cipher, data):
     return cipher.decrypt(data[:16]) + cipher.decrypt(data[16:32])
 
 
-def _emotiv_find_device():
-    for dev in hid.enumerate():
-        product = (dev.get("product_string") or "").lower()
-        manufacturer = (dev.get("manufacturer_string") or "").lower()
-        if "emotiv" in product or "emotiv" in manufacturer or "epoc" in product:
-            return dev
-    return None
+
+    def _emotiv_find_device():
+        devices = hid.enumerate(0x21A1, 0x0001)
+
+        for dev in devices:
+            if (
+                dev.get("interface_number") == 1
+                and dev.get("usage_page") == 0xFFFF
+            ):
+                print("Interfaz de datos Emotiv seleccionada:")
+                print("Producto:", dev.get("product_string"))
+                print("Interfaz:", dev.get("interface_number"))
+                print("Path:", dev.get("path"))
+                return dev
+
+        print("No se encontró la interfaz de datos Emotiv (MI_01).")
+        return None
+
 
 
 class EmotivReader(QThread):
@@ -251,8 +262,8 @@ class EmotivReader(QThread):
 
     def run(self):
         device_info = _emotiv_find_device()
-        # print("Device info:", device_info)
-        # print("Device info path:", device_info["path"])
+        print("Device info:", device_info)
+        print("Device info path:", device_info["path"])
 
         if device_info is None:
             self.error_signal.emit("No se encontro la diadema Emotiv EPOC+ conectada (revisa el USB/dongle).")
@@ -271,6 +282,13 @@ class EmotivReader(QThread):
         while self.running:
             try:
                 data = h.read(EMOTIV_PACKET_SIZE, timeout_ms=1000)
+
+                if not data:
+                    print("Emotiv: lectura vacía (timeout)")
+                    continue
+
+                # print(f"Emotiv: paquete recibido, longitud={len(data)}")
+                # print(f"Primeros bytes: {list(data[:8])}")
             except Exception as ex:
                 self.error_signal.emit(f"Error de lectura Emotiv: {ex}")
                 continue

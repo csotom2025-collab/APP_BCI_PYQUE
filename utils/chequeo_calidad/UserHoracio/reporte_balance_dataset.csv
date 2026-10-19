@@ -1,0 +1,11 @@
+usuario,clase,a_validos,b_validos,total_validos,minimo_requerido,faltantes,estado,c_reportados,a_no_disponibles,b_no_disponibles
+UserHoracio,A,3,17,20,30,10,REGRABAR,10,0,0
+UserHoracio,D,5,9,14,30,16,REGRABAR,16,0,0
+UserHoracio,E,5,18,23,30,7,REGRABAR,9,0,0
+UserHoracio,I,4,18,22,30,8,REGRABAR,8,0,0
+UserHoracio,L,0,9,9,30,21,REGRABAR,21,0,0
+UserHoracio,N,4,12,16,30,14,REGRABAR,14,0,0
+UserHoracio,O,5,15,20,30,10,REGRABAR,10,0,0
+UserHoracio,R,3,17,20,30,10,REGRABAR,10,0,0
+UserHoracio,S,1,11,12,30,18,REGRABAR,18,0,0
+UserHoracio,U,1,15,16,30,14,REGRABAR,14,0,0

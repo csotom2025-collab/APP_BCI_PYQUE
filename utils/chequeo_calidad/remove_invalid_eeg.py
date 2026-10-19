@@ -22,6 +22,7 @@ from typing import Callable, Iterable, TextIO
 EXPECTED_BLACKLIST_NAMES = {
     "regrabar_archivos_c.csv",
     "regrabar_archivos_c_real.csv",
+    "quality_report.csv",
 }
 NON_EEG_AUXILIARY_DIRS = {"graficas", "graficos"}
 NON_EEG_AUXILIARY_FILENAMES = {"resultados_clasificacion.csv"}
@@ -164,7 +165,7 @@ def load_blacklist(path: Path, usuario: str | None = None) -> tuple[list[Blackli
                 task_class=_value(row, headers, ("clase", "task_class")),
                 trial=_value(row, headers, ("trial", "ensayo")),
                 reason=" | ".join(reason_parts),
-                affected_channels=_value(row, headers, ("canales_afectados", "affected_channels")),
+                affected_channels=_value(row, headers, ("canales_afectados", "affected_channels", "canales_invalidos")),
                 parameters=parameters,
                 explicit_classification=explicit_c,
                 raw=row,

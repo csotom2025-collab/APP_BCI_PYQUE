@@ -1,6 +1,11 @@
+import csv
 import os
+import re
+import subprocess
 import sys
+import threading
 import traceback
+from pathlib import Path
 from PyQt6.QtCore import QSize, Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import (
@@ -49,6 +54,8 @@ CHANNEL_CONNECTIONS = (
     ("O2", "P8"), ("P8", "T8"),
 )
 
+MINIMUM_RECORDINGS_PER_CLASS = 30
+
 
 class TrainingThread(QThread):
     completed = pyqtSignal()
@@ -67,6 +74,176 @@ class TrainingThread(QThread):
             self.failed.emit(str(error))
         else:
             self.completed.emit()
+
+
+class DatasetPreparationThread(QThread):
+    stage_changed = pyqtSignal(str)
+    delete_confirmation_requested = pyqtSignal(int)
+    completed = pyqtSignal(dict)
+    failed = pyqtSignal(str)
+
+    def __init__(self, user, project_root, parent=None):
+        super().__init__(parent)
+        self.user = user
+        self.project_root = Path(project_root)
+        self.captures_dir = self.project_root / "captures"
+        self.quality_dir = (
+            self.project_root / "utils" / "chequeo_calidad"
+        )
+        self._delete_decision = threading.Event()
+        self._delete_approved = False
+
+    def set_delete_approved(self, approved):
+        self._delete_approved = approved
+        self._delete_decision.set()
+
+    def _run_script(self, script_name, *arguments):
+        script = self.quality_dir / script_name
+        result = subprocess.run(
+            [sys.executable, "-X", "utf8", str(script), *map(str, arguments)],
+            cwd=self.project_root,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+        if result.stdout:
+            encoding = sys.stdout.encoding or "utf-8"
+            safe_output = result.stdout.encode(
+                encoding, errors="replace"
+            ).decode(encoding)
+            sys.stdout.write(safe_output)
+        if result.returncode:
+            details = result.stderr.strip() or result.stdout.strip()
+            raise RuntimeError(
+                f"{script_name} terminó con código {result.returncode}."
+                + (f"\n{details}" if details else "")
+            )
+        return result.stdout
+
+    def _preview_invalid_recordings(self):
+        output = self._run_script(
+            "remove_invalid_eeg.py",
+            self.user,
+            "--captures",
+            self.captures_dir,
+            "--report-dir",
+            self.quality_dir,
+            "--dry-run",
+        )
+        match = re.search(r"^Archivos encontrados:\s*(\d+)\s*$", output, re.MULTILINE)
+        if match is None:
+            raise RuntimeError(
+                "No se pudo determinar cuántos EEG inválidos encontró "
+                "remove_invalid_eeg."
+            )
+        return int(match.group(1))
+
+    def _read_balance_report(self):
+        report_path = (
+            self.quality_dir
+            / self.user
+            / "reporte_balance_dataset.csv"
+        )
+        with report_path.open("r", encoding="utf-8-sig", newline="") as report:
+            rows = [
+                row
+                for row in csv.DictReader(report)
+                if row.get("usuario") == self.user
+            ]
+        if not rows:
+            raise RuntimeError(
+                f"El verificador no generó resultados para {self.user}."
+            )
+        missing_rows = [
+            {
+                "clase": row["clase"],
+                "faltantes": int(row["faltantes"]),
+                "validas": int(row["total_validos"]),
+                "minimo": int(row["minimo_requerido"]),
+            }
+            for row in rows
+            if int(row["faltantes"]) > 0
+        ]
+        return {
+            "usuario": self.user,
+            "clases_revisadas": len(rows),
+            "faltantes": missing_rows,
+            "total_faltantes": sum(
+                row["faltantes"] for row in missing_rows
+            ),
+            "reporte": str(report_path),
+        }
+
+    def run(self):
+        try:
+            self.stage_changed.emit("Aplicando filtro de calidad EEG...")
+            self._run_script(
+                "quality_filter.py",
+                self.user,
+                "--captures",
+                self.captures_dir,
+                "--trials-objetivo",
+                MINIMUM_RECORDINGS_PER_CLASS,
+            )
+
+            self.stage_changed.emit(
+                "Revisando grabaciones inválidas..."
+            )
+            invalid_count = self._preview_invalid_recordings()
+            deletion_failures = 0
+            if invalid_count:
+                self.delete_confirmation_requested.emit(invalid_count)
+                self._delete_decision.wait()
+                if self._delete_approved:
+                    self.stage_changed.emit(
+                        "Respaldando y eliminando grabaciones inválidas..."
+                    )
+                    deletion_output = self._run_script(
+                        "remove_invalid_eeg.py",
+                        self.user,
+                        "--captures",
+                        self.captures_dir,
+                        "--report-dir",
+                        self.quality_dir,
+                        "--delete",
+                        "--yes",
+                        "--backup",
+                    )
+                    failure_match = re.search(
+                        r"^No eliminados por error:\s*(\d+)\s*$",
+                        deletion_output,
+                        re.MULTILINE,
+                    )
+                    if failure_match is None:
+                        raise RuntimeError(
+                            "No se pudo verificar el resultado de la "
+                            "eliminación de EEG inválidos."
+                        )
+                    deletion_failures = int(failure_match.group(1))
+
+            self.stage_changed.emit(
+                "Verificando el mínimo de grabaciones por clase..."
+            )
+            self._run_script(
+                "dataset_balance_checker.py",
+                self.user,
+                "--captures",
+                self.captures_dir,
+                "--output-dir",
+                self.quality_dir,
+                "--minimum",
+                MINIMUM_RECORDINGS_PER_CLASS,
+            )
+            result = self._read_balance_report()
+            result["eliminacion_aprobada"] = (
+                invalid_count == 0 or self._delete_approved
+            )
+            result["fallidos_eliminacion"] = deletion_failures
+            self.completed.emit(result)
+        except Exception as error:
+            self.failed.emit(str(error))
 
 
 class ChannelNodeCheckBox(QCheckBox):
@@ -178,6 +355,7 @@ class TrainWindow(QMainWindow):
         super().__init__()
 
         self.training_thread = None
+        self.dataset_preparation_thread = None
         self.setup_ui()
         self.models= ['lstm', 'lda', 'svm', 'random_forest', 'xgboost']
         self.show_models()
@@ -196,6 +374,11 @@ class TrainWindow(QMainWindow):
         self.button_start_training = QPushButton("Iniciar entrenamiento")
         self.button_start_training.clicked.connect(self.start_training)
         self.button_start_training.setMinimumHeight(48)
+        self.button_check_dataset = QPushButton(
+            "Verificar grabaciones para entrenar"
+        )
+        self.button_check_dataset.clicked.connect(self.check_dataset)
+        self.button_check_dataset.setMinimumHeight(48)
 
         training_group = QGroupBox("Entrenamiento")
         training_layout = QGridLayout(training_group)
@@ -204,6 +387,7 @@ class TrainWindow(QMainWindow):
         training_layout.addWidget(QLabel("Selecciona un modelo:"), 1, 0)
         training_layout.addWidget(self.combo_box_models, 1, 1)
         training_layout.addWidget(self.button_start_training, 2, 0, 1, 2)
+        training_layout.addWidget(self.button_check_dataset, 3, 0, 1, 2)
         left_layout.addWidget(training_group)
 
         signal_group = QGroupBox("Configuración de señal")
@@ -351,7 +535,10 @@ class TrainWindow(QMainWindow):
         return self.seed_spinbox.value()
 
     def start_training(self):
-        if self.training_thread is not None:
+        if (
+            self.training_thread is not None
+            or self.dataset_preparation_thread is not None
+        ):
             return
 
         user = self.get_user()
@@ -394,12 +581,133 @@ class TrainWindow(QMainWindow):
             "seed": self.getSelectedSeed(),
         }
         self.button_start_training.setEnabled(False)
+        self.button_check_dataset.setEnabled(False)
         self.training_status_label.setText("Entrenamiento en curso...")
         self.training_thread = TrainingThread(training_args, self)
         self.training_thread.completed.connect(self._on_training_completed)
         self.training_thread.failed.connect(self._on_training_failed)
         self.training_thread.finished.connect(self._on_training_thread_finished)
         self.training_thread.start()
+
+    def check_dataset(self):
+        if (
+            self.training_thread is not None
+            or self.dataset_preparation_thread is not None
+        ):
+            return
+
+        user = self.get_user()
+        if not user:
+            QMessageBox.warning(self, "Usuario requerido", "Selecciona un usuario.")
+            return
+
+        project_root = Path("captures").resolve().parent
+        self.button_start_training.setEnabled(False)
+        self.button_check_dataset.setEnabled(False)
+        self.user_combobox.setEnabled(False)
+        self.training_status_label.setText(
+            "Preparando y verificando las grabaciones..."
+        )
+        self.dataset_preparation_thread = DatasetPreparationThread(
+            user, project_root, self
+        )
+        self.dataset_preparation_thread.stage_changed.connect(
+            self.training_status_label.setText
+        )
+        self.dataset_preparation_thread.delete_confirmation_requested.connect(
+            self._confirm_invalid_recording_removal
+        )
+        self.dataset_preparation_thread.completed.connect(
+            self._on_dataset_preparation_completed
+        )
+        self.dataset_preparation_thread.failed.connect(
+            self._on_dataset_preparation_failed
+        )
+        self.dataset_preparation_thread.finished.connect(
+            self._on_dataset_preparation_finished
+        )
+        self.dataset_preparation_thread.start()
+
+    def _confirm_invalid_recording_removal(self, invalid_count):
+        user = self.get_user()
+        backup_dir = (
+            Path("captures").resolve().parent
+            / "backup_eliminados"
+            / user
+        )
+        answer = QMessageBox.question(
+            self,
+            "Confirmar eliminación de EEG inválidos",
+            f"Se encontraron {invalid_count} grabaciones clasificadas como "
+            f"inválidas para {user}.\n\n"
+            "¿Deseas eliminarlas? Se guardará un respaldo antes de cada "
+            f"eliminación en:\n{backup_dir}",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        self.dataset_preparation_thread.set_delete_approved(
+            answer == QMessageBox.StandardButton.Yes
+        )
+
+    def _on_dataset_preparation_completed(self, result):
+        user = result["usuario"]
+        minimum = MINIMUM_RECORDINGS_PER_CLASS
+        total_missing = result["total_faltantes"]
+        if total_missing:
+            details = "\n".join(
+                f"• {row['clase']}: faltan {row['faltantes']} "
+                f"({row['validas']}/{row['minimo']})"
+                for row in result["faltantes"]
+            )
+            title = "Faltan grabaciones"
+            message = (
+                f"{user} todavía no cumple el mínimo de {minimum} "
+                "grabaciones válidas por clase:\n\n"
+                f"{details}\n\n"
+                f"Total faltante: {total_missing}"
+            )
+        else:
+            title = "Dataset listo para entrenar"
+            message = (
+                f"{user} cumple el mínimo de {minimum} grabaciones válidas "
+                f"en las {result['clases_revisadas']} clases revisadas."
+            )
+
+        if not result["eliminacion_aprobada"]:
+            message += (
+                "\n\nNo se eliminaron los EEG inválidos; se conservaron "
+                "los archivos originales."
+            )
+        if result["fallidos_eliminacion"]:
+            message += (
+                "\n\nAdvertencia: no se pudieron eliminar "
+                f"{result['fallidos_eliminacion']} archivos inválidos. "
+                "Consulta los reportes de remove_invalid_eeg."
+            )
+        message += f"\n\nReporte: {result['reporte']}"
+        self.training_status_label.setText(title)
+        if total_missing:
+            QMessageBox.warning(self, title, message)
+        else:
+            QMessageBox.information(self, title, message)
+
+    def _on_dataset_preparation_failed(self, error_message):
+        self.training_status_label.setText(
+            "La verificación de grabaciones terminó con errores."
+        )
+        QMessageBox.critical(
+            self,
+            "Error al verificar el dataset",
+            f"{error_message}\n\nConsulta la salida de la aplicación para más detalles.",
+        )
+
+    def _on_dataset_preparation_finished(self):
+        if self.dataset_preparation_thread is not None:
+            self.dataset_preparation_thread.deleteLater()
+            self.dataset_preparation_thread = None
+        self.user_combobox.setEnabled(True)
+        self.button_start_training.setEnabled(True)
+        self.button_check_dataset.setEnabled(True)
 
     def _on_training_completed(self):
         self.training_status_label.setText("Entrenamiento completado.")
@@ -417,13 +725,22 @@ class TrainWindow(QMainWindow):
         if self.training_thread is not None:
             self.training_thread.deleteLater()
             self.training_thread = None
+        if self.dataset_preparation_thread is None:
+            self.button_check_dataset.setEnabled(True)
+        self.button_start_training.setEnabled(
+            self.dataset_preparation_thread is None
+        )
 
     def closeEvent(self, event):
-        if self.training_thread is not None and self.training_thread.isRunning():
+        running_threads = (
+            self.training_thread,
+            self.dataset_preparation_thread,
+        )
+        if any(thread is not None and thread.isRunning() for thread in running_threads):
             QMessageBox.information(
                 self,
-                "Entrenamiento en curso",
-                "Espera a que termine el entrenamiento antes de cerrar esta ventana.",
+                "Proceso en curso",
+                "Espera a que termine el proceso antes de cerrar esta ventana.",
             )
             event.ignore()
             return

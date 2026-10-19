@@ -1,0 +1,26 @@
+{
+  "version": "2.1.0",
+  "fecha_utc": "2026-10-19T21:17:37.083355+00:00",
+  "captures": "C:\\Users\\usuario\\Desktop\\APP_BCI_PYQUE\\captures",
+  "salida": "C:\\Users\\usuario\\Desktop\\APP_BCI_PYQUE\\utils\\chequeo_calidad\\UserJairR",
+  "usuario": "UserJairR",
+  "archivos": 1210,
+  "A": 596,
+  "B": 455,
+  "C": 159,
+  "codigos_C": {
+    "REFERENCIA_INESTABLE": 73,
+    "REFERENCIA_CONTAMINADA": 62,
+    "ANOMALIA_EXTENSA": 40,
+    "REFERENCIA_INSUFICIENTE": 7,
+    "AMPLITUD_BAJA_RELATIVA": 1,
+    "ESTRUCTURA": 9,
+    "CANAL_INVALIDO": 2,
+    "NO_UTILIZABLES_EXCESO": 2
+  },
+  "segmentos_corregidos": 599,
+  "muestras_modificadas": 75805,
+  "archivos_con_amplificacion": 189,
+  "archivos_con_canales_no_utilizables": 244,
+  "rescatados_A_B_con_canales_no_utilizables": 176
+}

@@ -1,0 +1,24 @@
+{
+  "version": "2.1.0",
+  "fecha_utc": "2026-10-19T21:26:57.588725+00:00",
+  "captures": "C:\\Users\\usuario\\Desktop\\APP_BCI_PYQUE\\captures",
+  "salida": "C:\\Users\\usuario\\Desktop\\APP_BCI_PYQUE\\utils\\chequeo_calidad\\UserAlexJ",
+  "usuario": "UserAlexJ",
+  "archivos": 1208,
+  "A": 581,
+  "B": 425,
+  "C": 202,
+  "codigos_C": {
+    "REFERENCIA_INESTABLE": 115,
+    "REFERENCIA_CONTAMINADA": 73,
+    "REFERENCIA_INSUFICIENTE": 13,
+    "ANOMALIA_EXTENSA": 89,
+    "AMPLITUD_BAJA_RELATIVA": 1,
+    "ESTRUCTURA": 1
+  },
+  "segmentos_corregidos": 541,
+  "muestras_modificadas": 48181,
+  "archivos_con_amplificacion": 65,
+  "archivos_con_canales_no_utilizables": 414,
+  "rescatados_A_B_con_canales_no_utilizables": 298
+}

@@ -1,0 +1,8 @@
+usuario,clase,grabaciones_validas,minimo,faltantes,accion
+UserCMSM,0,29,30,1,REGRABAR 1
+UserCMSM,1,27,30,3,REGRABAR 3
+UserCMSM,2,29,30,1,REGRABAR 1
+UserCMSM,6,28,30,2,REGRABAR 2
+UserCMSM,F,26,30,4,REGRABAR 4
+UserCMSM,W,28,30,2,REGRABAR 2
+UserCMSM,Ñ,29,30,1,REGRABAR 1

@@ -1,0 +1,111 @@
+@startuml
+title DIAGRAMA DE CLASES - Entrenamiento de modelos
+
+skinparam backgroundColor #FAFBFC
+skinparam shadowing false
+skinparam roundcorner 15
+skinparam class {
+    BackgroundColor #FFFFFF
+    BorderColor #334155
+    ArrowColor #475569
+    FontColor #0F172A
+    AttributeFontColor #334155
+    MethodFontColor #334155
+    HeaderFontColor #0F172A
+}
+
+class TrainWindow <<QMainWindow>> {
+    - training_thread : TrainingThread
+    - models : list
+    - channel_map : ChannelMapWidget
+    - channel_checkboxes : dict
+    --
+    + __init__(self)
+    + setup_ui(self)
+    + show_models(self)
+    + get_model(self)
+    + get_user(self)
+    + get_path(self)
+    + show_users(self)
+    + getSelectedChannels(self)
+    + getSelectedFs(self)
+    /'+ getUseP300Window(self)
+    + getApplyBaselineCorrection(self)
+    + getCommandTypes(self)
+    + getSelectedSeed(self)
+    + start_training(self)
+    + _on_training_completed(self)
+    + _on_training_failed(self, error_message)
+    + _on_training_thread_finished(self)'/
+    + closeEvent(self, event)
+}
+
+class TrainingThread <<QThread>> {
+    - training_args : dict
+    --
+    + __init__(self, training_args, parent=None)
+    + run(self)
+}
+
+class ChannelMapWidget <<QWidget>> {
+    - checkboxes : dict
+    - channel_labels : dict
+    --
+    + __init__(self, channel_names, parent=None)
+    + sizeHint(self)
+    + resizeEvent(self, event)
+    + _position_checkboxes(self)
+    + paintEvent(self, event)
+}
+
+class ChannelNodeCheckBox <<QCheckBox>> {
+    + __init__(self, channel)
+    + paintEvent(self, event)
+}
+
+class controllerTraining {
+    - pipeline_lda : PipelineCompletoLDA
+    --
+    + __init__(self)
+    '  + train_model(self, user, dataPath, modelType, output_dir="trainingOutputs", commandTypes, channels=None, fs=None, use_p300window=False, apply_baseline_correction=True, seed=42)
+    + save_model(self, path)
+    + get_label(self, file_name : str)
+    + generate_data_set_by_files(self, path, files)
+    + create_df(self, path)
+}
+
+
+
+class EEGFeatureExtractor {
+    - fs : int
+    --
+    + __init__(self, fs)
+    + extract_features(self)
+}
+
+class SafeLDA {
+    + fit(self, X, y)
+}
+
+class HierarchicalTrainer <<modulo funciones>> {
+    + build_dataset()
+    + train_optimized_hierarchical( channels=None, fs=None, use_p300window=False)
+}
+
+TrainWindow *-- TrainingThread : crea
+TrainWindow *-- ChannelMapWidget : canales
+ChannelMapWidget *-- ChannelNodeCheckBox
+TrainWindow ..> controllerTraining : inicia entrenamiento
+TrainingThread --> controllerTraining : train_model(**args)
+controllerTraining --> PipelineCompletoLDA : ruta modelType mamagievo
+controllerTraining --> HierarchicalTrainer : ruta modelType lda
+HierarchicalTrainer --> EEGFeatureExtractor
+HierarchicalTrainer --> SafeLDA
+
+legend bottom
+|= Relacion |= Significado |
+| *-- | Composicion |
+| --> | Utiliza |
+| ..> | Interaccion vista-controlador |
+endlegend
+@enduml

@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Inferencia en tiempo real con la arquitectura jerarquica de 4 redes:
-    1) super_clase predice el tipo de comando (Letters/Numbers/Controls)
-    2) segun el resultado, se usa el modelo especializado de ese grupo
-       para predecir el comando final.
+Inferencia en tiempo real con clasificación jerárquica:
+    1) color predice Green/Blue
+    2) super-clase del color predice Letters/Numbers/Controls
+    3) el modelo fino del color y grupo predice el comando final.
 
 Uso por linea de comandos:
     python hierarchical_infer.py ruta/a/grabacion.csv
@@ -83,25 +83,52 @@ class HierarchicalBCIPredictor:
 
         self.last_artifact_info = {}
 
-        self.super_bundle = self.bundle["super_clase"]
-        self.group_bundles = self.bundle["por_grupo"]  # {"Letters": {...}, "Numbers": {...}, "Controls": {...}}
+        if "color" not in self.bundle or "por_color" not in self.bundle:
+            raise ValueError(
+                "El bundle no contiene los modelos jerárquicos separados por color. "
+                "Vuelve a entrenarlo desde la interfaz de entrenamiento."
+            )
+        self.color_bundle = self.bundle["color"]
+        self.color_hierarchies = self.bundle["por_color"]
+        self.color_feature_cols = list(self.color_bundle["feature_columns"])
+        self.super_feature_cols = {
+            color: list(hierarchy["super_clase"]["feature_columns"])
+            for color, hierarchy in self.color_hierarchies.items()
+        }
+        self.group_feature_cols = {
+            color: {
+                group: list(bundle["feature_columns"])
+                for group, bundle in hierarchy["por_grupo"].items()
+            }
+            for color, hierarchy in self.color_hierarchies.items()
+        }
 
-        # feature_columns: unión de todas las columnas de todos los sub-bundles
-        # (no existe en el nivel raíz del bundle — se deriva de los sub-modelos)
-        all_cols = list(self.super_bundle["feature_columns"])
-        for b in self.group_bundles.values():
-            for c in b["feature_columns"]:
-                if c not in all_cols:
-                    all_cols.append(c)
+        # La extracción de features se hace una sola vez para cubrir todos los niveles.
+        all_cols = list(self.color_feature_cols)
+        for color, cols in self.super_feature_cols.items():
+            for col in cols:
+                if col not in all_cols:
+                    all_cols.append(col)
+            for group_cols in self.group_feature_cols[color].values():
+                for col in group_cols:
+                    if col not in all_cols:
+                        all_cols.append(col)
         self.feature_columns = all_cols
 
         self.extractor = EEGFeatureExtractor(fs=self.fs)
 
         print(f"Modelo jerarquico monousuario cargado: usuario='{self.usuario}'")
-        print(f"  Super-clase: f1_cv={self.super_bundle.get('f1_macro_cv', 0.0):.3f}")
-        for grupo, b in self.group_bundles.items():
-            n_clases = len(b["label_encoder"].classes_)
-            print(f"  {grupo:10s}: f1_cv={b.get('f1_macro_cv', 0.0):.3f} ({n_clases} clases)")
+        print(f"  Color: f1_cv={self.color_bundle.get('f1_macro_cv', 0.0):.3f}")
+        for color, hierarchy in self.color_hierarchies.items():
+            super_bundle = hierarchy["super_clase"]
+            print(f"  Super-clase {color}: f1_cv={super_bundle.get('f1_macro_cv', 0.0):.3f}")
+            for grupo, bundle in hierarchy["por_grupo"].items():
+                if "fixed_label" in bundle:
+                    print(f"    {grupo:10s}: salida fija {ascii(bundle['fixed_label'])}")
+                    continue
+                n_clases = len(bundle["label_encoder"].classes_)
+                print(f"    {grupo:10s}: f1_cv={bundle.get('f1_macro_cv', 0.0):.3f} "
+                      f"({n_clases} clases)")
 
 
     # -----------------------------------------------------------------
@@ -217,6 +244,19 @@ class HierarchicalBCIPredictor:
             proba_dict: diccionario de probabilidades promedio
             window_details: lista con predicción y probabilidades de cada ventana individual
         """
+        if "fixed_label" in bundle:
+            pred_label = bundle["fixed_label"]
+            proba_dict = {pred_label: 1.0}
+            window_details = [
+                {
+                    "ventana": i + 1,
+                    "prediccion": pred_label,
+                    "probabilidades": proba_dict,
+                }
+                for i in range(len(feat_df))
+            ]
+            return pred_label, proba_dict, window_details
+
         X = feat_df.reindex(columns=bundle["feature_columns"]).to_numpy(dtype=float)
         X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
 
@@ -280,16 +320,42 @@ class HierarchicalBCIPredictor:
 
         all_feats = pd.concat(feat_dfs, ignore_index=True)
 
-        # Etapa 1: super-clase pasando todas las ventanas
-        grupo_pred, grupo_probas, grupo_ventanas = self._predict_with_bundle(self.super_bundle, all_feats)
+        # Etapa 1: color
+        color_feats = all_feats.reindex(columns=self.color_feature_cols)
+        color_pred, color_probas, color_ventanas = self._predict_with_bundle(
+            self.color_bundle, color_feats
+        )
 
-        # Etapa 2: modelo especializado del grupo predicho pasando todas las ventanas
-        if grupo_pred not in self.group_bundles:
-            raise ValueError(f"Grupo predicho '{grupo_pred}' no tiene modelo especializado asociado.")
-        group_bundle = self.group_bundles[grupo_pred]
-        comando_final, comando_probas, comando_ventanas = self._predict_with_bundle(group_bundle, all_feats)
+        hierarchy = self.color_hierarchies.get(str(color_pred))
+        if hierarchy is None:
+            raise ValueError(
+                f"El color predicho '{color_pred}' no tiene modelos asociados."
+            )
+        super_bundle = hierarchy["super_clase"]
+        group_bundles = hierarchy["por_grupo"]
+
+        # Etapa 2: el super-grupo se predice solo con los datos de este color.
+        super_feats = all_feats.reindex(columns=self.super_feature_cols[color_pred])
+        grupo_pred, grupo_probas, grupo_ventanas = self._predict_with_bundle(
+            super_bundle, super_feats
+        )
+
+        # Etapa 3: comando fino restringido al color y grupo elegidos.
+        if grupo_pred not in group_bundles:
+            raise ValueError(
+                f"El grupo '{grupo_pred}' no tiene un modelo para el color '{color_pred}'."
+            )
+        group_bundle = group_bundles[grupo_pred]
+        group_feats = all_feats.reindex(
+            columns=self.group_feature_cols[color_pred][grupo_pred]
+        )
+        comando_final, comando_probas, comando_ventanas = self._predict_with_bundle(
+            group_bundle, group_feats
+        )
 
         detalle = {
+            "color_predicho": color_pred,
+            "color_probabilidades": color_probas,
             "grupo_predicho": grupo_pred,
             "grupo_probabilidades": grupo_probas,
             "comando_probabilidades": comando_probas,
@@ -298,6 +364,7 @@ class HierarchicalBCIPredictor:
             "ventanas": [
                 {
                     "ventana": i + 1,
+                    "color": color_ventanas[i]["prediccion"],
                     "grupo": grupo_ventanas[i]["prediccion"],
                     "comando": comando_ventanas[i]["prediccion"],
                     "confianza_grupo": float(grupo_ventanas[i]["probabilidades"].get(grupo_ventanas[i]["prediccion"], 1.0)),
@@ -305,6 +372,7 @@ class HierarchicalBCIPredictor:
                 }
                 for i in range(len(all_feats))
             ],
+            "detalle_ventanas_color": color_ventanas,
             "detalle_ventanas_grupo": grupo_ventanas,
             "detalle_ventanas_comando": comando_ventanas,
             "artefactos_detectados": artefactos,
@@ -345,13 +413,15 @@ def main():
     predictor = HierarchicalBCIPredictor(usuario=usuario)
     comando, detalle = predictor.predict_from_csv(csv_path)
 
-    print(f"\n>>> Grupo predicho: {detalle['grupo_predicho']}")
+    print(f"\n>>> Color predicho: {detalle['color_predicho']}")
+    print(f">>> Grupo predicho: {detalle['grupo_predicho']}")
     print(f">>> Comando final: {comando}")
+    print("\nProbabilidades de color:")
+    for color, p in detalle["color_probabilidades"].items():
+        print(f"  {color}: {p:.3f}")
     print("\nTop 3 probabilidades de grupo:")
     for g, p in list(detalle["grupo_probabilidades"].items())[:3]:
         print(f"  {g}: {p:.3f}")
     print("\nTop 5 probabilidades de comando (dentro del grupo elegido):")
     for cmd, p in list(detalle["comando_probabilidades"].items())[:5]:
         print(f"  {cmd}: {p:.3f}")
-
-

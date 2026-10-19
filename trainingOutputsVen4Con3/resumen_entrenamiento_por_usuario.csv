@@ -1,0 +1,7 @@
+usuario,n_trials,mejor_nivel,mejor_grupo,mejor_feature_set,mejor_clasificador,accuracy_mean,f1_macro_mean
+UserArcane,3829,comando_fino_por_color_grupo,Controls,Beta_Gamma_All,XGBC,0.8845528455284553,0.8839536255130904
+UserCMSM,6547,comando_fino_por_color_grupo,Controls,Estadicas_todas,LogReg,0.8787205387205386,0.8782758062472759
+UserJorge,4152,comando_fino_por_color_grupo,Controls,Frecuencias_Todas,XGBC,0.8843466107617051,0.8829491682239092
+UserMar,4072,comando_fino_por_color_grupo,Controls,Frecuencias_Abs,Ensamble_MLP_SVMRBF,0.8909090909090909,0.8901389723973023
+UserMartinEpoc,5359,comando_fino_por_color_grupo,Controls,Frecuencias_Est,LogReg,0.8885858585858586,0.8882791404538064
+UserPony,4185,comando_fino_por_color_grupo,Controls,Estadicas_todas,MLP,0.9653098982423682,0.9652507160181933

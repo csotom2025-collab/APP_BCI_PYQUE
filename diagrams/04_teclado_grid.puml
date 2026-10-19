@@ -1,0 +1,100 @@
+@startuml
+title DIAGRAMA DE CLASES - Teclado / Grid (Speller visual)
+
+skinparam backgroundColor #FAFBFC
+skinparam shadowing false
+skinparam roundcorner 15
+skinparam class {
+    BackgroundColor #FFFFFF
+    BorderColor #334155
+    ArrowColor #475569
+    FontColor #0F172A
+    AttributeFontColor #334155
+    MethodFontColor #334155
+    HeaderFontColor #0F172A
+}
+
+class KeyboardWindow <<QWidget>> {
+    '- current_theme : dict
+    - training_mode : bool
+    - buttons_list : list
+    - output_line : OutputLine
+    /'- current_epoca : int
+    - num_epocas : int
+    - flash_duration : int
+    - isi_duration : int
+    - sequence : list'/
+    --
+    + __init__(self, training_mode=False)
+    '+ load_theme(self)
+    '+ save_theme(self)
+    + setup_ui(self)
+    '+ show_grid(self)
+    '+ hide_grid(self)
+    '+ show_grid_after_rest(self)
+    + button_clicked(self, button)
+    + flash_button(self, button, duration=1.0, COLOR="#00FF00")
+    /'+ reapply_button_theme(self, button)
+    + toggle_theme(self)
+    + apply_theme(self, theme)
+    + update_theme_button(self)
+    + get_hover_color(self, color)
+    + get_pressed_color(self, color)'/
+    + add_character(self, char)
+    /'+ start_paradigm(self, times=5)
+    + prepare_epoca(self)
+    + run_next_flash(self)
+    + end_flash(self, group_id)
+    + set_checkerboard_state(self, group_id, active)
+    + start_chess_flashes(self, times=5)'/
+    + closeEvent(self, event : QCloseEvent)
+    + quit(self)
+}
+/'
+class BlackScreen <<QWidget>> {
+    - keyboard_window : KeyboardWindow
+    - dragging : bool
+    - is_maximized : bool
+    --
+    + __init__(self, keyboard_window=None)
+    + create_title_bar(self)
+    + show_title_bar(self)
+    + hide_title_bar(self)
+    '+ mouseMoveEvent(self, event)
+    + leaveEvent(self, event)
+    '+ title_bar_mouse_press(self, event)
+    '+ title_bar_mouse_move(self, event)
+    '+ title_bar_mouse_release(self, event)
+    '+ toggle_maximize(self)
+}'/
+
+class OutputLine <<QWidget>> {
+    - label : QLineEdit
+    --
+    + __init__(self, text)
+    + set_text(self, text)
+    + add_character(self, char)
+}
+
+class ControllerKeyboardCapture {
+    - keyboard_window : KeyboardWindow
+    - flash_idx : int
+    - flash_list : list
+    --
+    + __init__(self, WindowKeyboard : KeyboardWindow)
+    + flash_character(self, character, duration=0.5)
+    + start_simulation(self)
+    + _flash_step(self, flash_time)
+    + hide_grid(self)
+}
+
+'BlackScreen *-- KeyboardWindow : contiene
+KeyboardWindow *-- OutputLine : contiene
+ControllerKeyboardCapture --> KeyboardWindow : flash / hide
+
+legend bottom
+|= Relacion |= Significado |
+| *-- | Composicion |
+| --> | Utiliza |
+endlegend
+@enduml

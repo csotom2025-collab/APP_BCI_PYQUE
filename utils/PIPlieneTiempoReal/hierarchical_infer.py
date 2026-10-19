@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Inferencia en tiempo real con la arquitectura jerarquica de 4 redes:
-    1) super_clase predice el tipo de comando (Letters/Numbers/Controls)
-    2) segun el resultado, se usa el modelo especializado de ese grupo
-       para predecir el comando final.
+Inferencia en tiempo real con clasificación jerárquica:
+    1) color predice Green/Blue
+    2) super_clase predice el tipo de comando (Letters/Numbers/Controls)
+    3) el modelo especializado predice el comando final.
 
 Uso por linea de comandos:
     python hierarchical_infer.py ruta/a/grabacion.csv
@@ -30,7 +30,7 @@ from eeg_features import (
     log_transform_power_columns
 )
 from p300_segmentation import extract_with_flash_segmentation
-from lda_utils import SafeLDA  # noqa: F401 — necesario para que joblib deserialice SafeLDA correctamente
+from lda_utils import SafeLDA, ZeroThresholdClassifier, ZeroThresholdLDA  # noqa: F401 — requerido para deserializar pipelines guardados
 
 
 class HierarchicalBCIPredictor:
@@ -83,22 +83,39 @@ class HierarchicalBCIPredictor:
 
         self.last_artifact_info = {}
 
-        self.super_bundle = self.bundle["super_clase"]
-        self.group_bundles = self.bundle["por_grupo"]  # {"Letters": {...}, "Numbers": {...}, "Controls": {...}}
+        if "color" not in self.bundle or "por_color" not in self.bundle:
+            raise ValueError(
+                "El bundle cargado no tiene los modelos jerárquicos separados por color. "
+                "Vuelve a entrenarlo con train_hierarchical_optimized.py."
+            )
+        self.color_bundle = self.bundle["color"]
+        self.color_hierarchies = self.bundle["por_color"]
 
         # feature_columns por nivel: cada modelo usa SOLO sus mejores features
         # Guardadas en el bundle durante entrenamiento como "feature_columns"
-        self.super_feature_cols = list(self.super_bundle["feature_columns"])
+        self.color_feature_cols = list(self.color_bundle["feature_columns"])
+        self.super_feature_cols = {
+            color: list(hierarchy["super_clase"]["feature_columns"])
+            for color, hierarchy in self.color_hierarchies.items()
+        }
         self.group_feature_cols = {
-            g: list(b["feature_columns"]) for g, b in self.group_bundles.items()
+            color: {
+                group: list(bundle["feature_columns"])
+                for group, bundle in hierarchy["por_grupo"].items()
+            }
+            for color, hierarchy in self.color_hierarchies.items()
         }
 
         # feature_columns global: UNIÓN de todos los sets (para extracción única de señal)
-        all_cols = list(self.super_feature_cols)
-        for cols in self.group_feature_cols.values():
+        all_cols = list(self.color_feature_cols)
+        for color, cols in self.super_feature_cols.items():
             for c in cols:
                 if c not in all_cols:
                     all_cols.append(c)
+            for group_cols in self.group_feature_cols[color].values():
+                for c in group_cols:
+                    if c not in all_cols:
+                        all_cols.append(c)
         self.feature_columns = all_cols
 
         # Umbral de confianza mínima para la Etapa 1 (super-clase)
@@ -108,15 +125,21 @@ class HierarchicalBCIPredictor:
         self.extractor = EEGFeatureExtractor(fs=self.fs)
 
         print(f"Modelo jerarquico monousuario cargado: usuario='{self.usuario}'")
-        print(f"  Super-clase: f1_cv={self.super_bundle.get('f1_macro_cv', 0.0):.3f} "
-              f"| feature_set='{self.super_bundle.get('feature_set', 'N/A')}' "
-              f"({len(self.super_feature_cols)} features)")
-        for grupo, b in self.group_bundles.items():
-            n_clases = len(b["label_encoder"].classes_)
-            print(f"  {grupo:10s}: f1_cv={b.get('f1_macro_cv', 0.0):.3f} "
-                  f"| feature_set='{b.get('feature_set', 'N/A')}' "
-                  f"({len(self.group_feature_cols[grupo])} features) "
-                  f"({n_clases} clases)")
+        print(f"  Color: f1_cv={self.color_bundle.get('f1_macro_cv', 0.0):.3f} "
+              f"| feature_set='{self.color_bundle.get('feature_set', 'N/A')}' "
+              f"({len(self.color_feature_cols)} features)")
+        for color, hierarchy in self.color_hierarchies.items():
+            super_bundle = hierarchy["super_clase"]
+            print(f"  Super-clase {color}: f1_cv={super_bundle.get('f1_macro_cv', 0.0):.3f} "
+                  f"| feature_set='{super_bundle.get('feature_set', 'N/A')}'")
+            for grupo, bundle in hierarchy["por_grupo"].items():
+                if "fixed_label" in bundle:
+                    print(f"    {grupo:10s}: salida fija {ascii(bundle['fixed_label'])}")
+                    continue
+                n_clases = len(bundle["label_encoder"].classes_)
+                print(f"    {grupo:10s}: f1_cv={bundle.get('f1_macro_cv', 0.0):.3f} "
+                      f"| feature_set='{bundle.get('feature_set', 'N/A')}' "
+                      f"({n_clases} clases)")
 
 
     # -----------------------------------------------------------------
@@ -168,6 +191,9 @@ class HierarchicalBCIPredictor:
 
     def _signals_to_features(self, signals, return_artifact_info=False):
         """
+        signals: (n_channels, n_samples) -> DataFrame con TODAS las features extraídas.
+        Extrae el conjunto COMPLETO de features (unión de todos los feature sets).
+        Cada nivel de la cascada luego selecciona sus propias columnas con reindex.
         signals: (n_channels, n_samples) -> DataFrame con TODAS las features extraídas.
         Extrae el conjunto COMPLETO de features (unión de todos los feature sets).
         Cada nivel de la cascada luego selecciona sus propias columnas con reindex.
@@ -224,13 +250,27 @@ class HierarchicalBCIPredictor:
     def _predict_with_bundle(self, bundle, feat_df):
         """
         Pasa todas las ventanas (filas de feat_df) al clasificador.
-        Evalúa cada ventana y combina las predicciones mediante soft voting (promedio de probabilidades).
+        Combina los scores LDA binarios con frontera cero; los demás modelos
+        conservan el soft voting por promedio de probabilidades.
         
         Retorna:
             pred_label: clase ganadora global
             proba_dict: diccionario de probabilidades promedio
             window_details: lista con predicción y probabilidades de cada ventana individual
         """
+        if "fixed_label" in bundle:
+            pred_label = bundle["fixed_label"]
+            proba_dict = {pred_label: 1.0}
+            window_details = [
+                {
+                    "ventana": i + 1,
+                    "prediccion": pred_label,
+                    "probabilidades": proba_dict,
+                }
+                for i in range(len(feat_df))
+            ]
+            return pred_label, proba_dict, window_details
+
         X = feat_df.reindex(columns=bundle["feature_columns"]).to_numpy(dtype=float)
         X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
 
@@ -244,8 +284,21 @@ class HierarchicalBCIPredictor:
         window_details = []
         if hasattr(pipeline, "predict_proba"):
             all_probas = pipeline.predict_proba(X)  # shape: (n_ventanas, n_clases)
-            avg_probas = np.mean(all_probas, axis=0)  # Soft voting entre las 4 ventanas
-            pred_idx = np.argmax(avg_probas)
+            if (
+                isinstance(pipeline.named_steps.get("clf"), ZeroThresholdClassifier)
+                or isinstance(pipeline.named_steps.get("lda_clf"), ZeroThresholdLDA)
+            ):
+                avg_score = float(np.mean(pipeline.decision_function(X)))
+                positive_probability = float(
+                    np.exp(-np.logaddexp(0.0, -avg_score))
+                )
+                avg_probas = np.array(
+                    [1.0 - positive_probability, positive_probability]
+                )
+                pred_idx = int(avg_score > 0)
+            else:
+                avg_probas = np.mean(all_probas, axis=0)
+                pred_idx = np.argmax(avg_probas)
             pred_label = clases[pred_idx]
             proba_dict = dict(sorted(zip(clases, avg_probas), key=lambda kv: -kv[1]))
 
@@ -283,6 +336,10 @@ class HierarchicalBCIPredictor:
           - Etapa 1 (super-clase): usa SOLO las features del mejor feature_set del super-modelo.
           - Etapa 2 (sub-grupo): usa SOLO las features del mejor feature_set del modelo especializado.
         Esto evita ruido de features irrelevantes en cada nivel.
+        Cascada jerárquica con feature sets independientes por nivel:
+          - Etapa 1 (super-clase): usa SOLO las features del mejor feature_set del super-modelo.
+          - Etapa 2 (sub-grupo): usa SOLO las features del mejor feature_set del modelo especializado.
+        Esto evita ruido de features irrelevantes en cada nivel.
         """
         feat_dfs = []
         artefactos = []
@@ -296,11 +353,26 @@ class HierarchicalBCIPredictor:
         # DataFrame con TODAS las features extraídas (unión de todos los feature sets)
         all_feats = pd.concat(feat_dfs, ignore_index=True)
 
-        # ── ETAPA 1: Super-clase ──────────────────────────────────────────────
-        # Seleccionar SOLO las features del mejor feature_set de la super-clase
-        super_feats = all_feats.reindex(columns=self.super_feature_cols)
+        # ── ETAPA 1: Color ────────────────────────────────────────────────────
+        color_feats = all_feats.reindex(columns=self.color_feature_cols)
+        color_pred, color_probas, color_ventanas = self._predict_with_bundle(
+            self.color_bundle, color_feats
+        )
+
+        hierarchy = self.color_hierarchies.get(str(color_pred))
+        if hierarchy is None:
+            raise ValueError(
+                f"El color predicho '{color_pred}' no tiene modelos asociados."
+            )
+        super_bundle = hierarchy["super_clase"]
+        group_bundles = hierarchy["por_grupo"]
+        super_feature_cols = self.super_feature_cols[color_pred]
+        group_feature_cols = self.group_feature_cols[color_pred]
+
+        # ── ETAPA 2: Super-grupo, usando únicamente datos de este color ───────
+        super_feats = all_feats.reindex(columns=super_feature_cols)
         grupo_pred, grupo_probas, grupo_ventanas = self._predict_with_bundle(
-            self.super_bundle, super_feats
+            super_bundle, super_feats
         )
 
         # Verificar confianza mínima del grupo (umbral configurable)
@@ -310,6 +382,8 @@ class HierarchicalBCIPredictor:
         if rechazado:
             # Confianza insuficiente: no inferir comando
             detalle = {
+                "color_predicho": color_pred,
+                "color_probabilidades": color_probas,
                 "grupo_predicho": grupo_pred,
                 "grupo_probabilidades": grupo_probas,
                 "comando_probabilidades": {},
@@ -320,6 +394,7 @@ class HierarchicalBCIPredictor:
                 "ventanas": [
                     {
                         "ventana": i + 1,
+                        "color": color_ventanas[i]["prediccion"],
                         "grupo": grupo_ventanas[i]["prediccion"],
                         "comando": "RECHAZO",
                         "confianza_grupo": float(grupo_ventanas[i]["probabilidades"].get(grupo_ventanas[i]["prediccion"], 1.0)),
@@ -327,28 +402,32 @@ class HierarchicalBCIPredictor:
                     }
                     for i in range(len(all_feats))
                 ],
+                "detalle_ventanas_color": color_ventanas,
                 "detalle_ventanas_grupo": grupo_ventanas,
                 "detalle_ventanas_comando": [],
                 "artefactos_detectados": artefactos,
                 "picos_maximos_uV": picos,
                 "es_artefacto": any(artefactos) if artefactos else False,
                 "pico_maximo_uV": max(picos) if picos else 0.0,
-                "super_feature_set": self.super_bundle.get("feature_set", "N/A"),
+                "super_feature_set": super_bundle.get("feature_set", "N/A"),
                 "grupo_feature_set": "N/A",
             }
             return "RECHAZO", detalle
 
-        # ── ETAPA 2: Modelo especializado del grupo predicho ──────────────────
-        # Seleccionar SOLO las features del mejor feature_set del sub-grupo ganador
-        if grupo_pred not in self.group_bundles:
-            raise ValueError(f"Grupo predicho '{grupo_pred}' no tiene modelo especializado asociado.")
-        group_bundle = self.group_bundles[grupo_pred]
-        group_feats = all_feats.reindex(columns=self.group_feature_cols[grupo_pred])
+        # ── ETAPA 3: Comando fino, limitado a color + super-grupo ─────────────
+        if grupo_pred not in group_bundles:
+            raise ValueError(
+                f"El grupo '{grupo_pred}' no tiene un modelo para el color '{color_pred}'."
+            )
+        group_bundle = group_bundles[grupo_pred]
+        group_feats = all_feats.reindex(columns=group_feature_cols[grupo_pred])
         comando_final, comando_probas, comando_ventanas = self._predict_with_bundle(
             group_bundle, group_feats
         )
 
         detalle = {
+            "color_predicho": color_pred,
+            "color_probabilidades": color_probas,
             "grupo_predicho": grupo_pred,
             "grupo_probabilidades": grupo_probas,
             "comando_probabilidades": comando_probas,
@@ -358,6 +437,7 @@ class HierarchicalBCIPredictor:
             "ventanas": [
                 {
                     "ventana": i + 1,
+                    "color": color_ventanas[i]["prediccion"],
                     # voto individual de esta ventana en super-clase (puede diferir del grupo_final)
                     "grupo_voto": grupo_ventanas[i]["prediccion"],
                     # grupo ganador por soft voting de TODAS las ventanas (el usado para predecir el comando)
@@ -368,6 +448,7 @@ class HierarchicalBCIPredictor:
                 }
                 for i in range(len(all_feats))
             ],
+            "detalle_ventanas_color": color_ventanas,
             "detalle_ventanas_grupo": grupo_ventanas,
             "detalle_ventanas_comando": comando_ventanas,
             "artefactos_detectados": artefactos,
@@ -375,7 +456,7 @@ class HierarchicalBCIPredictor:
             "es_artefacto": any(artefactos) if artefactos else False,
             "pico_maximo_uV": max(picos) if picos else 0.0,
             # Feature sets usados en cada etapa (para trazabilidad)
-            "super_feature_set": self.super_bundle.get("feature_set", "N/A"),
+            "super_feature_set": super_bundle.get("feature_set", "N/A"),
             "grupo_feature_set": group_bundle.get("feature_set", "N/A"),
         }
         return comando_final, detalle
@@ -415,9 +496,25 @@ class HierarchicalBCIPredictor:
         self.min_group_confidence = threshold
         print(f"[Umbral de confianza] min_group_confidence = {threshold:.3f}")
 
+    def set_min_group_confidence(self, threshold: float):
+        """
+        Configura el umbral mínimo de confianza para aceptar la predicción de grupo (Etapa 1).
+        Si la confianza del grupo predicho es menor que 'threshold', se retorna 'RECHAZO'.
+
+        Args:
+            threshold: float en [0.0, 1.0]. 
+                       0.0 = nunca rechazar (comportamiento por defecto).
+                       0.5 = rechazar si el modelo no supera el 50% de confianza en el grupo.
+        """
+        if not 0.0 <= threshold <= 1.0:
+            raise ValueError(f"El umbral debe estar en [0.0, 1.0], recibido: {threshold}")
+        self.min_group_confidence = threshold
+        print(f"[Umbral de confianza] min_group_confidence = {threshold:.3f}")
+
 
 def main():
     if len(sys.argv) < 3:
+        print("Uso: python hierarchical_infer.py <usuario> ruta/a/grabacion.csv [umbral_confianza]")
         print("Uso: python hierarchical_infer.py <usuario> ruta/a/grabacion.csv [umbral_confianza]")
         sys.exit(1)
 
@@ -425,13 +522,19 @@ def main():
     csv_path = sys.argv[2]
     umbral = float(sys.argv[3]) if len(sys.argv) > 3 else 0.0
 
+    umbral = float(sys.argv[3]) if len(sys.argv) > 3 else 0.0
+
     predictor = HierarchicalBCIPredictor(usuario=usuario)
+    if umbral > 0.0:
+        predictor.set_min_group_confidence(umbral)
+
     if umbral > 0.0:
         predictor.set_min_group_confidence(umbral)
 
     comando, detalle = predictor.predict_from_csv(csv_path)
 
-    print(f"\n>>> Grupo predicho  : {detalle['grupo_predicho']}")
+    print(f"\n>>> Color predicho  : {detalle['color_predicho']}")
+    print(f">>> Grupo predicho  : {detalle['grupo_predicho']}")
     print(f">>> Rechazado       : {detalle.get('rechazado', False)}")
     if detalle.get('rechazado'):
         print(f">>> Razón           : {detalle.get('razon_rechazo', '')}")
@@ -439,9 +542,16 @@ def main():
         print(f">>> Comando final   : {comando}")
     print(f">>> Super feat. set : {detalle.get('super_feature_set', 'N/A')}")
     print(f">>> Grupo feat. set : {detalle.get('grupo_feature_set', 'N/A')}")
+    print("\nProbabilidades de color:")
+    for color, p in detalle["color_probabilidades"].items():
+        print(f"  {color}: {p:.3f}")
     print("\nTop 3 probabilidades de grupo:")
     for g, p in list(detalle["grupo_probabilidades"].items())[:3]:
         print(f"  {g}: {p:.3f}")
+    if not detalle.get('rechazado'):
+        print("\nTop 5 probabilidades de comando (dentro del grupo elegido):")
+        for cmd, p in list(detalle["comando_probabilidades"].items())[:5]:
+            print(f"  {cmd}: {p:.3f}")
     if not detalle.get('rechazado'):
         print("\nTop 5 probabilidades de comando (dentro del grupo elegido):")
         for cmd, p in list(detalle["comando_probabilidades"].items())[:5]:
@@ -450,4 +560,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

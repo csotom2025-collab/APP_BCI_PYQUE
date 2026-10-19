@@ -20,8 +20,21 @@ from eeg_features import (
     apply_baseline_correction,
     apply_notch_filter,
     apply_bandpass_filter,
-    apply_zscore_normalization
+    apply_zscore_normalization,
 )
+
+GREEN_COMMANDS = [
+    "A", "C", "F", "R", "V", "I", "M", "J", "L", "Q", "U", "B", "X",
+    "4", "0", "2", "8", "W", "6", "⟵",
+]
+BLUE_COMMANDS = [
+    "S", "G", "E", "T", "Z", "N", "Y", "O", "P", "Ñ", "D", "H", "1",
+    "7", "K", "5", "───", "3", "9", "↩",
+]
+COLOR_BY_COMMAND = {
+    **{command: "Green" for command in GREEN_COMMANDS},
+    **{command: "Blue" for command in BLUE_COMMANDS},
+}
 
 
 def _parse_filename(fname, usuario):
@@ -80,7 +93,7 @@ def build_dataset(base_dir=None, usuarios=None, tp_comandos=None, verbose=True):
     """
     Recorre todos los usuarios/tpComando/archivos y construye un DataFrame
     con una fila por trial: columnas de caracteristicas + metadatos
-    (usuario, tpComando, letra, trial, label).
+    (usuario, tpComando, letra, trial, label, color).
     """
     base_dir = base_dir or config.BASE_DIR
     usuarios = usuarios or config.USUARIOS
@@ -92,7 +105,9 @@ def build_dataset(base_dir=None, usuarios=None, tp_comandos=None, verbose=True):
     limiteCom=40
     canfile=0
     for usuario in usuarios:
+        print(f"\nProcesando usuario: {usuario}")
         for tp in tp_comandos:
+            print(f"  tpComando: {tp}")
             carpeta = os.path.join(base_dir, usuario, tp)
             archivos = sorted(glob.glob(os.path.join(carpeta, f"{usuario}_*.csv")))
             if not archivos and verbose:
@@ -120,51 +135,57 @@ def build_dataset(base_dir=None, usuarios=None, tp_comandos=None, verbose=True):
                         print(f"[AVISO] No se pudo parsear el nombre: {path}")
                     continue
                 else: 
+                    if letra not in COLOR_BY_COMMAND:
+                        raise ValueError(
+                            f"El comando {letra!r} no tiene clasificacion de color. "
+                            "Actualiza GREEN_COMMANDS o BLUE_COMMANDS."
+                        )
+                    color = COLOR_BY_COMMAND[letra]
                     if(letra!=bef):
                         trialn=-1
                         bef=letra
                         canfile=0
                         print("Cambio de comando",letra, "en usuario", usuario, "tpComando", tp)
                 try:
-                    canfile+=1
+                    canfile += 1
 
                     signals = _load_signal_csv(path, config.CHANNEL_NAMES)
 
-                    # --- PREPROCESAMIENTO ---
-                    # 0) Filtro Notch (60 Hz)
+                    # --- PREPROCESAMIENTO GLOBAL (Microvoltios Reales) ---
+                    # 0) Filtro Notch (60 Hz) - Obligatorio para habla imaginada
                     signals = apply_notch_filter(signals, config.FS, notch_freq=60.0)
 
-                    # 1) Filtro Paso de Banda (0.5 a 40 Hz)
+                    # 1) Filtro Paso de Banda Amplio (0.5 a 40 Hz) - Conserva Alfa y Beta
                     signals = apply_bandpass_filter(signals, config.FS, lowcut=0.5, highcut=40.0)
                     
-                    # 2) Correccion de linea base (usando el pre-estimulo 0.0-0.5s)
+                    # 2) Corrección de línea base (usando el pre-estímulo 0.0-0.5s)
                     if config.APPLY_BASELINE_CORRECTION:
                         signals = apply_baseline_correction(
                             signals, config.FS, config.BASELINE_WINDOW_S
                         )
-                    # 3) Deteccion y Descarte de picos (>150uV) Parpadeo
+                        
+                    # 3) Detección y Descarte de picos por Umbral Optimizado (100 uV)
+                    # Detiene parpadeos masivos reales sin tirar la tensión facial del habla interna
                     pico_maximo = np.max(np.abs(signals))
-                    if pico_maximo > 150.0:
+                    if pico_maximo > 150.0:  # <-- Actualizado de 150 a 100 uV de forma óptima
                         print(f"Bloque descartado por Pico: {pico_maximo:.2f} uV en archivo: {path}")
                         n_fail += 1
                         continue
                     
-                    # 4) Normalizacion y Escalamiento (Z-score)
-                    signals = apply_zscore_normalization(signals)
-                    # ---------------------------------
-
-                    # 5) Recorte opcional a la ventana P300 (0.5-1.2s)
+                    # 4) Recorte opcional a la ventana P300 (Si tu protocolo lo requiere)
                     if config.USE_P300_WINDOW_ONLY:
                         signals = _crop_p300_window(signals, config.FS)
 
                     n_samples = signals.shape[1]
 
-                    # Un solo "window" = el trial (o el recorte P300) completo
                     if config.USE_WIN_SIZE:
                         window_size = config.WINDOW_SIZE
                     else:
-                        window_size=n_samples
+                        window_size = n_samples
+                    #aplicamos z-score a la señal completa antes de extraer caracteristicas
+                    signals = apply_zscore_normalization(signals)
 
+                    # 5) EXTRACCIÓN DE CARACTERÍSTICAS
                     feat_df = extractor.extract_features(
                         signals,
                         channel_names=config.CHANNEL_NAMES,
@@ -173,15 +194,16 @@ def build_dataset(base_dir=None, usuarios=None, tp_comandos=None, verbose=True):
                         overlap=config.WINDOW_OVERLAP,
                     )
 
-                    if(feat_df.shape[0]>1):
+                    if(feat_df.shape[0] > 1):
                         for index, row in feat_df.iterrows():
-                            trialn+=1
+                            trialn += 1
                             feat_row = row.to_dict()
                             feat_row["usuario"] = usuario
                             feat_row["tpComando"] = tp
                             feat_row["letra"] = letra
                             feat_row["trial"] = trialn
-                            feat_row["label"] = letra  # 40 clases posibles: A-Z, 0-9, simbolos control
+                            feat_row["label"] = letra  
+                            feat_row["color"] = color
                             rows.append(feat_row)
                     else:
                         feat_row = feat_df.mean(axis=0, numeric_only=True).to_dict()
@@ -189,9 +211,11 @@ def build_dataset(base_dir=None, usuarios=None, tp_comandos=None, verbose=True):
                         feat_row["tpComando"] = tp
                         feat_row["letra"] = letra
                         feat_row["trial"] = trial
-                        feat_row["label"] = letra  # 40 clases posibles: A-Z, 0-9, simbolos control
+                        feat_row["label"] = letra  
+                        feat_row["color"] = color
                         rows.append(feat_row)
                     n_ok += 1
+
                 except Exception as e:
                     n_fail += 1
                     if verbose:
@@ -207,7 +231,7 @@ def build_dataset(base_dir=None, usuarios=None, tp_comandos=None, verbose=True):
         )
 
     df = pd.DataFrame(rows)
-    meta_cols = ["usuario", "tpComando", "letra", "trial", "label"]
+    meta_cols = ["usuario", "tpComando", "letra", "trial", "label", "color"]
     feature_cols = [c for c in df.columns if c not in meta_cols]
     df = df[meta_cols + feature_cols]
     return df
@@ -234,7 +258,7 @@ def average_repetitions(df, n_rep=3, seed=42):
              (aprox len(df) // n_rep).
     """
     rng = np.random.default_rng(seed)
-    meta_cols = ["usuario", "tpComando", "letra", "trial", "label"]
+    meta_cols = ["usuario", "tpComando", "letra", "trial", "label", "color"]
     feature_cols = [c for c in df.columns if c not in meta_cols]
 
     rows = []
@@ -251,6 +275,7 @@ def average_repetitions(df, n_rep=3, seed=42):
             avg_feats["tpComando"] = chunk["tpComando"].iloc[0]
             avg_feats["usuario"] = chunk["usuario"].iloc[0]
             avg_feats["trial"] = f"avg_{g}"
+            avg_feats["color"] = chunk["color"].iloc[0]
             rows.append(avg_feats)
 
     out = pd.DataFrame(rows)

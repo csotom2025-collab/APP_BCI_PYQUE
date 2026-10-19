@@ -1,0 +1,154 @@
+@startuml
+title DIAGRAMA DE CLASES - Visualizacion EEG (SignalsWindow)
+
+skinparam backgroundColor #FAFBFC
+skinparam shadowing false
+skinparam roundcorner 15
+skinparam class {
+    BackgroundColor #FFFFFF
+    BorderColor #334155
+    ArrowColor #475569
+    FontColor #0F172A
+    AttributeFontColor #334155
+    MethodFontColor #334155
+    HeaderFontColor #0F172A
+}
+
+class SignalsWindow <<QMainWindow>> {
+    - data_queue : Queue
+    - sixteen_channels : list
+    - apply_filter : bool
+    - overlay_mode : bool
+    - serial_thread : QThread
+    - port : str
+    - baudrate : int
+    - sixteen_channels_mode : bool
+    - use_emotiv : bool
+    /'
+    - emotiv_channels : list
+    - emotiv_quality : dict*\
+    - emotiv_battery_percent : int
+    - channels : list
+    - data_buffer : deque
+    - buffer_lock : Lock
+    - recording_thread : RecordingThread
+    - plotting_thread : PlottingThread
+    - plots : list
+    '/
+    --
+    + __init__(self)
+    + setup_ui(self)
+    + toggle_test_mode(self, state)
+    + toggle_channels(self, state)
+    + toggle_emotiv(self, state)
+    + set_channel_mode(self, sixteen_mode : bool)
+    + toggle_overlay(self, state)
+    + set_apply_filter(self, state)
+    + on_emotiv_quality(self, quality_dict)
+    /'+ on_emotiv_battery(self, percent)
+    + update_emotiv_quality_display(self)
+    + _rebuild_plots(self)
+    + on_plot_update(self, times, all_values, channels)
+    + start_serial(self)
+    + on_serial_error(self, msg : str)
+    + stop_serial(self)
+    + process_queue_to_buffer(self)
+    + update_plot(self, row=None)
+    + update_serial_config(self, port, baudrate)
+    + closeEvent(self, event)
+    + stop_recording(self)
+    + start_recording(self, duration=2)
+    + return_recorded_data(self)
+    + check_registers(self, print_output=True)
+    + printRegisters(self)
+    + checkRegisterLOFF_STATP(self)
+    + print_disconnected_channels(self)'/
+}
+
+class SerialReader <<QThread>> {
+    - port : str
+    - baudrate : int
+    - data_queue : Queue
+    --
+    + __init__(self, port, baudrate, data_queue, sixteen_mode)
+    + printRegisters(self)
+    + run(self)
+    + stop(self)
+}
+
+class EmotivReader <<QThread>> {
+    - data_queue : Queue
+    - running : bool
+    - cipher
+    - decoder : EmotivPacketDecoder
+    --
+    + __init__(self, data_queue)
+    + run(self)
+    + stop(self)
+}
+
+class EmotivPacketDecoder {
+    - sensors : dict
+    - battery_raw
+    - battery_percent
+    --
+    + __init__(self)
+    + decode(self, raw_data)
+}
+
+class PlottingThread <<QThread>> {
+    - data_buffer
+    - buffer_lock
+    - plots
+    /'- channels
+    - running : bool
+    - applied_filter : bool'/
+    - filter : EEGFilter
+    --
+    + __init__(self, data_buffer, buffer_lock, plots, channels, apply_filter)
+    + run(self)
+    + stop(self)
+    + set_apply_filter(self, apply_filter)
+}
+
+class RecordingThread <<QThread>> {
+    - recording_queue : Queue
+    '- running : bool
+    '- recording : bool
+    '- recording_df : DataFrame
+    - filter : EEGFilter
+    -' columns_df
+    - duration
+    --
+    + __init__(self)
+    + start_recording(self, columns_df, duration)
+    + stop_recording(self)
+    + get_recorded_data(self)
+    + get_filtered_recording_df(self)
+    + run(self)
+    '+ stop(self)
+}
+
+class EEGFilter {
+    - fs : int
+    - use_notch : bool
+    - use_bandpass : bool
+    --
+    + __init__(self, fs=250, low=0.5, high=40, notch_freq=60, use_bandpass=False, use_notch=True)
+    + apply(self, signal)
+}
+
+SignalsWindow o-- SerialReader : crea/controla
+SignalsWindow o-- EmotivReader : crea/controla
+SignalsWindow o-- PlottingThread : crea/controla
+SignalsWindow o-- RecordingThread : crea/controla
+EmotivReader --> EmotivPacketDecoder : decodifica
+PlottingThread --> EEGFilter
+RecordingThread --> EEGFilter
+
+legend bottom
+|= Relacion |= Significado |
+| o-- | Agregacion |
+| --> | Utiliza |
+endlegend
+@enduml

@@ -1,12 +1,12 @@
 {
   "version": "2.1.0",
-  "fecha_utc": "2026-10-19T21:30:12.079864+00:00",
+  "fecha_utc": "2026-10-20T22:03:52.669860+00:00",
   "captures": "C:\\Users\\usuario\\Desktop\\APP_BCI_PYQUE\\captures",
   "salida": "C:\\Users\\usuario\\Desktop\\APP_BCI_PYQUE\\utils\\chequeo_calidad\\UserPony",
   "usuario": "UserPony",
   "archivos": 1202,
-  "A": 789,
-  "B": 327,
+  "A": 1115,
+  "B": 1,
   "C": 86,
   "codigos_C": {
     "REFERENCIA_INESTABLE": 12,
@@ -14,9 +14,9 @@
     "REFERENCIA_CONTAMINADA": 14,
     "ESTRUCTURA": 37
   },
-  "segmentos_corregidos": 393,
-  "muestras_modificadas": 27479,
-  "archivos_con_amplificacion": 8,
+  "segmentos_corregidos": 1,
+  "muestras_modificadas": 78,
+  "archivos_con_amplificacion": 0,
   "archivos_con_canales_no_utilizables": 218,
   "rescatados_A_B_con_canales_no_utilizables": 208
 }

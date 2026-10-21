@@ -1,0 +1,11 @@
+usuario,clase,a_validos,b_validos,total_validos,minimo_requerido,faltantes,estado,c_reportados,a_no_disponibles,b_no_disponibles
+UserCesarMen,A,11,21,32,30,0,OK,0,0,0
+UserCesarMen,D,18,12,30,30,0,OK,2,0,0
+UserCesarMen,E,17,12,29,30,1,REGRABAR,5,0,0
+UserCesarMen,I,14,10,24,30,6,REGRABAR,6,0,0
+UserCesarMen,L,21,8,29,30,1,REGRABAR,1,0,0
+UserCesarMen,N,17,11,28,30,2,REGRABAR,2,0,0
+UserCesarMen,O,16,12,28,30,2,REGRABAR,2,0,0
+UserCesarMen,R,16,11,27,30,3,REGRABAR,3,0,0
+UserCesarMen,S,16,9,25,30,5,REGRABAR,5,0,0
+UserCesarMen,U,18,10,28,30,2,REGRABAR,4,0,0

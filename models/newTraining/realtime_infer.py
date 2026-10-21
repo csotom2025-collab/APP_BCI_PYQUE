@@ -19,7 +19,7 @@ import pandas as pd
 
 import config
 from eeg_features import (
-    EEGFeatureExtractor,
+ EEGFeatureExtractor,
     apply_notch_filter,
     apply_bandpass_filter,
     apply_baseline_correction,
@@ -118,6 +118,7 @@ class BCIPredictor:
         x = feat_row.reindex(columns=self.feature_columns).iloc[0].to_numpy(dtype=float)
         x = np.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0)
         return x.reshape(1, -1)
+
 
     # -----------------------------------------------------------------
     def predict_from_signals(self, signals):

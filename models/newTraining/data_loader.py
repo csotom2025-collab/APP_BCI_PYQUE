@@ -20,10 +20,21 @@ from models.newTraining.eeg_features import (
     apply_baseline_correction,
     apply_notch_filter,
     apply_bandpass_filter,
-    apply_ica_artifact_removal,
-    apply_car_rereference,
-    apply_zscore_normalization
+    apply_zscore_normalization,
 )
+
+GREEN_COMMANDS = [
+    "A", "C", "F", "R", "V", "I", "M", "J", "L", "Q", "U", "B", "X",
+    "4", "0", "2", "8", "W", "6", "⟵",
+]
+BLUE_COMMANDS = [
+    "S", "G", "E", "T", "Z", "N", "Y", "O", "P", "Ñ", "D", "H", "1",
+    "7", "K", "5", "───", "3", "9", "↩",
+]
+COLOR_BY_COMMAND = {
+    **{command: "Green" for command in GREEN_COMMANDS},
+    **{command: "Blue" for command in BLUE_COMMANDS},
+}
 
 
 def _parse_filename(fname, usuario):
@@ -130,7 +141,13 @@ def build_dataset(base_dir=None, usuarios=None, tp_comandos=None, verbose=True,
                     if verbose:
                         print(f"[AVISO] No se pudo parsear el nombre: {path}")
                     continue
-                else: 
+                else:
+                    if letra not in COLOR_BY_COMMAND:
+                        raise ValueError(
+                            f"El comando {letra!r} no tiene clasificacion de color. "
+                            "Actualiza GREEN_COMMANDS o BLUE_COMMANDS."
+                        )
+                    color = COLOR_BY_COMMAND[letra] 
                     if(letra!=bef):
                         trialn=-1
                         bef=letra

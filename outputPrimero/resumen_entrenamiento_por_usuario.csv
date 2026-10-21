@@ -1,0 +1,2 @@
+usuario,n_trials,mejor_nivel,mejor_grupo,mejor_feature_set,mejor_clasificador,accuracy_mean,f1_macro_mean
+UserArcane,5158,comando_fino_por_color_grupo,Controls,Frecuencias_Est,SVM_RBF,0.8846274509803923,0.8842299473528692

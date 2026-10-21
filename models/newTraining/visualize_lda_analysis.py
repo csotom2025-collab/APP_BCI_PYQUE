@@ -37,7 +37,9 @@ from sklearn.pipeline import Pipeline
 
 import config
 from eeg_features import get_feature_sets, log_transform_power_columns
-from train_hierarchical_optimized import build_pipeline_hierarchical, build_classifiers
+from train_hierarchical_optimized import (
+    build_pipeline_hierarchical, build_classifiers, classifiers_for_group,
+)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # PALETAS Y ESTILO
@@ -91,7 +93,7 @@ def _lda2d_from_bundle(bundle_level, X_raw, y_encoded, classes_str):
     lda_step = None
     for name, step in pipe.steps[:-1]:          # excluir clf
         preproc_steps.append((name, step))
-        if name in ("lda", "lda2"):
+        if isinstance(step, LinearDiscriminantAnalysis):
             lda_step = (name, step)
 
     if lda_step is None:
@@ -116,6 +118,151 @@ def _lda2d_from_bundle(bundle_level, X_raw, y_encoded, classes_str):
         X_lda = lda_fitted.transform(X_t)[:, :2]
 
     return X_lda
+
+
+def plot_color_separability(df_usuario, color_bundle, results_df, out_dir, usuario):
+    """Visualiza en el eje discriminante la separación entre Green y Blue."""
+    label_encoder = color_bundle["label_encoder"]
+    classes = label_encoder.classes_
+    if len(classes) != 2:
+        raise ValueError(
+            f"Se esperaban 2 etiquetas de color; se encontraron {len(classes)}."
+        )
+
+    feature_columns = color_bundle["feature_columns"]
+    missing_columns = [col for col in feature_columns if col not in df_usuario.columns]
+    if missing_columns:
+        raise ValueError(f"Faltan características para color: {missing_columns}")
+
+    df_color = df_usuario[df_usuario["color"].astype(str).isin(classes)].copy()
+    if df_color.empty:
+        raise ValueError("No hay muestras con las etiquetas del modelo de color.")
+
+    y = label_encoder.transform(df_color["color"].astype(str))
+    X = np.nan_to_num(
+        df_color[feature_columns].to_numpy(),
+        nan=0.0, posinf=0.0, neginf=0.0
+    )
+    X_lda = _lda2d_from_bundle(color_bundle, X, y, classes)
+    if X_lda is None:
+        X_lda = _fit_lda2d_fresh(X, y, n_components=1, k_best=250)
+
+    fig, ax = plt.subplots(figsize=(12, 6), facecolor="#0D0D0D")
+    ax.set_facecolor("#111111")
+    rng = np.random.default_rng(42)
+    color_map = {"Green": "#7BC043", "Blue": "#2196F3"}
+
+    for class_idx, class_name in enumerate(classes):
+        scores = X_lda[y == class_idx, 0]
+        if scores.size == 0:
+            continue
+        jitter = rng.uniform(-0.13, 0.13, size=scores.size)
+        ax.scatter(
+            scores, class_idx + jitter,
+            color=color_map.get(str(class_name), PALETTE_SUPER[class_idx]),
+            alpha=0.62, s=24, edgecolors="none",
+            label=f"{class_name} (n={scores.size})"
+        )
+        ax.plot(
+            [scores.mean(), scores.mean()],
+            [class_idx - 0.2, class_idx + 0.2],
+            color="white", linewidth=2, zorder=4
+        )
+
+    ax.set_yticks(np.arange(len(classes)))
+    ax.set_yticklabels(classes, color="white")
+    ax.set_xlabel("Proyección LDA de color (LD1)", color="#AAAAAA")
+    ax.set_ylabel("Etiqueta real", color="#AAAAAA")
+    ax.set_title(
+        f"Separabilidad de la etiqueta de color – {usuario}\n"
+        f"Feature Set: {color_bundle['feature_set']} | "
+        f"Clasificador: {color_bundle['clasificador']}",
+        color="white", fontsize=13, fontweight="bold"
+    )
+
+    f1_cv = color_bundle.get("f1_macro_cv")
+    metric_text = f"F1-Macro CV: {f1_cv:.3f}" if f1_cv is not None else ""
+    if {"nivel", "feature_set", "clasificador", "accuracy_mean"} <= set(results_df.columns):
+        color_rows = results_df[
+            (results_df["nivel"] == "color")
+            & (results_df["feature_set"] == color_bundle["feature_set"])
+            & (results_df["clasificador"] == color_bundle["clasificador"])
+        ]
+        if not color_rows.empty:
+            accuracy = color_rows.iloc[0]["accuracy_mean"]
+            metric_text += f" | Accuracy CV: {accuracy:.3f}"
+    if metric_text:
+        ax.text(
+            0.99, 0.02, metric_text, transform=ax.transAxes,
+            ha="right", va="bottom", color="#B5FF4D", fontsize=10
+        )
+
+    ax.tick_params(colors="#888888")
+    ax.grid(axis="x", alpha=0.12, lw=0.6)
+    ax.legend(loc="best", framealpha=0.2, labelcolor="white")
+    for spine in ax.spines.values():
+        spine.set_edgecolor("#333333")
+
+    out_path = os.path.join(out_dir, f"color_separability_{usuario}.png")
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=160, bbox_inches="tight", facecolor="#0D0D0D")
+    plt.close(fig)
+    print(f"   [OK] Color separability -> {out_path}")
+
+    return out_path
+
+
+def plot_color_feature_heatmap(results_df, out_dir, usuario):
+    """Compara F1-Macro CV por clasificador y grupo de características para color."""
+    required_columns = {
+        "nivel", "clasificador", "feature_set", "f1_macro_mean"
+    }
+    if not required_columns.issubset(results_df.columns):
+        raise ValueError(
+            "El CSV de evaluación no contiene las columnas requeridas "
+            "para el heatmap de color."
+        )
+
+    color_results = results_df[results_df["nivel"] == "color"]
+    if color_results.empty:
+        raise ValueError("El CSV de evaluación no tiene resultados del nivel color.")
+
+    pivot = color_results.pivot_table(
+        index="clasificador", columns="feature_set",
+        values="f1_macro_mean", aggfunc="max"
+    )
+    fig_width = max(12, 1.5 * len(pivot.columns))
+    fig_height = max(6, 0.65 * len(pivot.index))
+    fig, ax = plt.subplots(
+        figsize=(fig_width, fig_height), facecolor="#0D0D0D"
+    )
+    ax.set_facecolor("#111111")
+    sns.heatmap(
+        pivot, ax=ax, cmap="viridis", vmin=0, vmax=1,
+        annot=True, fmt=".3f", linewidths=0.5,
+        linecolor="#1A1A1A",
+        annot_kws={"size": 9, "color": "white"},
+        cbar_kws={"label": "F1-Macro CV", "shrink": 0.8}
+    )
+    ax.set_title(
+        f"Separabilidad Green/Blue: clasificador × grupo de características\n"
+        f"{usuario}",
+        fontsize=13, fontweight="bold", color="white"
+    )
+    ax.set_xlabel("Grupo de características (Feature Set)", color="#AAAAAA")
+    ax.set_ylabel("Clasificador", color="#AAAAAA")
+    ax.tick_params(colors="white", labelsize=8)
+    ax.tick_params(axis="x", labelrotation=35)
+    ax.tick_params(axis="y", labelrotation=0)
+
+    out_path = os.path.join(
+        out_dir, f"color_feature_classifier_heatmap_{usuario}.png"
+    )
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=160, bbox_inches="tight", facecolor="#0D0D0D")
+    plt.close(fig)
+    print(f"   [OK] Color feature/classifier heatmap -> {out_path}")
+    return out_path
 
 
 def _fit_lda2d_fresh(X_raw, y, n_components=2, k_best=250):
@@ -174,7 +321,7 @@ def _scatter_lda(ax, X_lda, y, class_names, palette, title,
 
         ax.scatter(Xc_plot[:, 0], Xc_plot[:, 1],
                    c=[color], alpha=alpha, s=12, linewidths=0,
-                   label=cls_name, zorder=2)
+                   label=f"{cls_name} (n={len(Xc)})", zorder=2)
 
         if show_centroids:
             mu = Xc.mean(axis=0)
@@ -200,6 +347,17 @@ def _scatter_lda(ax, X_lda, y, class_names, palette, title,
         spine.set_edgecolor("#333333")
     ax.set_facecolor("#111111")
     ax.grid(True, alpha=0.08, lw=0.5)
+
+
+def _class_count_legend_handles(class_names, y, palette):
+    """Crea etiquetas de leyenda con el número de muestras proyectadas."""
+    return [
+        mpatches.Patch(
+            facecolor=palette[i % len(palette)],
+            label=f"{class_name} (n={int(np.count_nonzero(y == i))})"
+        )
+        for i, class_name in enumerate(class_names)
+    ]
 
 
 def _draw_ellipse(ax, mean, cov, color, alpha=0.15, n_std=2):
@@ -265,8 +423,7 @@ def plot_lda_projections(df_usuario, bundle, out_dir, usuario):
                  f"f1={super_b.get('f1_macro_cv', 0):.3f}",
                  evr=evr_s, show_ellipses=True, alpha=0.70)
 
-    handles = [mpatches.Patch(facecolor=PALETTE_SUPER[i], label=cls)
-               for i, cls in enumerate(le_s.classes_)]
+    handles = _class_count_legend_handles(le_s.classes_, y_s, PALETTE_SUPER)
     ax_s.legend(handles=handles, fontsize=8, loc="upper right",
                 framealpha=0.25, labelcolor="white")
 
@@ -295,8 +452,7 @@ def plot_lda_projections(df_usuario, bundle, out_dir, usuario):
                  f"f1={let_b.get('f1_macro_cv', 0):.3f}",
                  show_ellipses=False, show_centroids=True, alpha=0.55)
     if len(le_l.classes_) <= 14:
-        handles_l = [mpatches.Patch(facecolor=pal_l[i], label=cls)
-                     for i, cls in enumerate(le_l.classes_)]
+        handles_l = _class_count_legend_handles(le_l.classes_, y_l, pal_l)
         ax_l.legend(handles=handles_l, fontsize=6, ncol=2, loc="upper right",
                     framealpha=0.2, labelcolor="white")
 
@@ -324,8 +480,7 @@ def plot_lda_projections(df_usuario, bundle, out_dir, usuario):
                  f"Clf: {num_b['clasificador']}  |  "
                  f"f1={num_b.get('f1_macro_cv', 0):.3f}",
                  show_ellipses=True, show_centroids=True, alpha=0.70)
-    handles_n = [mpatches.Patch(facecolor=pal_n[i], label=cls)
-                 for i, cls in enumerate(le_n.classes_)]
+    handles_n = _class_count_legend_handles(le_n.classes_, y_n, pal_n)
     ax_n.legend(handles=handles_n, fontsize=8, ncol=2, loc="upper right",
                 framealpha=0.2, labelcolor="white")
 
@@ -362,8 +517,7 @@ def plot_lda_projections(df_usuario, bundle, out_dir, usuario):
                      f"Clf: {ctrl_b['clasificador']}  |  "
                      f"f1={ctrl_b.get('f1_macro_cv', 0):.3f}",
                      show_ellipses=True, show_centroids=True, alpha=0.75)
-        handles_c = [mpatches.Patch(facecolor=pal_c[i], label=cls)
-                     for i, cls in enumerate(le_c.classes_)]
+        handles_c = _class_count_legend_handles(le_c.classes_, y_c, pal_c)
         ax_c.legend(handles=handles_c, fontsize=9, loc="upper right",
                     framealpha=0.2, labelcolor="white")
 
@@ -372,6 +526,98 @@ def plot_lda_projections(df_usuario, bundle, out_dir, usuario):
     plt.close()
     print(f"   [OK] LDA projections -> {out_path}")
     return out_path
+
+
+def plot_lda_class_counts(df_usuario, bundle, out_dir, usuario):
+    """Guarda el conteo por clase de las muestras incluidas en las proyecciones LDA."""
+    class_groups = [
+        ("Super-clase", "super_clase", bundle["super_clase"], "tpComando"),
+        ("Letters", "Letters", bundle["por_grupo"]["Letters"], "label"),
+        ("Numbers", "Numbers", bundle["por_grupo"]["Numbers"], "label"),
+        ("Controls", "Controls", bundle["por_grupo"]["Controls"], "label"),
+    ]
+    records = []
+    for title, model_key, model, label_column in class_groups:
+        if title == "Super-clase":
+            df_group = df_usuario
+        else:
+            df_group = df_usuario[
+                df_usuario["tpComando"].astype(str) == title
+            ]
+
+        if "fixed_label" in model:
+            class_names = [str(model["fixed_label"])]
+        else:
+            class_names = [
+                str(value) for value in model["label_encoder"].classes_
+            ]
+
+        labels = _normalize_label_series(df_group[label_column])
+        counts = labels.value_counts()
+        color_values = (
+            sorted(df_group["color"].dropna().astype(str).unique())
+            if "color" in df_group.columns else []
+        )
+        color_name = ", ".join(color_values) if color_values else "No especificado"
+
+        for class_name in class_names:
+            records.append({
+                "usuario": usuario,
+                "color": color_name,
+                "nivel": model_key,
+                "clase": class_name,
+                "n_muestras": int(counts.get(class_name, 0)),
+            })
+
+    counts_df = pd.DataFrame(records)
+    csv_path = os.path.join(out_dir, f"lda_class_counts_{usuario}.csv")
+    counts_df.to_csv(csv_path, index=False)
+
+    fig, axes = plt.subplots(2, 2, figsize=(20, 13), facecolor="#0D0D0D")
+    fig.suptitle(
+        f"Cantidad de muestras por clase en proyecciones LDA – {usuario}",
+        fontsize=15, fontweight="bold", color="white"
+    )
+    palettes = {
+        "super_clase": PALETTE_SUPER,
+        "Letters": PALETTE_LETTERS,
+        "Numbers": PALETTE_NUMBERS,
+        "Controls": PALETTE_CONTROLS,
+    }
+    for ax, (title, model_key, _, _) in zip(axes.flat, class_groups):
+        subset = counts_df[counts_df["nivel"] == model_key]
+        bar_colors = [
+            palettes[model_key][i % len(palettes[model_key])]
+            for i in range(len(subset))
+        ]
+        bars = ax.bar(
+            subset["clase"], subset["n_muestras"], color=bar_colors, alpha=0.85
+        )
+        for bar, count in zip(bars, subset["n_muestras"]):
+            ax.annotate(
+                str(count),
+                (bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                xytext=(0, 3), textcoords="offset points",
+                ha="center", va="bottom", fontsize=7, color="white"
+            )
+        ax.set_title(title, color="white", fontsize=11, fontweight="bold")
+        ax.set_ylabel("Número de muestras", color="#AAAAAA", fontsize=9)
+        ax.tick_params(colors="#888888", labelsize=7)
+        ax.tick_params(axis="x", labelrotation=60)
+        ax.set_facecolor("#111111")
+        ax.grid(axis="y", alpha=0.10, lw=0.5)
+        for spine in ax.spines.values():
+            spine.set_edgecolor("#333333")
+
+    fig.tight_layout(rect=[0, 0, 1, 0.96])
+    figure_path = os.path.join(out_dir, f"lda_class_counts_{usuario}.png")
+    fig.savefig(
+        figure_path, dpi=160, bbox_inches="tight", facecolor="#0D0D0D"
+    )
+    plt.close(fig)
+    print(f"   [OK] LDA class counts -> {figure_path}")
+    print(f"   [OK] LDA class counts CSV -> {csv_path}")
+    return figure_path, csv_path
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -518,6 +764,72 @@ def plot_feature_winner_analysis(results_df, bundle, out_dir, usuario):
     return out_path
 
 
+def plot_fine_level_heatmaps(results_df, out_dir, usuario):
+    """Genera heatmaps Clasificador × Feature Set para los comandos finos."""
+    fine_level = "comando_fino_por_color_grupo"
+    fine_groups = ("Letters", "Numbers", "Controls")
+    required_columns = {
+        "nivel", "grupo", "clasificador", "feature_set", "f1_macro_mean"
+    }
+    fig, axes = plt.subplots(
+        1, len(fine_groups), figsize=(21, 7), facecolor="#0D0D0D"
+    )
+    fig.suptitle(
+        f"Heatmaps F1-Macro a nivel fino – {usuario}",
+        fontsize=14, fontweight="bold", color="white", y=0.98
+    )
+
+    if not required_columns.issubset(results_df.columns):
+        for ax in axes:
+            ax.axis("off")
+        axes[1].text(
+            0.5, 0.5, "El archivo de resultados no contiene las columnas "
+            "necesarias para el nivel fino.",
+            ha="center", va="center", color="#FF6B6B",
+            transform=axes[1].transAxes
+        )
+    else:
+        for ax, group in zip(axes, fine_groups):
+            ax.set_facecolor("#111111")
+            subset = results_df[
+                (results_df["nivel"] == fine_level)
+                & (results_df["grupo"] == group)
+            ]
+            if subset.empty:
+                ax.text(
+                    0.5, 0.5, "Sin resultados evaluables",
+                    ha="center", va="center", color="#AAAAAA",
+                    transform=ax.transAxes
+                )
+                ax.set_title(group, color="white", fontweight="bold")
+                ax.set_axis_off()
+                continue
+
+            pivot = subset.pivot_table(
+                index="clasificador", columns="feature_set",
+                values="f1_macro_mean", aggfunc="max"
+            )
+            sns.heatmap(
+                pivot, ax=ax, cmap="viridis", vmin=0, vmax=1,
+                annot=True, fmt=".2f", linewidths=0.4,
+                linecolor="#1A1A1A",
+                annot_kws={"size": 7, "color": "white"},
+                cbar_kws={"shrink": 0.75}
+            )
+            ax.set_title(group, color="white", fontsize=11, fontweight="bold")
+            ax.set_xlabel("Feature Set", color="#AAAAAA", fontsize=8)
+            ax.set_ylabel("Clasificador", color="#AAAAAA", fontsize=8)
+            ax.tick_params(colors="white", labelsize=7)
+            ax.set_facecolor("#111111")
+
+    out_path = os.path.join(out_dir, f"fine_level_heatmaps_{usuario}.png")
+    plt.tight_layout(rect=[0, 0, 1, 0.94])
+    plt.savefig(out_path, dpi=160, bbox_inches="tight", facecolor="#0D0D0D")
+    plt.close()
+    print(f"   [OK] Fine-level heatmaps -> {out_path}")
+    return out_path
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # FIGURA 3: CURVAS DE APRENDIZAJE
 # ──────────────────────────────────────────────────────────────────────────────
@@ -646,7 +958,7 @@ def plot_learning_curves(df_usuario, bundle, results_df, out_dir, usuario):
         n_clases = df_sub["label"].nunique()
         n_comp = cfg["n_comp"] if cfg["n_comp"] else max(1, min(n_clases - 1, 50))
 
-        clf = classifiers.get(clf_name)
+        clf = classifiers_for_group(classifiers, n_clases).get(clf_name)
         if clf is None:
             clf = list(classifiers.values())[0]
 
@@ -832,7 +1144,7 @@ def main():
     print(f"\n1) Cargando dataset: {config.FEATURES_CSV} ...")
     df = pd.read_csv(config.FEATURES_CSV)
     df["label"] = _normalize_label_series(df["label"])
-    meta_cols = ["usuario", "tpComando", "letra", "trial", "label"]
+    meta_cols = ["usuario", "tpComando", "letra", "trial", "label", "color"]
     feature_cols = [c for c in df.columns if c not in meta_cols]
     df[feature_cols] = log_transform_power_columns(df[feature_cols], feature_cols)
     print(f"   OK {df.shape[0]} trials | {len(feature_cols)} features | "
@@ -868,6 +1180,23 @@ def main():
         out_dir = os.path.join(config.FIGURES_DIR, usuario)
         os.makedirs(out_dir, exist_ok=True)
 
+        if "color" in bundle:
+            print("   -> Separabilidad LDA de la etiqueta de color ...")
+            try:
+                plot_color_separability(
+                    df_usuario, bundle["color"], results_df, out_dir, usuario
+                )
+            except Exception as e:
+                print(f"   [ERROR] Color separability: {e}")
+                import traceback; traceback.print_exc()
+
+            print("   -> Heatmap de clasificadores y grupos de características para color ...")
+            try:
+                plot_color_feature_heatmap(results_df, out_dir, usuario)
+            except Exception as e:
+                print(f"   [ERROR] Color feature/classifier heatmap: {e}")
+                import traceback; traceback.print_exc()
+
         if "por_color" in bundle:
             plotting_views = []
             for color, hierarchy in bundle["por_color"].items():
@@ -881,9 +1210,10 @@ def main():
                         else model["label_encoder"].classes_
                     )
                 }
-                df_color = df_usuario[
-                    df_usuario["label"].astype(str).isin(commands)
-                ].reset_index(drop=True)
+                color_mask = df_usuario["label"].astype(str).isin(commands)
+                if "color" in df_usuario.columns:
+                    color_mask &= df_usuario["color"].astype(str) == str(color)
+                df_color = df_usuario[color_mask].reset_index(drop=True)
                 color_results = results_df[
                     (results_df["nivel"] == "color")
                     | (results_df["color"] == color)
@@ -911,11 +1241,25 @@ def main():
                 print(f"   [ERROR] LDA projections: {e}")
                 import traceback; traceback.print_exc()
 
+            print("   -> Conteo de muestras por clase en las proyecciones LDA ...")
+            try:
+                plot_lda_class_counts(df_plot, bundle_plot, plot_dir, plot_user)
+            except Exception as e:
+                print(f"   [ERROR] LDA class counts: {e}")
+                import traceback; traceback.print_exc()
+
             print("   -> Analisis de Feature Set ganador ...")
             try:
                 plot_feature_winner_analysis(results_plot, bundle_plot, plot_dir, plot_user)
             except Exception as e:
                 print(f"   [ERROR] Feature winner: {e}")
+                import traceback; traceback.print_exc()
+
+            print("   -> Heatmaps de comandos finos ...")
+            try:
+                plot_fine_level_heatmaps(results_plot, plot_dir, plot_user)
+            except Exception as e:
+                print(f"   [ERROR] Fine-level heatmaps: {e}")
                 import traceback; traceback.print_exc()
 
             print("   -> Curvas de Aprendizaje ...")

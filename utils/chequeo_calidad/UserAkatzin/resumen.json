@@ -1,0 +1,22 @@
+{
+  "version": "2.1.0",
+  "fecha_utc": "2026-10-20T22:02:46.094222+00:00",
+  "captures": "C:\\Users\\usuario\\Desktop\\APP_BCI_PYQUE\\captures",
+  "salida": "C:\\Users\\usuario\\Desktop\\APP_BCI_PYQUE\\utils\\chequeo_calidad\\UserAkatzin",
+  "usuario": "UserAkatzin",
+  "archivos": 1205,
+  "A": 1114,
+  "B": 2,
+  "C": 89,
+  "codigos_C": {
+    "REFERENCIA_CONTAMINADA": 32,
+    "REFERENCIA_INESTABLE": 44,
+    "ANOMALIA_EXTENSA": 22,
+    "ESTRUCTURA": 11
+  },
+  "segmentos_corregidos": 2,
+  "muestras_modificadas": 51,
+  "archivos_con_amplificacion": 0,
+  "archivos_con_canales_no_utilizables": 136,
+  "rescatados_A_B_con_canales_no_utilizables": 122
+}

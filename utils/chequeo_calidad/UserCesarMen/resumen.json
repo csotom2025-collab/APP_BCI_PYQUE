@@ -1,0 +1,21 @@
+{
+  "version": "2.1.0",
+  "fecha_utc": "2026-10-21T00:46:26.077862+00:00",
+  "captures": "C:\\Users\\usuario\\Desktop\\APP_BCI_PYQUE\\captures",
+  "salida": "C:\\Users\\usuario\\Desktop\\APP_BCI_PYQUE\\utils\\chequeo_calidad\\UserCesarMen",
+  "usuario": "UserCesarMen",
+  "archivos": 310,
+  "A": 164,
+  "B": 116,
+  "C": 30,
+  "codigos_C": {
+    "REFERENCIA_CONTAMINADA": 10,
+    "REFERENCIA_INESTABLE": 19,
+    "ANOMALIA_EXTENSA": 8
+  },
+  "segmentos_corregidos": 138,
+  "muestras_modificadas": 13482,
+  "archivos_con_amplificacion": 24,
+  "archivos_con_canales_no_utilizables": 61,
+  "rescatados_A_B_con_canales_no_utilizables": 57
+}

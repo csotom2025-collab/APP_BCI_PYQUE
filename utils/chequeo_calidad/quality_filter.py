@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-quality_filter.py  --  Control de calidad y corrección de amplitud EEG.  v2.1.0
+quality_filter.py  --  Control de calidad y corrección de amplitud EEG.  v2.2.0
 
 PRINCIPIO: el filtro NO corta segmentos, NO borra filas/canales/trials, NO rellena
 con ceros y NO desplaza muestras. Número de muestras, duración, eje de tiempo
@@ -35,6 +35,10 @@ MÉTODO DE CORRECCIÓN (ganancia local suave sobre la desviación respecto al ni
   por cero, mismos picos y valles relativos, mismo espectro); las rampas suaves
   evitan escalones. Fuera de las zonas anómalas g == 1 exactamente (valores
   idénticos). Alternativa disponible: modo_ganancia="adaptativa".
+  Después se aplica un límite de seguridad por canal: si el pico absoluto respecto
+  a la mediana del canal alcanza `limite_pico_uv`, se atenúa todo ese canal por una
+  ganancia constante para dejarlo estrictamente por debajo del límite. No se eliminan
+  muestras ni segmentos.
 
 NOVEDADES v2.1.0
   * AMPLIFICADOR DE SEÑALES BAJAS. Un canal de voltaje muy bajo respecto a la referencia
@@ -49,6 +53,10 @@ NOVEDADES v2.1.0
     no corregibles (atenuación excesiva o anomalía extensa en el canal). No se modifican, salen
     de la referencia y se listan en quality_report.csv (canales_no_utilizables). Con más de 7
     el archivo es C. Con <= 7 sigue siendo A/B (según haya o no correcciones).
+NOVEDADES v2.2.0
+  * LIMITADOR DE PICO: en registros utilizables, atenúa el canal completo si alguna
+    muestra alcanza 150 uV respecto a su mediana. Deja margen por debajo de 150 uV,
+    conserva todas las muestras y registra los cambios en los reportes B.
 
 Ver reporte_criterios_quality_filter.md para la justificación estadística de
 cada criterio y la lista completa de parámetros (clase Config).
@@ -71,7 +79,7 @@ import numpy as np
 import pandas as pd
 from scipy import ndimage
 
-VERSION = "2.1.0"
+VERSION = "2.2.0"
 CANALES = ["F3", "FC5", "AF3", "F7", "T7", "P7", "O1",
            "O2", "P8", "T8", "F8", "AF4", "FC6", "F4"]
 ALIAS_TIEMPO = ("Tm", "Time", "time", "TIME")
@@ -112,6 +120,7 @@ class Config:
     sigma_log_archivo: float = 0.3224      # REAL: sigma robusta de ln(MAD canal / ref) entre canales
     inflacion_sigma_ventana: float = 1.4   # PROVISIONAL: ventana corta > archivo (ver reporte 4.3)
     # --- detección y atenuación ------------------------------------------
+    limite_pico_uv: float = 150.0           # límite estricto del pico respecto a la mediana del canal
     z_deteccion: float = 4.0               # PROVISIONAL: q_deteccion = exp(z * sigma_ventana)
     z_inicio: float = 2.0                  # PROVISIONAL: inicio de la atenuación (histéresis)
     q_objetivo: float = 1.0                # amplitud tras corregir, en unidades de la referencia
@@ -206,6 +215,7 @@ class Config:
         assert self.q_objetivo <= self.q_inicio <= self.q_deteccion, \
             "se requiere q_objetivo <= q_inicio <= q_deteccion"
         assert self.max_atenuacion > 1 and self.rampa_muestras >= 1
+        assert self.limite_pico_uv > 0.01
         assert self.max_amplificacion > 1 and self.sigma_min_amplificar_uv >= 0
         assert 0 <= self.max_canales_no_utilizables <= len(CANALES) - 3, \
             "max_canales_no_utilizables debe dejar al menos 3 canales de referencia"
@@ -437,8 +447,104 @@ def analizar_registro(X: np.ndarray, cfg: Config) -> Analisis:
     for _ in range(C + 1):
         res, nuevos = _analizar_pasada(X, cfg, extra)
         if not nuevos:
-            return res
+            return _aplicar_limite_pico(X, res, cfg)
         extra.update(nuevos)
+    return _aplicar_limite_pico(X, res, cfg)
+
+
+def _aplicar_limite_pico(X: np.ndarray, res: Analisis, cfg: Config) -> Analisis:
+    """Aplica una atenuación global por canal sin quitar muestras ni alterar el tiempo."""
+    if res.Y is None:
+        return res
+
+    dc = np.median(X, axis=0)
+    Y = res.Y.copy()
+    objetivo = cfg.limite_pico_uv - 0.01
+    ganancias: dict[int, float] = {}
+
+    for j, canal in enumerate(CANALES):
+        salida_centrada = Y[:, j] - dc[j]
+        pico_antes = float(np.max(np.abs(salida_centrada)))
+        if pico_antes < cfg.limite_pico_uv:
+            continue
+
+        ganancia = objetivo / pico_antes
+        antes = salida_centrada.copy()
+        Y[:, j] = np.round(dc[j] + ganancia * antes, 4)
+        despues = Y[:, j] - dc[j]
+        pico_despues = float(np.max(np.abs(despues)))
+        if pico_despues >= cfg.limite_pico_uv:
+            raise ArithmeticError(
+                f"No se pudo garantizar el límite de pico en {canal}: "
+                f"{pico_despues:.6f} >= {cfg.limite_pico_uv:g} uV"
+            )
+
+        rms_antes = float(np.sqrt(np.mean(antes ** 2)))
+        rms_despues = float(np.sqrt(np.mean(despues ** 2)))
+        if rms_antes > 0 and rms_despues > 0 and len(antes) > 2:
+            corr_forma = float(np.corrcoef(antes, despues)[0, 1])
+        else:
+            corr_forma = float("nan")
+        id_segmento = f"{canal}-limite_pico"
+        criterio = (
+            f"pico_abs={pico_antes:.3f}uV>=limite={cfg.limite_pico_uv:g}uV;"
+            "atenuacion_global_del_canal;sin_eliminar_muestras"
+        )
+        for segmento in res.segmentos:
+            if segmento.canal == canal:
+                segmento.rms_despues *= ganancia
+                segmento.pico_despues *= ganancia
+                segmento.g_min *= ganancia
+                segmento.g_mediana *= ganancia
+                segmento.g_max *= ganancia
+        res.segmentos.append(Segmento(
+            id=id_segmento, canal=canal, inicio=0, fin=len(X) - 1,
+            rms_antes=rms_antes, rms_despues=rms_despues,
+            pico_antes=pico_antes, pico_despues=pico_despues,
+            g_min=ganancia, g_mediana=ganancia, q_max=float("nan"),
+            a_max=pico_antes, referencia_uv=float("nan"), canales_referencia=[],
+            criterio=criterio, corr_forma=corr_forma,
+            tipo="atenuacion", g_max=ganancia,
+        ))
+        if canal not in res.canales_corregidos:
+            res.canales_corregidos.append(canal)
+        if canal not in res.canales_afectados:
+            res.canales_afectados.append(canal)
+        res.pct_por_canal[canal] = 100.0
+        res.amplitudes[canal] = f"pico_limitado={pico_antes:.3f}->{pico_despues:.3f}uV"
+        res.metricas[f"ganancia_limite_pico_{canal}"] = ganancia
+        ganancias[j] = ganancia
+
+    if not ganancias:
+        return res
+
+    existentes = {(r["canal"], r["muestra"]): r for r in res.muestras}
+    for j in ganancias:
+        canal = CANALES[j]
+        for t in np.flatnonzero(np.abs(Y[:, j] - X[:, j]) > 1e-9):
+            registro = existentes.get((canal, int(t)))
+            if registro is None:
+                registro = {
+                    "canal": canal, "muestra": int(t), "valor_original": float(X[t, j]),
+                    "ganancia": float("nan"), "q": float("nan"),
+                    "amplitud_local_uv": float(abs(X[t, j] - dc[j])),
+                    "referencia_uv": float("nan"), "id_segmento": f"{canal}-limite_pico",
+                    "criterio": "atenuacion_global_para_limitar_pico;sin_eliminar_muestras",
+                }
+                res.muestras.append(registro)
+                existentes[(canal, int(t))] = registro
+            registro["valor_corregido"] = float(Y[t, j])
+            registro["ganancia"] = float((Y[t, j] - dc[j]) / (X[t, j] - dc[j])) \
+                if abs(X[t, j] - dc[j]) > 1e-12 else float("nan")
+
+    res.Y = Y
+    res.estado = ESTADO_B
+    res.motivos.append(
+        f"limite_pico_aplicado={cfg.limite_pico_uv:g}uV;"
+        f"canales={','.join(CANALES[j] for j in ganancias)}"
+    )
+    res.metricas["limite_pico_uv"] = cfg.limite_pico_uv
+    _metricas_finales(res, X, Y, *X.shape)
     return res
 
 
@@ -1129,6 +1235,7 @@ def procesar(captures: str, salida: str, cfg: Config, trials_objetivo: int = 30,
             return float(tm[t]) if tm is not None else None
         N = i["n_filas"]
         for s in a.segmentos:
+            es_limite_pico = s.id == f"{s.canal}-limite_pico"
             b_rows.append({
                 "archivo": i["rel"], "usuario": i["usuario"], "clase": i["clase"], "trial": i["trial"],
                 "canal": s.canal, "id_segmento": s.id, "muestra_inicial": s.inicio, "muestra_final": s.fin,
@@ -1140,11 +1247,15 @@ def procesar(captures: str, salida: str, cfg: Config, trials_objetivo: int = 30,
                 "pico_antes_uv": round(s.pico_antes, 3), "pico_despues_uv": round(s.pico_despues, 3),
                 "factor_atenuacion_min": round(s.g_min, 5), "factor_atenuacion_mediano": round(s.g_mediana, 5),
                 "razon_q_max": round(s.q_max, 3), "amplitud_local_max_uv": round(s.a_max, 3),
-                "metodo": f"ganancia_{cfg.modo_ganancia}_sobre_desviacion_respecto_a_mediana_DC;RMS_local_{cfg.ventana_ms:g}ms;rampas_coseno",
-                "referencia": "mediana_leave_one_out_de_amplitud_normalizada_entre_canales",
+                "metodo": ("atenuacion_global_por_limite_de_pico" if es_limite_pico else
+                           f"ganancia_{cfg.modo_ganancia}_sobre_desviacion_respecto_a_mediana_DC;RMS_local_{cfg.ventana_ms:g}ms;rampas_coseno"),
+                "referencia": ("no_aplica_limite_de_pico" if es_limite_pico else
+                               "mediana_leave_one_out_de_amplitud_normalizada_entre_canales"),
                 "referencia_uv": round(s.referencia_uv, 3), "canales_referencia": "|".join(s.canales_referencia),
                 "criterio_activacion": s.criterio,
-                "motivo": ("amplitud local muy baja respecto a la referencia inter-canal; amplificación de escala hacia la mediana de los canales sanos, sin cortar muestras"
+                "motivo": ("pico instantaneo alcanza el limite; atenuacion global del canal sin eliminar muestras"
+                           if es_limite_pico else
+                           "amplitud local muy baja respecto a la referencia inter-canal; amplificación de escala hacia la mediana de los canales sanos, sin cortar muestras"
                            if s.tipo == "amplificacion" else
                            "amplitud local anómala respecto a la referencia inter-canal; corrección de escala sin cortar muestras"),
                 "corr_forma_original_vs_corregida": None if np.isnan(s.corr_forma) else round(s.corr_forma, 5),

@@ -192,15 +192,16 @@ def build_dataset(base_dir=None, usuarios=None, tp_comandos=None, verbose=True,
                         window_size=window_size,
                         overlap=window_overlap,
                     )
-                    if(feat_df.shape[0]>1):
+                    if(feat_df.shape[0] > 1):
                         for index, row in feat_df.iterrows():
-                            trialn+=1
+                            trialn += 1
                             feat_row = row.to_dict()
                             feat_row["usuario"] = usuario
                             feat_row["tpComando"] = tp
                             feat_row["letra"] = letra
                             feat_row["trial"] = trialn
-                            feat_row["label"] = letra  # 40 clases posibles: A-Z, 0-9, simbolos control
+                            feat_row["label"] = letra  
+                            feat_row["color"] = color
                             rows.append(feat_row)
                     else:
                         feat_row = feat_df.mean(axis=0, numeric_only=True).to_dict()
@@ -208,7 +209,8 @@ def build_dataset(base_dir=None, usuarios=None, tp_comandos=None, verbose=True,
                         feat_row["tpComando"] = tp
                         feat_row["letra"] = letra
                         feat_row["trial"] = trial
-                        feat_row["label"] = letra  # 40 clases posibles: A-Z, 0-9, simbolos control
+                        feat_row["label"] = letra  
+                        feat_row["color"] = color
                         rows.append(feat_row)
                     n_ok += 1
                 except Exception as e:
@@ -226,7 +228,7 @@ def build_dataset(base_dir=None, usuarios=None, tp_comandos=None, verbose=True,
         )
 
     df = pd.DataFrame(rows)
-    meta_cols = ["usuario", "tpComando", "letra", "trial", "label"]
+    meta_cols = ["usuario", "tpComando", "letra", "trial", "label", "color"]
     feature_cols = [c for c in df.columns if c not in meta_cols]
     df = df[meta_cols + feature_cols]
     return df
@@ -253,7 +255,7 @@ def average_repetitions(df, n_rep=3, seed=42):
              (aprox len(df) // n_rep).
     """
     rng = np.random.default_rng(seed)
-    meta_cols = ["usuario", "tpComando", "letra", "trial", "label"]
+    meta_cols = ["usuario", "tpComando", "letra", "trial", "label", "color"]
     feature_cols = [c for c in df.columns if c not in meta_cols]
 
     rows = []
@@ -270,6 +272,7 @@ def average_repetitions(df, n_rep=3, seed=42):
             avg_feats["tpComando"] = chunk["tpComando"].iloc[0]
             avg_feats["usuario"] = chunk["usuario"].iloc[0]
             avg_feats["trial"] = f"avg_{g}"
+            avg_feats["color"] = chunk["color"].iloc[0]
             rows.append(avg_feats)
 
     out = pd.DataFrame(rows)

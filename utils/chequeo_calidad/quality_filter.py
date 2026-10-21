@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-quality_filter.py  --  Control de calidad y corrección de amplitud EEG.  v2.2.0
+quality_filter.py  --  Control de calidad y corrección de amplitud EEG.  v2.3.0
 
 PRINCIPIO: el filtro NO corta segmentos, NO borra filas/canales/trials, NO rellena
 con ceros y NO desplaza muestras. Número de muestras, duración, eje de tiempo
@@ -35,10 +35,10 @@ MÉTODO DE CORRECCIÓN (ganancia local suave sobre la desviación respecto al ni
   por cero, mismos picos y valles relativos, mismo espectro); las rampas suaves
   evitan escalones. Fuera de las zonas anómalas g == 1 exactamente (valores
   idénticos). Alternativa disponible: modo_ganancia="adaptativa".
-  Después se aplica un límite de seguridad por canal: si el pico absoluto respecto
-  a la mediana del canal alcanza `limite_pico_uv`, se atenúa todo ese canal por una
-  ganancia constante para dejarlo estrictamente por debajo del límite. No se eliminan
-  muestras ni segmentos.
+  Después se simula el notch de 60 Hz, el paso de banda de 0.5 a 40 Hz y la
+  corrección de línea base que usa el cargador de entrenamiento. Si el pico absoluto
+  de esa señal preprocesada alcanza `limite_pico_uv`, se atenúa el canal completo
+  en el CSV para dejarlo debajo del límite antes del entrenamiento.
 
 NOVEDADES v2.1.0
   * AMPLIFICADOR DE SEÑALES BAJAS. Un canal de voltaje muy bajo respecto a la referencia
@@ -53,10 +53,10 @@ NOVEDADES v2.1.0
     no corregibles (atenuación excesiva o anomalía extensa en el canal). No se modifican, salen
     de la referencia y se listan en quality_report.csv (canales_no_utilizables). Con más de 7
     el archivo es C. Con <= 7 sigue siendo A/B (según haya o no correcciones).
-NOVEDADES v2.2.0
-  * LIMITADOR DE PICO: en registros utilizables, atenúa el canal completo si alguna
-    muestra alcanza 150 uV respecto a su mediana. Deja margen por debajo de 150 uV,
-    conserva todas las muestras y registra los cambios en los reportes B.
+NOVEDADES v2.3.0
+  * LIMITADOR DE PICO PREPROCESADO: mide los picos después de aplicar el mismo
+    notch, paso de banda y corrección de línea base del cargador de entrenamiento.
+    Atenúa el canal en el CSV original y conserva las muestras.
 
 Ver reporte_criterios_quality_filter.md para la justificación estadística de
 cada criterio y la lista completa de parámetros (clase Config).
@@ -78,8 +78,9 @@ from datetime import datetime, timezone
 import numpy as np
 import pandas as pd
 from scipy import ndimage
+from scipy import signal
 
-VERSION = "2.2.0"
+VERSION = "2.3.0"
 CANALES = ["F3", "FC5", "AF3", "F7", "T7", "P7", "O1",
            "O2", "P8", "T8", "F8", "AF4", "FC6", "F4"]
 ALIAS_TIEMPO = ("Tm", "Time", "time", "TIME")
@@ -120,7 +121,7 @@ class Config:
     sigma_log_archivo: float = 0.3224      # REAL: sigma robusta de ln(MAD canal / ref) entre canales
     inflacion_sigma_ventana: float = 1.4   # PROVISIONAL: ventana corta > archivo (ver reporte 4.3)
     # --- detección y atenuación ------------------------------------------
-    limite_pico_uv: float = 150.0           # límite estricto del pico respecto a la mediana del canal
+    limite_pico_uv: float = 150.0           # pico máximo tras notch, paso de banda y corrección de línea base
     z_deteccion: float = 4.0               # PROVISIONAL: q_deteccion = exp(z * sigma_ventana)
     z_inicio: float = 2.0                  # PROVISIONAL: inicio de la atenuación (histéresis)
     q_objetivo: float = 1.0                # amplitud tras corregir, en unidades de la referencia
@@ -453,32 +454,28 @@ def analizar_registro(X: np.ndarray, cfg: Config) -> Analisis:
 
 
 def _aplicar_limite_pico(X: np.ndarray, res: Analisis, cfg: Config) -> Analisis:
-    """Aplica una atenuación global por canal sin quitar muestras ni alterar el tiempo."""
+    """Limita en el CSV los picos que verá el cargador tras su preprocesamiento."""
     if res.Y is None:
         return res
 
     dc = np.median(X, axis=0)
     Y = res.Y.copy()
-    objetivo = cfg.limite_pico_uv - 0.01
+    preprocesada_antes = _preprocesar_para_limite_pico(Y, cfg)
+    picos_antes = np.max(np.abs(preprocesada_antes), axis=0)
+    objetivo = cfg.limite_pico_uv - 1.0
     ganancias: dict[int, float] = {}
+    res.metricas["pico_preprocesado_max_uv"] = float(picos_antes.max())
 
     for j, canal in enumerate(CANALES):
-        salida_centrada = Y[:, j] - dc[j]
-        pico_antes = float(np.max(np.abs(salida_centrada)))
+        pico_antes = float(picos_antes[j])
         if pico_antes < cfg.limite_pico_uv:
             continue
 
         ganancia = objetivo / pico_antes
-        antes = salida_centrada.copy()
-        Y[:, j] = np.round(dc[j] + ganancia * antes, 4)
-        despues = Y[:, j] - dc[j]
+        Y[:, j] = np.round(dc[j] + ganancia * (Y[:, j] - dc[j]), 4)
+        antes = preprocesada_antes[:, j]
+        despues = antes * ganancia
         pico_despues = float(np.max(np.abs(despues)))
-        if pico_despues >= cfg.limite_pico_uv:
-            raise ArithmeticError(
-                f"No se pudo garantizar el límite de pico en {canal}: "
-                f"{pico_despues:.6f} >= {cfg.limite_pico_uv:g} uV"
-            )
-
         rms_antes = float(np.sqrt(np.mean(antes ** 2)))
         rms_despues = float(np.sqrt(np.mean(despues ** 2)))
         if rms_antes > 0 and rms_despues > 0 and len(antes) > 2:
@@ -487,8 +484,8 @@ def _aplicar_limite_pico(X: np.ndarray, res: Analisis, cfg: Config) -> Analisis:
             corr_forma = float("nan")
         id_segmento = f"{canal}-limite_pico"
         criterio = (
-            f"pico_abs={pico_antes:.3f}uV>=limite={cfg.limite_pico_uv:g}uV;"
-            "atenuacion_global_del_canal;sin_eliminar_muestras"
+            f"pico_preprocesado={pico_antes:.3f}uV>=limite={cfg.limite_pico_uv:g}uV;"
+            "atenuacion_global_en_CSV;sin_eliminar_muestras"
         )
         for segmento in res.segmentos:
             if segmento.canal == canal:
@@ -511,11 +508,14 @@ def _aplicar_limite_pico(X: np.ndarray, res: Analisis, cfg: Config) -> Analisis:
         if canal not in res.canales_afectados:
             res.canales_afectados.append(canal)
         res.pct_por_canal[canal] = 100.0
-        res.amplitudes[canal] = f"pico_limitado={pico_antes:.3f}->{pico_despues:.3f}uV"
+        res.amplitudes[canal] = (
+            f"pico_preprocesado_limitado={pico_antes:.3f}->{pico_despues:.3f}uV"
+        )
         res.metricas[f"ganancia_limite_pico_{canal}"] = ganancia
         ganancias[j] = ganancia
 
     if not ganancias:
+        res.metricas["pico_preprocesado_corregido_max_uv"] = float(picos_antes.max())
         return res
 
     existentes = {(r["canal"], r["muestra"]): r for r in res.muestras}
@@ -529,14 +529,30 @@ def _aplicar_limite_pico(X: np.ndarray, res: Analisis, cfg: Config) -> Analisis:
                     "ganancia": float("nan"), "q": float("nan"),
                     "amplitud_local_uv": float(abs(X[t, j] - dc[j])),
                     "referencia_uv": float("nan"), "id_segmento": f"{canal}-limite_pico",
-                    "criterio": "atenuacion_global_para_limitar_pico;sin_eliminar_muestras",
+                    "criterio": "atenuacion_global_en_CSV_para_limitar_pico_preprocesado",
                 }
                 res.muestras.append(registro)
                 existentes[(canal, int(t))] = registro
             registro["valor_corregido"] = float(Y[t, j])
             registro["ganancia"] = float((Y[t, j] - dc[j]) / (X[t, j] - dc[j])) \
                 if abs(X[t, j] - dc[j]) > 1e-12 else float("nan")
+            if registro["id_segmento"] != f"{canal}-limite_pico":
+                registro["criterio"] += ";atenuacion_global_por_pico_preprocesado"
 
+    preprocesada_final = _preprocesar_para_limite_pico(Y, cfg)
+    picos_finales = np.max(np.abs(preprocesada_final), axis=0)
+    for j in ganancias:
+        pico_final = float(picos_finales[j])
+        if pico_final >= cfg.limite_pico_uv:
+            raise ArithmeticError(
+                f"No se pudo garantizar el límite de pico en {CANALES[j]}: "
+                f"preprocesado={pico_final:.6f} >= {cfg.limite_pico_uv:g} uV"
+            )
+        segmento = next(s for s in res.segmentos if s.id == f"{CANALES[j]}-limite_pico")
+        segmento.pico_despues = pico_final
+        segmento.rms_despues = float(
+            np.sqrt(np.mean(preprocesada_final[:, j] ** 2))
+        )
     res.Y = Y
     res.estado = ESTADO_B
     res.motivos.append(
@@ -544,8 +560,28 @@ def _aplicar_limite_pico(X: np.ndarray, res: Analisis, cfg: Config) -> Analisis:
         f"canales={','.join(CANALES[j] for j in ganancias)}"
     )
     res.metricas["limite_pico_uv"] = cfg.limite_pico_uv
+    res.metricas["pico_preprocesado_corregido_max_uv"] = float(picos_finales.max())
     _metricas_finales(res, X, Y, *X.shape)
     return res
+
+
+def _preprocesar_para_limite_pico(X: np.ndarray, cfg: Config) -> np.ndarray:
+    """Replica el preprocesamiento anterior al umbral de pico del cargador."""
+    signals = X.T
+    b, a = signal.iirnotch(w0=60.0, Q=30.0, fs=cfg.fs)
+    signals = signal.filtfilt(b, a, signals, axis=1)
+    nyquist = 0.5 * cfg.fs
+    b, a = signal.butter(
+        4, [0.5 / nyquist, 40.0 / nyquist], btype="band"
+    )
+    signals = signal.filtfilt(b, a, signals, axis=1)
+    inicio = int(0.0 * cfg.fs)
+    fin = min(int(0.5 * cfg.fs), signals.shape[1])
+    if fin > inicio:
+        signals = signals - np.mean(
+            signals[:, inicio:fin], axis=1, keepdims=True
+        )
+    return signals.T
 
 
 def _analizar_pasada(X: np.ndarray, cfg: Config, extra: dict):
@@ -1253,7 +1289,7 @@ def procesar(captures: str, salida: str, cfg: Config, trials_objetivo: int = 30,
                                "mediana_leave_one_out_de_amplitud_normalizada_entre_canales"),
                 "referencia_uv": round(s.referencia_uv, 3), "canales_referencia": "|".join(s.canales_referencia),
                 "criterio_activacion": s.criterio,
-                "motivo": ("pico instantaneo alcanza el limite; atenuacion global del canal sin eliminar muestras"
+                "motivo": ("pico tras preprocesamiento alcanza el limite; atenuacion global del canal en el CSV sin eliminar muestras"
                            if es_limite_pico else
                            "amplitud local muy baja respecto a la referencia inter-canal; amplificación de escala hacia la mediana de los canales sanos, sin cortar muestras"
                            if s.tipo == "amplificacion" else
@@ -1291,6 +1327,8 @@ def procesar(captures: str, salida: str, cfg: Config, trials_objetivo: int = 30,
             "pct_muestras_modificadas": met.get("pct_muestras_modificadas", 0.0 if a.estado == ESTADO_A else None),
             "max_amplitud_original_uv": None if "max_amp_original_uv" not in met else round(met["max_amp_original_uv"], 2),
             "max_amplitud_corregida_uv": None if "max_amp_corregida_uv" not in met else round(met["max_amp_corregida_uv"], 2),
+            "pico_preprocesado_max_uv": None if "pico_preprocesado_max_uv" not in met else round(met["pico_preprocesado_max_uv"], 2),
+            "pico_preprocesado_corregido_max_uv": None if "pico_preprocesado_corregido_max_uv" not in met else round(met["pico_preprocesado_corregido_max_uv"], 2),
             "q_max_antes": None if "q_max" not in met else round(met["q_max"], 3),
             "q_max_despues": None if "q_max_despues" not in met else round(met["q_max_despues"], 3),
             "k_max_simultaneos": met.get("k_max_simultaneos", 0 if a.estado == ESTADO_A else None),

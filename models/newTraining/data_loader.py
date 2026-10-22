@@ -192,10 +192,42 @@ def build_dataset(base_dir=None, usuarios=None, tp_comandos=None, verbose=True,
                         window_size=window_size,
                         overlap=window_overlap,
                     )
+
+                    # B) NUEVO: Extracción automática de ERP usando TU método
+                    # Detectamos dinámicamente si la señal ya viene recortada a la ventana P300
+                    if use_p300_window_only:
+                        # Si ya está recortada de 0.5 a 1.2s, buscamos en el rango completo disponible
+                        t_start, t_end = 0.0, float(signals.shape[1] / fs)
+                    else:
+                        # Si es la época completa de 2.0s, delimitamos la ventana normal
+                        t_start, t_end = 0.5, 1.2
+
+                    erp_df = extractor.extract_erp_features(
+                        signals,
+                        channel_names=channel_names,
+                        available_channel_names=channel_names,
+                        t_pre_stim=0.5,
+                        t_p300_start=t_start,
+                        t_p300_end=t_end
+                    )
+                    erp_row = erp_df.iloc[0].to_dict()
+                    
+                    # Ajuste adaptativo de latencia si la ventana ya estaba recortada
+                    if use_p300_window_only:
+                        for k in list(erp_row.keys()):
+                            if k.endswith('_latency_ms'):
+                                # Compensamos sumando los 500ms del pre-estímulo original
+                                erp_row[k] = erp_row[k] + 500.0
+
+                    # C) Inyección en tus filas (Mapeo idéntico al que ya tienes)
                     if(feat_df.shape[0] > 1):
                         for index, row in feat_df.iterrows():
                             trialn += 1
                             feat_row = row.to_dict()
+                            
+                            # Fusionamos las métricas del ERP dentro de cada ventana/fila
+                            feat_row.update(erp_row)
+                            
                             feat_row["usuario"] = usuario
                             feat_row["tpComando"] = tp
                             feat_row["letra"] = letra
@@ -205,6 +237,10 @@ def build_dataset(base_dir=None, usuarios=None, tp_comandos=None, verbose=True,
                             rows.append(feat_row)
                     else:
                         feat_row = feat_df.mean(axis=0, numeric_only=True).to_dict()
+                        
+                        # Fusionamos las métricas del ERP en la fila única promediada
+                        feat_row.update(erp_row)
+                        
                         feat_row["usuario"] = usuario
                         feat_row["tpComando"] = tp
                         feat_row["letra"] = letra
@@ -212,6 +248,7 @@ def build_dataset(base_dir=None, usuarios=None, tp_comandos=None, verbose=True,
                         feat_row["label"] = letra  
                         feat_row["color"] = color
                         rows.append(feat_row)
+                        
                     n_ok += 1
                 except Exception as e:
                     n_fail += 1

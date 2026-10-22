@@ -15,8 +15,14 @@ Uso:
 """
 
 import os
+import sys
+from pathlib import Path
 import warnings
 warnings.filterwarnings("ignore")
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 import numpy as np
 import pandas as pd
@@ -35,9 +41,11 @@ from sklearn.model_selection import learning_curve, StratifiedKFold
 from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.pipeline import Pipeline
 
-import config
-from eeg_features import get_feature_sets, log_transform_power_columns
-from train_hierarchical_optimized import (
+from models.newTraining import config
+from models.newTraining.eeg_features import (
+    get_feature_sets, log_transform_power_columns,
+)
+from models.newTraining.train_hierarchical_optimized import (
     build_pipeline_hierarchical, build_classifiers, classifiers_for_group,
 )
 
@@ -108,14 +116,14 @@ def _lda2d_from_bundle(bundle_level, X_raw, y_encoded, classes_str):
 
     lda_fitted = lda_step[1]
 
-    # Nos aseguramos de tener al menos 2 componentes
-    n_comp_avail = lda_fitted.scalings_.shape[1]
-    if n_comp_avail < 2:
-        # proyecto al único componente disponible + 0
-        X_lda_1 = lda_fitted.transform(X_t)     # (N, 1)
-        X_lda = np.hstack([X_lda_1, np.zeros((len(X_lda_1), 1))])
+    X_lda = lda_fitted.transform(X_t)
+    if X_lda.shape[1] < 2:
+        X_lda = np.hstack([
+            X_lda,
+            np.zeros((len(X_lda), 2 - X_lda.shape[1])),
+        ])
     else:
-        X_lda = lda_fitted.transform(X_t)[:, :2]
+        X_lda = X_lda[:, :2]
 
     return X_lda
 

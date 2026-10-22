@@ -281,6 +281,79 @@ class EEGFeatureExtractor:
             features.append(window_features)
         return pd.DataFrame(features)
 
+    def extract_erp_features(self, signals, channel_names=None, available_channel_names=None, 
+                             t_pre_stim=0.5, t_p300_start=0.5, t_p300_end=1.2):
+        """
+        Calcula las métricas del ERP (Amplitud de Pico y Latencia) para la P300.
+        Diseñado para procesar una época/ensayo completo de 2.0 segundos.
+        
+        - signals: array (n_channels, n_samples) correspondiente a una época de 2.0s
+        - t_pre_stim: tiempo en segundos antes del estímulo (ej. 0.5s)
+        - t_p300_start: inicio de la ventana P300 (ej. 0.5s)
+        - t_p300_end: fin de la ventana P300 (ej. 1.2s)
+        """
+        # 1. Decidir índices de canales a procesar (Mismo sistema de tu función original)
+        if channel_names is None:
+            sel_idxs = list(range(signals.shape[0]))
+        else:
+            if available_channel_names is not None:
+                sel_idxs = []
+                for ch in channel_names:
+                    if ch in available_channel_names:
+                        sel_idxs.append(available_channel_names.index(ch))
+                    else:
+                        try: sel_idxs.append(int(ch))
+                        except Exception: pass
+                sel_idxs = [i for i in dict.fromkeys(sel_idxs) if 0 <= i < signals.shape[0]]
+            else:
+                sel_idxs = []
+                for ch in channel_names:
+                    try:
+                        idx = int(ch)
+                        if 0 <= idx < signals.shape[0]: sel_idxs.append(idx)
+                    except Exception: pass
+                sel_idxs = list(dict.fromkeys(sel_idxs))
+
+        if not sel_idxs:
+            raise ValueError("No se encontraron índices de canal válidos para el cálculo de ERP.")
+
+        # 2. Aplicar corrección de línea base automáticamente a la época actual
+        # Usa la función global 'apply_baseline_correction' que ya tienes en tu archivo
+        signals_corrected = apply_baseline_correction(signals, self.fs, baseline_window_s=(0.0, t_pre_stim))
+
+        # 3. Definir los índices de muestras para la ventana P300 (Respuesta Evocada)
+        idx_p300_start = int(t_p300_start * self.fs)
+        idx_p300_end = int(t_p300_end * self.fs)
+        idx_p300_end = min(idx_p300_end, signals_corrected.shape[1])
+
+        erp_features = {}
+
+        # 4. Extraer métricas canal por canal
+        for channel_idx in sel_idxs:
+            if available_channel_names is not None and channel_idx < len(available_channel_names):
+                cname = self.safe(available_channel_names[channel_idx])
+            else:
+                cname = f'ch{channel_idx}'
+
+            # Recortar los datos de la ventana de Respuesta Evocada (0.5s - 1.2s)
+            p300_window_data = signals_corrected[channel_idx, idx_p300_start:idx_p300_end]
+
+            if len(p300_window_data) > 0:
+                # Cálculo de Amplitud Máxima (Voltaje más positivo de la P300)
+                peak_amplitude = float(np.max(p300_window_data))
+                
+                # Cálculo de Latencia (Tiempo transcurrido desde el estímulo en el segundo 0.5s)
+                peak_sample_idx = np.argmax(p300_window_data)
+                # Convertir muestra a segundos relativos desde el momento exacto del estímulo
+                peak_latency_s = float(peak_sample_idx / self.fs) 
+                
+                erp_features[f'{cname}_p300_amplitude'] = peak_amplitude
+                erp_features[f'{cname}_p300_latency_ms'] = peak_latency_s * 1000  # En milisegundos
+            else:
+                erp_features[f'{cname}_p300_amplitude'] = np.nan
+                erp_features[f'{cname}_p300_latency_ms'] = np.nan
+
+        return pd.DataFrame([erp_features])
 
 def apply_baseline_correction(signals, fs, baseline_window_s=(0.0, 0.5)):
     """
@@ -366,6 +439,14 @@ def get_feature_sets(all_cols):
         "Beta_Gamma_Est":[c for c in all_cols if any(k in c for k in
                               ["beta_", "gamma_"])and not any(k in c for k in
                          ["_Abs", "_rel"])],
+
+        # --- NUEVO GRUPO: Métricas morfológicas puras de la onda ERP -
+        "Metricas_ERP": [c for c in all_cols if "_p300_" in c],
+        
+        # --- NUEVO GRUPO: Combinación de características Espectrales + ERP ---
+        "Espectral_Mas_ERP": [c for c in all_cols if any(k in c for k in 
+                               ["welch_", "delta_rel", "theta_rel", "alpha_rel", "beta_rel", "gamma_rel", "_p300_"])],
+
 
         "TODAS": list(all_cols),
     }

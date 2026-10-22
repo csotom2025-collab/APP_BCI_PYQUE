@@ -1,25 +1,17 @@
 {
-  "version": "2.1.0",
-  "fecha_utc": "2026-10-20T22:03:21.474309+00:00",
+  "version": "2.3.0",
+  "fecha_utc": "2026-10-22T00:10:27.408257+00:00",
   "captures": "C:\\Users\\usuario\\Desktop\\APP_BCI_PYQUE\\captures",
   "salida": "C:\\Users\\usuario\\Desktop\\APP_BCI_PYQUE\\utils\\chequeo_calidad\\UserMar",
   "usuario": "UserMar",
-  "archivos": 1207,
-  "A": 1070,
+  "archivos": 1304,
+  "A": 1304,
   "B": 0,
-  "C": 137,
-  "codigos_C": {
-    "ANOMALIA_EXTENSA": 52,
-    "REFERENCIA_CONTAMINADA": 39,
-    "REFERENCIA_INESTABLE": 43,
-    "ESTRUCTURA": 19,
-    "REFERENCIA_INSUFICIENTE": 1,
-    "CANAL_INVALIDO": 1,
-    "NO_UTILIZABLES_EXCESO": 1
-  },
+  "C": 0,
+  "codigos_C": {},
   "segmentos_corregidos": 0,
   "muestras_modificadas": 0,
   "archivos_con_amplificacion": 0,
-  "archivos_con_canales_no_utilizables": 248,
-  "rescatados_A_B_con_canales_no_utilizables": 220
+  "archivos_con_canales_no_utilizables": 251,
+  "rescatados_A_B_con_canales_no_utilizables": 251
 }

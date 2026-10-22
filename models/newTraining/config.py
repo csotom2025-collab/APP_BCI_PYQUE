@@ -83,7 +83,8 @@ WINDOW_SIZE=192
 # ---------------------------------------------------------------------------
 # Salidas
 # ---------------------------------------------------------------------------
-OUTPUT_DIR = "outputPrimero"
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+OUTPUT_DIR = os.path.join(PROJECT_ROOT, "trainingOutputs")
 FEATURES_CSV = os.path.join(OUTPUT_DIR, "features_dataset.csv")
 RESULTS_CSV = os.path.join(OUTPUT_DIR, "resultados_modelos.csv")
 FIGURES_DIR = os.path.join(OUTPUT_DIR, "figures")

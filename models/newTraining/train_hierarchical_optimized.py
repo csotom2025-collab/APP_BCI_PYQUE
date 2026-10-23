@@ -7,6 +7,7 @@ Flujo:
 3. Identifica modelos ganadores para color, super-grupo y comando fino por color
 4. Entrena la cascada: color → super-grupo del color → comando fino del color/grupo
 5. Guarda bundle final listo para tiempo real (hierarchical_bundle_optimizado.joblib)
+6. Guarda modelos top por ranking y sus pasos entrenados en archivos separados
 
 Protocolo asumido:
 - 2 flashes por grupo en 2 segundos de grabación
@@ -490,7 +491,7 @@ def evaluate_all_hierarchical(df, verbose=True, seed=42):
 
 
 # ===========================================================================================
-# PASO 5: ENTRENAR MODELOS GANADORES
+# PASO 5: ENTRENAR MODELOS GANADORES Y TOP 5 POR GRUPO
 # ===========================================================================================
 def train_final_models(df, best_per_group):
     """Entrena los modelos de color y los modelos super/fino separados por color."""
@@ -569,6 +570,335 @@ def train_final_models(df, best_per_group):
         final_bundles["por_color"][color] = hierarchy
 
     return final_bundles
+
+
+def train_top_models_by_category(df, results_df, seed=42):
+    """Entrena los candidatos solicitados para cada ranking y categoría."""
+    meta_cols = ["usuario", "tpComando", "letra", "trial", "label", "color"]
+    feature_cols = [col for col in df.columns if col not in meta_cols]
+    classifiers = build_classifiers(40, seed=seed)
+    prepared_groups = {}
+    trained_models = {}
+    evaluated_models = {}
+
+    ranked_results = results_df.sort_values(
+        "f1_macro_mean", ascending=False, kind="stable"
+    )
+    category_specs = {
+        "general": (ranked_results, 5),
+        "color": (ranked_results[ranked_results["nivel"] == "color"], 5),
+        "super": (
+            ranked_results[ranked_results["nivel"] == "super_clase_por_color"],
+            10,
+        ),
+        "letras": (
+            ranked_results[
+                (ranked_results["nivel"] == "comando_fino_por_color_grupo")
+                & (ranked_results["grupo"] == "Letters")
+            ],
+            10,
+        ),
+        "numeros": (
+            ranked_results[
+                (ranked_results["nivel"] == "comando_fino_por_color_grupo")
+                & (ranked_results["grupo"] == "Numbers")
+            ],
+            10,
+        ),
+        "controles": (
+            ranked_results[
+                (ranked_results["nivel"] == "comando_fino_por_color_grupo")
+                & (ranked_results["grupo"] == "Controls")
+            ],
+            5,
+        ),
+    }
+    cascade_specs = {
+        "_cascada_color": ranked_results[
+            ranked_results["nivel"] == "color"
+        ],
+    }
+    for color in ("Green", "Blue"):
+        cascade_specs[f"_cascada_super_{color}"] = ranked_results[
+            (ranked_results["nivel"] == "super_clase_por_color")
+            & (ranked_results["color"] == color)
+        ]
+        for group in ("Letters", "Numbers", "Controls"):
+            cascade_specs[f"_cascada_fino_{color}_{group}"] = ranked_results[
+                (ranked_results["nivel"] == "comando_fino_por_color_grupo")
+                & (ranked_results["color"] == color)
+                & (ranked_results["grupo"] == group)
+            ]
+    category_specs.update(
+        {key: (value, 5) for key, value in cascade_specs.items()}
+    )
+    top_models = {}
+
+    for category, (category_results, top_n) in category_specs.items():
+        if category.startswith("_cascada_fino_"):
+            _, _, _, color, group = category.split("_")
+            labels = df.loc[
+                (df["color"] == color) & (df["tpComando"] == group), "label"
+            ].astype(str).unique()
+            if len(labels) == 1:
+                top_models[category] = [
+                    {
+                        "rank": rank,
+                        "categoria": category,
+                        "nivel": "comando_fino_por_color_grupo",
+                        "color": color,
+                        "grupo": group,
+                        "fixed_label": labels[0],
+                        "feature_set": "N/A",
+                        "clasificador": "Salida fija",
+                        "f1_macro_cv": None,
+                    }
+                    for rank in range(1, top_n + 1)
+                ]
+                continue
+        if len(category_results) < top_n:
+            raise RuntimeError(
+                f"No hay suficientes modelos evaluados para '{category}': "
+                f"se requieren {top_n} y solo hay {len(category_results)}."
+            )
+
+        top_models[category] = []
+        for rank, (_, row) in enumerate(category_results.head(top_n).iterrows(), 1):
+            nivel = row["nivel"]
+            color = row.get("color")
+            if pd.isna(color):
+                color = None
+            grupo = row["grupo"]
+
+            if nivel == "color":
+                group_key = "color"
+                group_df = df
+                label_column = "color"
+                n_components = 1
+            elif nivel == "super_clase_por_color":
+                group_key = f"super_clase_{color}"
+                group_df = df[df["color"] == color]
+                label_column = "tpComando"
+                n_components = 2
+            else:
+                group_key = f"{color}_{grupo}"
+                group_df = df[
+                    (df["color"] == color) & (df["tpComando"] == grupo)
+                ]
+                label_column = "label"
+                n_components = None
+
+            model_key = (
+                group_key,
+                row["feature_set"],
+                row["clasificador"],
+            )
+            if model_key not in trained_models:
+                if group_key not in prepared_groups:
+                    label_encoder = LabelEncoder()
+                    y = label_encoder.fit_transform(
+                        group_df[label_column].astype(str)
+                    )
+                    feature_sets = get_feature_sets(feature_cols)
+                    prepared_groups[group_key] = (
+                        group_df, label_encoder, y, feature_sets
+                    )
+
+                group_df, label_encoder, y, feature_sets = prepared_groups[group_key]
+                model_n_components = n_components
+                if model_n_components is None:
+                    model_n_components = max(
+                        1, min(len(label_encoder.classes_) - 1, 50)
+                    )
+                cols = feature_sets[row["feature_set"]]
+                X = group_df[cols].to_numpy()
+                X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+
+                group_classifiers = classifiers_for_group(
+                    classifiers, len(label_encoder.classes_)
+                )
+                pipeline = build_pipeline_hierarchical(
+                    group_classifiers[row["clasificador"]],
+                    model_n_components,
+                    X.shape[1],
+                    k_best=250,
+                )
+                pipeline.fit(X, y)
+                trained_models[model_key] = {
+                    "nivel": nivel,
+                    "color": color,
+                    "grupo": grupo,
+                    "pipeline": pipeline,
+                    "label_encoder": label_encoder,
+                    "feature_columns": cols,
+                    "feature_set": row["feature_set"],
+                    "clasificador": row["clasificador"],
+                    "f1_macro_cv": float(row["f1_macro_mean"]),
+                    "accuracy_mean": float(row["accuracy_mean"]),
+                }
+
+            if model_key not in evaluated_models:
+                eval_df = group_df.copy()
+                eval_df["label"] = eval_df[
+                    "color" if nivel == "color"
+                    else "tpComando" if nivel == "super_clase_por_color"
+                    else "label"
+                ]
+                eval_df[feature_cols] = log_transform_power_columns(
+                    eval_df[feature_cols], feature_cols
+                )
+                model_n_components = n_components
+                if model_n_components is None:
+                    model_n_components = max(
+                        1, min(len(label_encoder.classes_) - 1, 50)
+                    )
+                cv_result = evaluate_combination(
+                    eval_df,
+                    cols,
+                    f"{nivel}-{color or 'todos'}-{grupo}",
+                    row["clasificador"],
+                    group_classifiers[row["clasificador"]],
+                    model_n_components,
+                    k_best=250,
+                    cv_splits=5,
+                    verbose=False,
+                )
+                if cv_result[4] is None:
+                    raise RuntimeError(
+                        "No se pudo generar la matriz de confusión para "
+                        f"{category} #{rank} ({nivel}/{color}/{grupo})."
+                    )
+                evaluated_models[model_key] = {
+                    "y_pred": cv_result[4],
+                    "label_encoder_cv": cv_result[5],
+                    "y_true": cv_result[6],
+                }
+
+            top_models[category].append({
+                **trained_models[model_key],
+                **evaluated_models[model_key],
+                "rank": rank,
+                "categoria": category,
+            })
+
+    return top_models
+
+
+def build_top_hierarchical_bundles(top_models, bundle_metadata):
+    """Combina el mismo puesto de cada etapa en cinco cascadas completas."""
+    bundles = []
+    for rank in range(1, 6):
+        color_model = top_models["_cascada_color"][rank - 1]
+        hierarchy = {}
+        for color in ("Green", "Blue"):
+            super_model = top_models[f"_cascada_super_{color}"][rank - 1]
+            per_group = {}
+            for group in ("Letters", "Numbers", "Controls"):
+                per_group[group] = top_models[
+                    f"_cascada_fino_{color}_{group}"
+                ][rank - 1]
+
+            hierarchy[color] = {
+                "super_clase": _to_inference_bundle(super_model),
+                "por_grupo": {
+                    group: _to_inference_bundle(model)
+                    for group, model in per_group.items()
+                },
+            }
+
+        bundle = {
+            **bundle_metadata,
+            "modelo_top_rank": rank,
+            "color": _to_inference_bundle(color_model),
+            "por_color": hierarchy,
+        }
+        bundles.append(bundle)
+    return bundles
+
+
+def _to_inference_bundle(model):
+    """Reduce un modelo top a la estructura esperada por HierarchicalBCIPredictor."""
+    if "fixed_label" in model:
+        return {
+            "fixed_label": model["fixed_label"],
+            "feature_columns": [],
+            "feature_set": "N/A",
+            "clasificador": "Salida fija",
+            "f1_macro_cv": None,
+        }
+    return {
+        "pipeline": model["pipeline"],
+        "label_encoder": model["label_encoder"],
+        "feature_columns": model["feature_columns"],
+        "feature_set": model["feature_set"],
+        "clasificador": model["clasificador"],
+        "f1_macro_cv": model["f1_macro_cv"],
+    }
+
+
+def save_top_model_artifacts(usuario_models_dir, top_models_by_category):
+    """Guarda cada modelo completo y cada paso ajustado del pipeline por separado."""
+    artifacts_dir = os.path.join(usuario_models_dir, "top_modelos")
+    os.makedirs(artifacts_dir, exist_ok=True)
+
+    for category, models in top_models_by_category.items():
+        if category.startswith("_cascada_"):
+            continue
+        category_dir = os.path.join(artifacts_dir, category)
+        os.makedirs(category_dir, exist_ok=True)
+
+        for model in models:
+            color = model["color"] or "todos"
+            parts = (
+                f"top_{model['rank']:02d}",
+                model["nivel"],
+                color,
+                model["grupo"],
+                model["feature_set"],
+                model["clasificador"],
+            )
+            filename = "_".join(
+                "".join(
+                    char if char.isalnum() or char in "-_" else "_"
+                    for char in str(part)
+                )
+                for part in parts
+            )
+            model_path = os.path.join(category_dir, f"{filename}.joblib")
+            layers_dir = os.path.join(category_dir, f"{filename}_capas")
+            os.makedirs(layers_dir, exist_ok=True)
+
+            artifact = dict(model)
+            artifact["archivo_capas"] = {}
+            for step_name, fitted_step in model["pipeline"].named_steps.items():
+                layer_path = os.path.join(layers_dir, f"{step_name}.joblib")
+                joblib.dump(fitted_step, layer_path)
+                artifact["archivo_capas"][step_name] = os.path.relpath(
+                    layer_path, category_dir
+                )
+
+            joblib.dump(artifact, model_path)
+            confusion_path = os.path.join(category_dir, f"{filename}_matriz.png")
+            labels = [
+                str(label) for label in model["label_encoder_cv"].classes_
+            ]
+            plot_confusion_matrix(
+                model["y_true"],
+                model["y_pred"],
+                labels,
+                (
+                    f"{category} top {model['rank']} | {color} | {model['grupo']}\n"
+                    f"F1 macro CV={model['f1_macro_cv']:.3f}"
+                ),
+                confusion_path,
+            )
+            print(
+                f"   OK {category} #{model['rank']}: {model_path} "
+                f"({len(artifact['archivo_capas'])} capas, matriz: "
+                f"{confusion_path})"
+            )
+
+    return artifacts_dir
 
 
 # ===========================================================================================
@@ -664,6 +994,9 @@ def train_optimized_hierarchical(output_dir=None,channels = None,fs=None,use_p30
         # Paso 5: Entrenar modelos finales para este usuario
         print(f"\n3) Entrenando modelos finales por color para {usuario}...")
         final_bundles = train_final_models(df_usuario, best_per_group)
+        top_models_by_category = train_top_models_by_category(
+            df_usuario, results_df, seed=semilla
+        )
         
         # Guardar bundle final POR USUARIO
         usuario_models_dir = os.path.join(MODELS_DIR, usuario)
@@ -690,7 +1023,32 @@ def train_optimized_hierarchical(output_dir=None,channels = None,fs=None,use_p30
         out_bundle = os.path.join(usuario_models_dir, "hierarchical_bundle_optimizado.joblib")
         joblib.dump(hierarchy_bundle, out_bundle)
         print(f"   ✓ Bundle guardado en: {out_bundle}")
-        
+
+        cascade_metadata = {
+            key: value for key, value in hierarchy_bundle.items()
+            if key not in ("color", "por_color")
+        }
+        top_cascades = build_top_hierarchical_bundles(
+            top_models_by_category, cascade_metadata
+        )
+        cascades_dir = os.path.join(usuario_models_dir, "top_cascadas")
+        os.makedirs(cascades_dir, exist_ok=True)
+        for rank, cascade_bundle in enumerate(top_cascades, 1):
+            cascade_path = os.path.join(
+                cascades_dir,
+                f"hierarchical_bundle_optimizado_top_{rank}.joblib",
+            )
+            joblib.dump(cascade_bundle, cascade_path)
+            print(f"   ✓ Cascada completa top {rank} guardada: {cascade_path}")
+
+        top_models_dir = save_top_model_artifacts(
+            usuario_models_dir, top_models_by_category
+        )
+        print(f"   ✓ 45 modelos individuales y sus capas guardados en: {top_models_dir}")
+        for category, models in top_models_by_category.items():
+            if not category.startswith("_cascada_"):
+                print(f"      {category}: {len(models)} modelos")
+
         # Resumen para este usuario
         best_row = results_df.iloc[0]
         resumen_global.append({
@@ -728,6 +1086,8 @@ def train_optimized_hierarchical(output_dir=None,channels = None,fs=None,use_p30
         print(f"  - outputs/figures/{usuario}/cm_Numbers.png")
         print(f"  - outputs/figures/{usuario}/cm_Controls.png")
         print(f"  - outputs/models/{usuario}/hierarchical_bundle_optimizado.joblib")
+        print(f"  - outputs/models/{usuario}/top_cascadas/hierarchical_bundle_optimizado_top_1..5.joblib")
+        print(f"  - outputs/models/{usuario}/top_modelos/")
     
     print(f"\nPara usar en tiempo real (POR USUARIO):")
     print(f"  from hierarchical_infer import HierarchicalBCIPredictor")

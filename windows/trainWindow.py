@@ -76,6 +76,62 @@ class TrainingThread(QThread):
             self.completed.emit()
 
 
+class LDAVisualizationThread(QThread):
+    completed = pyqtSignal(str)
+    failed = pyqtSignal(str)
+
+    def __init__(self, user, project_root, parent=None):
+        super().__init__(parent)
+        self.user = user
+        self.project_root = Path(project_root)
+
+    def run(self):
+        script = (
+            self.project_root
+            / "models"
+            / "newTraining"
+            / "visualize_lda_analysis.py"
+        )
+        output_dir = self.project_root / "trainingOutputs"
+        try:
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-X",
+                    "utf8",
+                    str(script),
+                    "--user",
+                    self.user,
+                    "--top-cascades",
+                    "--output-dir",
+                    str(output_dir),
+                ],
+                cwd=self.project_root,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                check=False,
+            )
+        except OSError as error:
+            self.failed.emit(f"No se pudo iniciar el visualizador LDA: {error}")
+            return
+
+        if result.stdout:
+            print(result.stdout)
+        if result.returncode:
+            details = result.stderr.strip() or result.stdout.strip()
+            self.failed.emit(
+                details or "El generador de visualizaciones LDA falló."
+            )
+            return
+
+        figures_dir = (
+            output_dir / "figures" / self.user / "top_cascadas"
+        )
+        self.completed.emit(str(figures_dir))
+
+
 class DatasetPreparationThread(QThread):
     stage_changed = pyqtSignal(str)
     delete_confirmation_requested = pyqtSignal(int)
@@ -356,6 +412,7 @@ class TrainWindow(QMainWindow):
 
         self.training_thread = None
         self.dataset_preparation_thread = None
+        self.lda_visualization_thread = None
         self.setup_ui()
         self.models= ['lstm', 'lda', 'svm', 'random_forest', 'xgboost']
         self.show_models()
@@ -379,6 +436,13 @@ class TrainWindow(QMainWindow):
         )
         self.button_check_dataset.clicked.connect(self.check_dataset)
         self.button_check_dataset.setMinimumHeight(48)
+        self.button_visualize_lda = QPushButton(
+            "Generar visualizaciones LDA (Top cascadas)"
+        )
+        self.button_visualize_lda.clicked.connect(
+            self.start_lda_visualization
+        )
+        self.button_visualize_lda.setMinimumHeight(48)
 
         training_group = QGroupBox("Entrenamiento")
         training_layout = QGridLayout(training_group)
@@ -388,6 +452,7 @@ class TrainWindow(QMainWindow):
         training_layout.addWidget(self.combo_box_models, 1, 1)
         training_layout.addWidget(self.button_start_training, 2, 0, 1, 2)
         training_layout.addWidget(self.button_check_dataset, 3, 0, 1, 2)
+        training_layout.addWidget(self.button_visualize_lda, 4, 0, 1, 2)
         left_layout.addWidget(training_group)
 
         signal_group = QGroupBox("Configuración de señal")
@@ -538,6 +603,7 @@ class TrainWindow(QMainWindow):
         if (
             self.training_thread is not None
             or self.dataset_preparation_thread is not None
+            or self.lda_visualization_thread is not None
         ):
             return
 
@@ -582,6 +648,7 @@ class TrainWindow(QMainWindow):
         }
         self.button_start_training.setEnabled(False)
         self.button_check_dataset.setEnabled(False)
+        self.button_visualize_lda.setEnabled(False)
         self.training_status_label.setText("Entrenamiento en curso...")
         self.training_thread = TrainingThread(training_args, self)
         self.training_thread.completed.connect(self._on_training_completed)
@@ -593,6 +660,7 @@ class TrainWindow(QMainWindow):
         if (
             self.training_thread is not None
             or self.dataset_preparation_thread is not None
+            or self.lda_visualization_thread is not None
         ):
             return
 
@@ -604,6 +672,7 @@ class TrainWindow(QMainWindow):
         project_root = Path("captures").resolve().parent
         self.button_start_training.setEnabled(False)
         self.button_check_dataset.setEnabled(False)
+        self.button_visualize_lda.setEnabled(False)
         self.user_combobox.setEnabled(False)
         self.training_status_label.setText(
             "Preparando y verificando las grabaciones..."
@@ -627,6 +696,73 @@ class TrainWindow(QMainWindow):
             self._on_dataset_preparation_finished
         )
         self.dataset_preparation_thread.start()
+
+    def start_lda_visualization(self):
+        if (
+            self.training_thread is not None
+            or self.dataset_preparation_thread is not None
+            or self.lda_visualization_thread is not None
+        ):
+            return
+
+        user = self.get_user()
+        if not user:
+            QMessageBox.warning(
+                self, "Usuario requerido", "Selecciona un usuario."
+            )
+            return
+
+        project_root = Path(__file__).resolve().parents[1]
+        self.button_start_training.setEnabled(False)
+        self.button_check_dataset.setEnabled(False)
+        self.button_visualize_lda.setEnabled(False)
+        self.user_combobox.setEnabled(False)
+        self.training_status_label.setText(
+            f"Generando visualizaciones LDA con las top cascadas de {user}..."
+        )
+        self.lda_visualization_thread = LDAVisualizationThread(
+            user, project_root, self
+        )
+        self.lda_visualization_thread.completed.connect(
+            self._on_lda_visualization_completed
+        )
+        self.lda_visualization_thread.failed.connect(
+            self._on_lda_visualization_failed
+        )
+        self.lda_visualization_thread.finished.connect(
+            self._on_lda_visualization_finished
+        )
+        self.lda_visualization_thread.start()
+
+    def _on_lda_visualization_completed(self, figures_dir):
+        self.training_status_label.setText(
+            "Visualizaciones LDA de top cascadas completadas."
+        )
+        QMessageBox.information(
+            self,
+            "Visualizaciones completadas",
+            f"Se generaron las visualizaciones LDA para {self.get_user()} "
+            f"con los cinco modelos top.\n\nDirectorio:\n{figures_dir}",
+        )
+
+    def _on_lda_visualization_failed(self, error_message):
+        self.training_status_label.setText(
+            "La generación de visualizaciones LDA terminó con errores."
+        )
+        QMessageBox.critical(
+            self,
+            "Error al generar visualizaciones LDA",
+            f"{error_message}\n\nConsulta la salida de la aplicación para más detalles.",
+        )
+
+    def _on_lda_visualization_finished(self):
+        if self.lda_visualization_thread is not None:
+            self.lda_visualization_thread.deleteLater()
+            self.lda_visualization_thread = None
+        self.user_combobox.setEnabled(True)
+        self.button_start_training.setEnabled(True)
+        self.button_check_dataset.setEnabled(True)
+        self.button_visualize_lda.setEnabled(True)
 
     def _confirm_invalid_recording_removal(self, invalid_count):
         user = self.get_user()
@@ -708,6 +844,7 @@ class TrainWindow(QMainWindow):
         self.user_combobox.setEnabled(True)
         self.button_start_training.setEnabled(True)
         self.button_check_dataset.setEnabled(True)
+        self.button_visualize_lda.setEnabled(True)
 
     def _on_training_completed(self):
         self.training_status_label.setText("Entrenamiento completado.")
@@ -722,6 +859,7 @@ class TrainWindow(QMainWindow):
 
     def _on_training_thread_finished(self):
         self.button_start_training.setEnabled(True)
+        self.button_visualize_lda.setEnabled(True)
         if self.training_thread is not None:
             self.training_thread.deleteLater()
             self.training_thread = None
@@ -735,6 +873,7 @@ class TrainWindow(QMainWindow):
         running_threads = (
             self.training_thread,
             self.dataset_preparation_thread,
+            self.lda_visualization_thread,
         )
         if any(thread is not None and thread.isRunning() for thread in running_threads):
             QMessageBox.information(

@@ -34,6 +34,10 @@ from utils.chequeo_calidad import quality_filter
 from models.newTraining.lda_utils import SafeLDA,ZeroThresholdClassifier, ZeroThresholdLDA  # noqa: F401 — necesario para que joblib deserialice SafeLDA correctamente
 
 
+class RecordingQualityError(ValueError):
+    """La grabación no supera los controles de calidad EEG."""
+
+
 class HierarchicalBCIPredictor:
     def __init__(self, usuario=None, model_path=None, use_flash_segmentation=False):
         """
@@ -190,7 +194,7 @@ class HierarchicalBCIPredictor:
         if analysis.estado == quality_filter.ESTADO_C or analysis.Y is None:
             codes = ", ".join(analysis.codigos_C) or "sin código"
             reasons = "; ".join(analysis.motivos) or "sin detalle"
-            raise ValueError(
+            raise RecordingQualityError(
                 "El filtro de calidad marcó la grabación como no utilizable "
                 f"(C; {codes}): {reasons}"
             )

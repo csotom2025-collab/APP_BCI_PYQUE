@@ -14,21 +14,42 @@ class PredictorController:
         self.model = model
         self.bci_predictor = None
         self.model_path = None
+        self.last_prediction_details = {}
 
 
     def predict(self,user, recording_path):
-        self.bci_predictor = HierarchicalBCIPredictor(usuario=user,model_path=self.model_path)
         file_path = recording_path
         if not os.path.exists(file_path):
-            print(f"Error: El archivo no se encuentra en la ruta {file_path}")
-            return
+            raise FileNotFoundError(
+                f"El archivo de grabación no se encuentra en la ruta {file_path}"
+            )
         print(f"Prediciendo con el modelo {self.model_path} usando el archivo {file_path}")
-        return self.get_predictionBCIHierarchichal(file_path)
+        if (
+            isinstance(self.model, dict)
+            and "pipeline" in self.model
+            and "label_encoder" in self.model
+            and "feature_columns" in self.model
+            and "categoria" in self.model
+        ):
+            self.bci_predictor = HierarchicalBCIPredictor(usuario=user)
+            prediction, self.last_prediction_details = (
+                self.bci_predictor.predict_with_model_artifact_from_csv(
+                    file_path, self.model
+                )
+            )
+            return prediction
+
+        self.bci_predictor = HierarchicalBCIPredictor(
+            usuario=user, model_path=self.model_path
+        )
+        prediction, self.last_prediction_details = (
+            self.bci_predictor.predict_from_csv(file_path)
+        )
+        return prediction
 
     def set_model_path(self, model_path):
         if not os.path.exists(model_path):
-            print(f"Error: El modelo no se encuentra en la ruta {model_path}")
-            return
+            raise FileNotFoundError(f"El modelo no se encuentra en la ruta {model_path}")
         self.model_path = model_path
         self.model = joblib.load(model_path)
         print(f"Modelo cargado desde {model_path}")

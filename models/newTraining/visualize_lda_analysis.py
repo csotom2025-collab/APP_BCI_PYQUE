@@ -16,6 +16,7 @@ Uso:
 
 import os
 import sys
+import argparse
 from pathlib import Path
 import warnings
 warnings.filterwarnings("ignore")
@@ -1144,13 +1145,114 @@ def plot_executive_summary(bundle, results_df, out_dir, usuario):
 # MAIN
 # ──────────────────────────────────────────────────────────────────────────────
 
-def main():
+def _generate_bundle_visualizations(
+    df_usuario, bundle, results_df, out_dir, usuario
+):
+    errors = []
+    os.makedirs(out_dir, exist_ok=True)
+
+    if "color" in bundle:
+        print("   -> Separabilidad LDA de la etiqueta de color ...")
+        try:
+            plot_color_separability(
+                df_usuario, bundle["color"], results_df, out_dir, usuario
+            )
+        except Exception as error:
+            errors.append(f"Separabilidad de color: {error}")
+            print(f"   [ERROR] Color separability: {error}")
+            import traceback
+            traceback.print_exc()
+
+        print("   -> Heatmap de clasificadores y grupos de características para color ...")
+        try:
+            plot_color_feature_heatmap(results_df, out_dir, usuario)
+        except Exception as error:
+            errors.append(f"Heatmap de color: {error}")
+            print(f"   [ERROR] Color feature/classifier heatmap: {error}")
+            import traceback
+            traceback.print_exc()
+
+    if "por_color" in bundle:
+        plotting_views = []
+        for color, hierarchy in bundle["por_color"].items():
+            fine_models = hierarchy["por_grupo"].values()
+            commands = {
+                command
+                for model in fine_models
+                for command in (
+                    [model["fixed_label"]]
+                    if "fixed_label" in model
+                    else model["label_encoder"].classes_
+                )
+            }
+            color_mask = df_usuario["label"].astype(str).isin(commands)
+            if "color" in df_usuario.columns:
+                color_mask &= df_usuario["color"].astype(str) == str(color)
+            df_color = df_usuario[color_mask].reset_index(drop=True)
+            color_results = results_df[
+                (results_df["nivel"] == "color")
+                | (results_df["color"] == color)
+            ]
+            color_bundle = {
+                "super_clase": hierarchy["super_clase"],
+                "por_grupo": hierarchy["por_grupo"],
+            }
+            color_dir = os.path.join(out_dir, color)
+            os.makedirs(color_dir, exist_ok=True)
+            plotting_views.append(
+                (df_color, color_bundle, color_results, color_dir,
+                 f"{usuario}_{color}")
+            )
+    else:
+        plotting_views = [(df_usuario, bundle, results_df, out_dir, usuario)]
+
+    for df_plot, bundle_plot, results_plot, plot_dir, plot_user in plotting_views:
+        print(f"\n4) Generando figuras para {plot_user}: {plot_dir}")
+        plots = (
+            ("Proyecciones LDA", plot_lda_projections,
+             (df_plot, bundle_plot, plot_dir, plot_user)),
+            ("Conteo de muestras", plot_lda_class_counts,
+             (df_plot, bundle_plot, plot_dir, plot_user)),
+            ("Feature Set ganador", plot_feature_winner_analysis,
+             (results_plot, bundle_plot, plot_dir, plot_user)),
+            ("Heatmaps de comandos finos", plot_fine_level_heatmaps,
+             (results_plot, plot_dir, plot_user)),
+            ("Curvas de aprendizaje", plot_learning_curves,
+             (df_plot, bundle_plot, results_plot, plot_dir, plot_user)),
+            ("Panel resumen ejecutivo", plot_executive_summary,
+             (bundle_plot, results_plot, plot_dir, plot_user)),
+        )
+        for label, plot_function, arguments in plots:
+            print(f"   -> {label} ...")
+            try:
+                plot_function(*arguments)
+            except Exception as error:
+                errors.append(f"{plot_user} / {label}: {error}")
+                print(f"   [ERROR] {label}: {error}")
+                import traceback
+                traceback.print_exc()
+
+        print(f"\n  Figuras guardadas en: {plot_dir}")
+
+    if errors:
+        raise RuntimeError(
+            "Algunas visualizaciones no se pudieron generar:\n- "
+            + "\n- ".join(errors)
+        )
+
+
+def main(usuario_seleccionado=None, usar_top_cascadas=False, output_dir=None):
     print("\n" + "="*90)
     print("VISUALIZACION LDA JERARQUICO – ANALISIS COMPLETO")
     print("="*90)
 
-    print(f"\n1) Cargando dataset: {config.FEATURES_CSV} ...")
-    df = pd.read_csv(config.FEATURES_CSV)
+    output_dir = Path(output_dir or config.OUTPUT_DIR)
+    features_csv = output_dir / "features_dataset.csv"
+    print(f"\n1) Cargando dataset: {features_csv} ...")
+    if not features_csv.is_file():
+        raise FileNotFoundError(f"No se encontró el dataset: {features_csv}")
+
+    df = pd.read_csv(features_csv)
     df["label"] = _normalize_label_series(df["label"])
     meta_cols = ["usuario", "tpComando", "letra", "trial", "label", "color"]
     feature_cols = [c for c in df.columns if c not in meta_cols]
@@ -1159,137 +1261,106 @@ def main():
           f"Usuarios: {df['usuario'].unique().tolist()}")
 
     usuarios = sorted(df["usuario"].unique())
+    if usuario_seleccionado:
+        if usuario_seleccionado not in usuarios:
+            raise ValueError(
+                f"El usuario '{usuario_seleccionado}' no está en {features_csv}."
+            )
+        usuarios = [usuario_seleccionado]
+
+    generated_count = 0
 
     for usuario in usuarios:
         print(f"\n{'='*90}")
         print(f"USUARIO: {usuario}")
         print("="*90)
 
-        usuario_models_dir = os.path.join(config.MODELS_DIR, usuario)
-        bundle_path = os.path.join(usuario_models_dir, "hierarchical_bundle_optimizado.joblib")
-        results_csv_path = os.path.join(config.OUTPUT_DIR, usuario, "evaluacion_jerarquica_completa.csv")
-
-        if not os.path.exists(bundle_path):
-            print(f"   Bundle no encontrado: {bundle_path}  — saltando.")
+        usuario_models_dir = output_dir / "models" / usuario
+        results_csv_path = output_dir / usuario / "evaluacion_jerarquica_completa.csv"
+        if not results_csv_path.is_file():
+            if usar_top_cascadas:
+                raise FileNotFoundError(
+                    f"No se encontró la evaluación del usuario: {results_csv_path}"
+                )
+            print(
+                f"   CSV de evaluación no encontrado: {results_csv_path} "
+                "— saltando."
+            )
             continue
-        if not os.path.exists(results_csv_path):
-            print(f"   CSV evaluacion no encontrado: {results_csv_path}  — saltando.")
-            continue
-
-        print(f"\n2) Cargando bundle: {bundle_path}")
-        bundle = joblib.load(bundle_path)
-
-        print(f"3) Cargando resultados: {results_csv_path}")
         results_df = pd.read_csv(results_csv_path)
 
         df_usuario = df[df["usuario"] == usuario].reset_index(drop=True)
         print(f"   Trials del usuario: {len(df_usuario)}")
 
-        out_dir = os.path.join(config.FIGURES_DIR, usuario)
-        os.makedirs(out_dir, exist_ok=True)
-
-        if "color" in bundle:
-            print("   -> Separabilidad LDA de la etiqueta de color ...")
-            try:
-                plot_color_separability(
-                    df_usuario, bundle["color"], results_df, out_dir, usuario
+        if usar_top_cascadas:
+            cascades_dir = usuario_models_dir / "top_cascadas"
+            bundle_paths = sorted(
+                cascades_dir.glob("hierarchical_bundle_optimizado_top_*.joblib"),
+                key=lambda path: int(path.stem.rsplit("_", 1)[1]),
+            )
+            if not bundle_paths:
+                raise FileNotFoundError(
+                    f"No se encontraron modelos top en: {cascades_dir}"
                 )
-            except Exception as e:
-                print(f"   [ERROR] Color separability: {e}")
-                import traceback; traceback.print_exc()
-
-            print("   -> Heatmap de clasificadores y grupos de características para color ...")
-            try:
-                plot_color_feature_heatmap(results_df, out_dir, usuario)
-            except Exception as e:
-                print(f"   [ERROR] Color feature/classifier heatmap: {e}")
-                import traceback; traceback.print_exc()
-
-        if "por_color" in bundle:
-            plotting_views = []
-            for color, hierarchy in bundle["por_color"].items():
-                fine_models = hierarchy["por_grupo"].values()
-                commands = {
-                    command
-                    for model in fine_models
-                    for command in (
-                        [model["fixed_label"]]
-                        if "fixed_label" in model
-                        else model["label_encoder"].classes_
-                    )
-                }
-                color_mask = df_usuario["label"].astype(str).isin(commands)
-                if "color" in df_usuario.columns:
-                    color_mask &= df_usuario["color"].astype(str) == str(color)
-                df_color = df_usuario[color_mask].reset_index(drop=True)
-                color_results = results_df[
-                    (results_df["nivel"] == "color")
-                    | (results_df["color"] == color)
-                ]
-                color_bundle = {
-                    "super_clase": hierarchy["super_clase"],
-                    "por_grupo": hierarchy["por_grupo"],
-                }
-                color_dir = os.path.join(out_dir, color)
-                os.makedirs(color_dir, exist_ok=True)
-                plotting_views.append(
-                    (df_color, color_bundle, color_results, color_dir,
-                     f"{usuario}_{color}")
+            ranks = {
+                int(path.stem.rsplit("_", 1)[1]) for path in bundle_paths
+            }
+            if ranks != set(range(1, 6)):
+                raise FileNotFoundError(
+                    "Se requieren las cinco cascadas top (top_1 a top_5); "
+                    f"se encontraron: {sorted(ranks)} en {cascades_dir}"
                 )
         else:
-            plotting_views = [(df_usuario, bundle, results_df, out_dir, usuario)]
+            bundle_path = (
+                usuario_models_dir / "hierarchical_bundle_optimizado.joblib"
+            )
+            if not bundle_path.is_file():
+                print(f"   Bundle no encontrado: {bundle_path}  — saltando.")
+                continue
+            bundle_paths = [bundle_path]
 
-        for df_plot, bundle_plot, results_plot, plot_dir, plot_user in plotting_views:
-            print(f"\n4) Generando figuras para {plot_user}: {plot_dir}")
+        for bundle_path in bundle_paths:
+            print(f"\n2) Cargando bundle: {bundle_path}")
+            bundle = joblib.load(bundle_path)
+            if usar_top_cascadas:
+                rank = bundle.get("modelo_top_rank")
+                if rank is None:
+                    rank = int(bundle_path.stem.rsplit("_", 1)[1])
+                out_dir = (
+                    output_dir / "figures" / usuario / "top_cascadas"
+                    / f"top_{rank}"
+                )
+                plot_user = f"{usuario}_top_{rank}"
+            else:
+                out_dir = output_dir / "figures" / usuario
+                plot_user = usuario
 
-            print("   -> Proyecciones LDA 2D ...")
-            try:
-                plot_lda_projections(df_plot, bundle_plot, plot_dir, plot_user)
-            except Exception as e:
-                print(f"   [ERROR] LDA projections: {e}")
-                import traceback; traceback.print_exc()
-
-            print("   -> Conteo de muestras por clase en las proyecciones LDA ...")
-            try:
-                plot_lda_class_counts(df_plot, bundle_plot, plot_dir, plot_user)
-            except Exception as e:
-                print(f"   [ERROR] LDA class counts: {e}")
-                import traceback; traceback.print_exc()
-
-            print("   -> Analisis de Feature Set ganador ...")
-            try:
-                plot_feature_winner_analysis(results_plot, bundle_plot, plot_dir, plot_user)
-            except Exception as e:
-                print(f"   [ERROR] Feature winner: {e}")
-                import traceback; traceback.print_exc()
-
-            print("   -> Heatmaps de comandos finos ...")
-            try:
-                plot_fine_level_heatmaps(results_plot, plot_dir, plot_user)
-            except Exception as e:
-                print(f"   [ERROR] Fine-level heatmaps: {e}")
-                import traceback; traceback.print_exc()
-
-            print("   -> Curvas de Aprendizaje ...")
-            try:
-                plot_learning_curves(df_plot, bundle_plot, results_plot, plot_dir, plot_user)
-            except Exception as e:
-                print(f"   [ERROR] Learning curves: {e}")
-                import traceback; traceback.print_exc()
-
-            print("   -> Panel resumen ejecutivo ...")
-            try:
-                plot_executive_summary(bundle_plot, results_plot, plot_dir, plot_user)
-            except Exception as e:
-                print(f"   [ERROR] Executive summary: {e}")
-                import traceback; traceback.print_exc()
-
-            print(f"\n  Todas las figuras guardadas en: {plot_dir}")
+            print(f"3) Cargando resultados: {results_csv_path}")
+            _generate_bundle_visualizations(
+                df_usuario, bundle, results_df, str(out_dir), plot_user
+            )
+            generated_count += 1
 
     print("\n" + "="*90)
     print("VISUALIZACION COMPLETADA")
     print("="*90)
+    if generated_count == 0:
+        raise RuntimeError("No se generó ninguna visualización.")
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(
+        description="Genera visualizaciones LDA de modelos jerárquicos."
+    )
+    parser.add_argument("--user", help="Genera visualizaciones solo para este usuario.")
+    parser.add_argument(
+        "--top-cascades",
+        action="store_true",
+        help="Usa los bundles top de models/<usuario>/top_cascadas.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        help="Directorio de entrenamiento (por defecto trainingOutputs).",
+    )
+    args = parser.parse_args()
+    main(args.user, args.top_cascades, args.output_dir)

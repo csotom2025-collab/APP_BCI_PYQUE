@@ -114,7 +114,7 @@ CLASES_POR_CARPETA = {"letters": set(LETRAS), "numbers": set(DIGITOS), "controls
 class Config:
     # --- estructura -------------------------------------------------------
     fs: float = 128.0                      # Hz nominal (no se modifica nunca)
-    n_muestras_min: int = 240              # < esto -> C (registros insuficientes)
+    n_muestras_min: int = 256              # < esto -> C (registros insuficientes)
     # --- medida de amplitud ----------------------------------------------
     ventana_ms: float = 250.0              # ventana del RMS local (~1 ciclo de 4 Hz)
     escala_canal: dict = field(default_factory=lambda: dict(ESCALA_CANAL_REAL))  # REAL

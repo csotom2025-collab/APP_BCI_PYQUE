@@ -1,7 +1,17 @@
 from matplotlib._api import deprecation
-from hierarchical_infer import HierarchicalBCIPredictor
 import os
 import logging
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from models.newTraining.BCIpredictorhierarchical import (
+    HierarchicalBCIPredictor,
+    RecordingQualityError,
+)
 
 # Puedes poner este diccionario al inicio de tu script
 MAPA_CONTROLES = {
@@ -16,10 +26,17 @@ MAPA_CONTROLES = {
 
 
 
-User="UserCMSM"
-comands=["A","E","I","O","U","S","R","L","D"]
-tip="Letters"
-file=[i for  i in range(30,60)]
+User="UserAlexJ"
+modelo_path = os.path.join(
+    PROJECT_ROOT,
+    "trainingOutputs",
+    "models",
+    "UserAlexJ",
+    "hierarchical_bundle_optimizado.joblib",
+)
+comands=["UNKNOWN"]
+tip="recordings"
+file=[i for  i in range(1,60)]
 greenComd = ["A", "C", "F", "R", "V", "I", "M", "J", "L", "Q", "U", "B", "X",
              "4", "0", "2", "8", "W", "6", "⟵"]
 blueComd = ["S", "G", "E", "T", "Z", "N", "Y", "O", "P", "Ñ", "D", "H", "1",
@@ -41,18 +58,30 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
     force=True,
 )
-predictor = HierarchicalBCIPredictor(usuario=User)
+predictor = HierarchicalBCIPredictor(usuario=User, model_path=modelo_path)
 for comand in comands:
     logging.info("=======================================================================================")
     for num in file:
-        csv_file = f"D:/APP_BCI_PYQUE/captures/{User}/{tip}/{User}_{comand}_{num}.csv"
+        csv_file = f"captures/{User}/{tip}/{User}_{comand}_{num}.csv"
         #checar si existe el archivo csv si no existe continuar
         if (os.path.exists(csv_file) == False):
             logging.info(f"El archivo {csv_file} no existe")
             continue    
-        comando, detalle = predictor.predict_from_csv(csv_file)
         totlFile+=1
-        color_real = colorByCommand[comand]
+        try:
+            comando, detalle = predictor.predict_from_csv(csv_file)
+        except RecordingQualityError as error:
+            logging.warning(
+                "Grabación omitida por control de calidad: %s: %s",
+                csv_file,
+                error,
+            )
+            continue
+
+        if comand in colorByCommand:
+            color_real = colorByCommand[comand]
+        else:
+            color_real = "Desconocido"
         color_predicho = detalle["color_predicho"]
         confianza_color = float(detalle["color_probabilidades"][color_predicho])
 

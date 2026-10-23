@@ -432,6 +432,12 @@ class KeyboardWindow(QWidget):
         # Restaurar el tema actual después del flash
         QTimer.singleShot(int(duration * 1000), lambda: self.reapply_button_theme(button))
 
+    def flash_all_buttons(self, duration=0.5):
+        """Ilumina todas las teclas simultáneamente durante un único flash."""
+        for button in self.buttons_list:
+            color = "#00FF00" if button.text() in greenComd else "#0096FF"
+            self.flash_button(button, duration=duration, COLOR=color)
+
     def reapply_button_theme(self, button):
         """Reaplica el tema actual a un botón específico"""
         theme = self.current_theme

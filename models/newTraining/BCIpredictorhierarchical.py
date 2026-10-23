@@ -30,6 +30,7 @@ from models.newTraining.eeg_features import (
     log_transform_power_columns
 )
 from models.newTraining.p300_segmentation import extract_with_flash_segmentation
+from utils.chequeo_calidad import quality_filter
 from models.newTraining.lda_utils import SafeLDA,ZeroThresholdClassifier, ZeroThresholdLDA  # noqa: F401 — necesario para que joblib deserialice SafeLDA correctamente
 
 
@@ -82,6 +83,7 @@ class HierarchicalBCIPredictor:
         self.window_overlap = getattr(config, "WINDOW_OVERLAP", 0.89)
 
         self.last_artifact_info = {}
+        self.last_quality_filter_info = {}
 
         if "color" not in self.bundle or "por_color" not in self.bundle:
             raise ValueError(
@@ -151,17 +153,67 @@ class HierarchicalBCIPredictor:
             return signals
         return signals[:, start:end]
 
+    def _apply_quality_filter(self, signals):
+        """Corrige una grabación en memoria usando el filtro de calidad del proyecto."""
+        signals = np.asarray(signals, dtype=float)
+        if signals.ndim != 2 or signals.shape[0] != len(self.channel_names):
+            raise ValueError(
+                f"Se esperaba una señal con forma ("
+                f"{len(self.channel_names)} canales, muestras), recibido {signals.shape}."
+            )
+
+        expected_channels = quality_filter.CANALES
+        if (
+            len(self.channel_names) != len(expected_channels)
+            or set(self.channel_names) != set(expected_channels)
+        ):
+            raise ValueError(
+                "El filtro de calidad requiere los 14 canales EEG del proyecto: "
+                f"{expected_channels}."
+            )
+
+        quality_config = quality_filter.Config(
+            fs=float(self.fs), n_muestras_min=256
+        )
+        if signals.shape[1] < quality_config.n_muestras_min:
+            raise ValueError(
+                "La grabación es demasiado corta para el filtro de calidad: "
+                f"{signals.shape[1]} muestras; se requieren al menos "
+                f"{quality_config.n_muestras_min}."
+            )
+
+        predictor_indices = [
+            self.channel_names.index(channel) for channel in expected_channels
+        ]
+        quality_ordered = signals[predictor_indices, :].T
+        analysis = quality_filter.analizar_registro(quality_ordered, quality_config)
+        if analysis.estado == quality_filter.ESTADO_C or analysis.Y is None:
+            codes = ", ".join(analysis.codigos_C) or "sin código"
+            reasons = "; ".join(analysis.motivos) or "sin detalle"
+            raise ValueError(
+                "El filtro de calidad marcó la grabación como no utilizable "
+                f"(C; {codes}): {reasons}"
+            )
+
+        self.last_quality_filter_info = {
+            "estado": analysis.estado,
+            "canales_corregidos": list(analysis.canales_corregidos),
+            "n_muestras_modificadas": analysis.metricas.get(
+                "n_muestras_modificadas", 0
+            ),
+        }
+        corrected = analysis.Y.T
+        return corrected[
+            [expected_channels.index(channel) for channel in self.channel_names]
+        ]
+
     def preprocess_signals(self, signals):
         """
-        Aplica exactamente la misma cadena de preprocesamiento que data_loader.py:
-        0) Filtro Notch (60 Hz)
-        1) Filtro Paso de Banda (0.5 a 40 Hz)
-        2) Corrección de línea base (pre-estímulo 0.0 - 0.5s)
-        3) Detección de picos (> 150 uV)
-        4) Normalización Z-score
-        5) Recorte a ventana P300 si use_p300_window_only=True
+        Aplica primero el filtro de calidad y después la cadena de data_loader.py:
+        filtros, corrección de línea base, normalización Z-score y recorte P300.
         """
         signals = np.array(signals, dtype=float, copy=True)
+        signals = self._apply_quality_filter(signals)
 
         # 0) Filtro Notch (60 Hz)
         if self.apply_notch:
@@ -227,6 +279,30 @@ class HierarchicalBCIPredictor:
 
             if self.log_transform_power:
                 feat_df = log_transform_power_columns(feat_df, feat_df.columns)
+
+        if self.use_p300_window_only:
+            t_p300_start = 0.0
+            t_p300_end = float(signals.shape[1] / self.fs)
+        else:
+            t_p300_start, t_p300_end = 0.5, 1.2
+
+        erp_df = self.extractor.extract_erp_features(
+            signals,
+            channel_names=self.channel_names,
+            available_channel_names=self.channel_names,
+            t_pre_stim=float(self.baseline_window_s[1]),
+            t_p300_start=t_p300_start,
+            t_p300_end=t_p300_end,
+        )
+        erp_row = erp_df.iloc[0].to_dict()
+        if self.use_p300_window_only:
+            for name in erp_row:
+                if name.endswith("_latency_ms"):
+                    erp_row[name] += 500.0
+        erp_features = pd.DataFrame(
+            [erp_row] * len(feat_df), columns=erp_row.keys(), index=feat_df.index
+        )
+        feat_df = pd.concat([feat_df, erp_features], axis=1)
 
         self.last_artifact_info = {
             "es_artefacto": es_artefacto,
@@ -342,11 +418,13 @@ class HierarchicalBCIPredictor:
         feat_dfs = []
         artefactos = []
         picos = []
+        quality_filter_results = []
         for s in lista_signals:
             f_df, es_art, pico = self._signals_to_features(s, return_artifact_info=True)
             feat_dfs.append(f_df)
             artefactos.append(es_art)
             picos.append(pico)
+            quality_filter_results.append(self.last_quality_filter_info)
 
         # DataFrame con TODAS las features extraídas (unión de todos los feature sets)
         all_feats = pd.concat(feat_dfs, ignore_index=True)
@@ -406,6 +484,7 @@ class HierarchicalBCIPredictor:
                 "detalle_ventanas_comando": [],
                 "artefactos_detectados": artefactos,
                 "picos_maximos_uV": picos,
+                "filtro_calidad": quality_filter_results,
                 "es_artefacto": any(artefactos) if artefactos else False,
                 "pico_maximo_uV": max(picos) if picos else 0.0,
                 "super_feature_set": super_bundle.get("feature_set", "N/A"),
@@ -452,6 +531,7 @@ class HierarchicalBCIPredictor:
             "detalle_ventanas_comando": comando_ventanas,
             "artefactos_detectados": artefactos,
             "picos_maximos_uV": picos,
+            "filtro_calidad": quality_filter_results,
             "es_artefacto": any(artefactos) if artefactos else False,
             "pico_maximo_uV": max(picos) if picos else 0.0,
             # Feature sets usados en cada etapa (para trazabilidad)
@@ -479,6 +559,50 @@ class HierarchicalBCIPredictor:
         """Atajo de 1 sola repeticion (ver advertencia en predict_from_signals)."""
         signals = self._load_csv_as_signals(path)
         return self.predict_from_signals(signals)
+
+    def predict_with_model_artifact_from_csv(self, path, model_artifact):
+        """Prueba un modelo individual del ranking usando el preprocesamiento EEG actual."""
+        required_keys = {"pipeline", "label_encoder", "feature_columns", "categoria"}
+        missing_keys = required_keys - model_artifact.keys()
+        if missing_keys:
+            raise ValueError(
+                "El archivo seleccionado no es un modelo individual de top_modelos; "
+                f"faltan campos: {sorted(missing_keys)}."
+            )
+
+        previous_feature_columns = self.feature_columns
+        self.feature_columns = list(model_artifact["feature_columns"])
+        try:
+            signals = self._load_csv_as_signals(path)
+            feat_df = self._signals_to_features(signals)
+        finally:
+            self.feature_columns = previous_feature_columns
+
+        model_bundle = {
+            "pipeline": model_artifact["pipeline"],
+            "label_encoder": model_artifact["label_encoder"],
+            "feature_columns": model_artifact["feature_columns"],
+        }
+        prediction, probabilities, windows = self._predict_with_bundle(
+            model_bundle, feat_df
+        )
+        details = {
+            "categoria": model_artifact["categoria"],
+            "rank": model_artifact["rank"],
+            "nivel": model_artifact["nivel"],
+            "color": model_artifact["color"],
+            "grupo": model_artifact["grupo"],
+            "feature_set": model_artifact["feature_set"],
+            "clasificador": model_artifact["clasificador"],
+            "f1_macro_cv": model_artifact["f1_macro_cv"],
+            "prediccion": str(prediction),
+            "probabilidades": {
+                str(label): float(probability)
+                for label, probability in probabilities.items()
+            },
+            "ventanas": windows,
+        }
+        return prediction, details
     
     def set_min_group_confidence(self, threshold: float):
         """

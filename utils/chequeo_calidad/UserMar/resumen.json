@@ -1,17 +1,19 @@
 {
   "version": "2.3.0",
-  "fecha_utc": "2026-10-22T00:10:27.408257+00:00",
+  "fecha_utc": "2026-10-22T20:31:09.467300+00:00",
   "captures": "C:\\Users\\usuario\\Desktop\\APP_BCI_PYQUE\\captures",
   "salida": "C:\\Users\\usuario\\Desktop\\APP_BCI_PYQUE\\utils\\chequeo_calidad\\UserMar",
   "usuario": "UserMar",
   "archivos": 1304,
-  "A": 1304,
+  "A": 1294,
   "B": 0,
-  "C": 0,
-  "codigos_C": {},
+  "C": 10,
+  "codigos_C": {
+    "ESTRUCTURA": 10
+  },
   "segmentos_corregidos": 0,
   "muestras_modificadas": 0,
   "archivos_con_amplificacion": 0,
-  "archivos_con_canales_no_utilizables": 251,
-  "rescatados_A_B_con_canales_no_utilizables": 251
+  "archivos_con_canales_no_utilizables": 249,
+  "rescatados_A_B_con_canales_no_utilizables": 249
 }

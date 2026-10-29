@@ -91,7 +91,8 @@ def _crop_p300_window(signals, fs):
 
 def build_dataset(base_dir=None, usuarios=None, tp_comandos=None, verbose=True,
                   FS=None,channel_names=None,apply_baseline=None,use_p300_window_only=None,
-                  use_win_size=None,window_size=None,window_overlap=None):
+                  use_win_size=None,window_size=None,window_overlap=None,
+                  max_recordings_per_class=None):
     """
     Recorre todos los usuarios/tpComando/archivos y construye un DataFrame
     con una fila por trial: columnas de caracteristicas + metadatos
@@ -112,9 +113,21 @@ def build_dataset(base_dir=None, usuarios=None, tp_comandos=None, verbose=True,
         if use_p300_window_only is None
         else use_p300_window_only
     )
-    use_win_size = use_win_size or config.USE_WIN_SIZE
-    window_size = window_size or config.WINDOW_SIZE
-    window_overlap = window_overlap or config.WINDOW_OVERLAP
+    use_win_size = (
+        config.USE_WIN_SIZE if use_win_size is None else use_win_size
+    )
+    window_size = (
+        config.WINDOW_SIZE if window_size is None else window_size
+    )
+    window_overlap = (
+        config.WINDOW_OVERLAP
+        if window_overlap is None
+        else window_overlap
+    )
+    if max_recordings_per_class is not None and max_recordings_per_class < 1:
+        raise ValueError("max_recordings_per_class debe ser positivo.")
+    if not 0 <= window_overlap < 1:
+        raise ValueError("window_overlap debe estar entre 0 (incluido) y 1.")
 
     extractor = EEGFeatureExtractor(fs=fs)
     rows = []
@@ -127,6 +140,19 @@ def build_dataset(base_dir=None, usuarios=None, tp_comandos=None, verbose=True,
             archivos = sorted(glob.glob(os.path.join(carpeta, f"{usuario}_*.csv")))
             if not archivos and verbose:
                 print(f"[AVISO] Sin archivos en: {carpeta}")
+            if max_recordings_per_class is not None:
+                archivos_por_clase = {}
+                archivos_limitados = []
+                for path in archivos:
+                    letra, _ = _parse_filename(path, usuario)
+                    if letra is None:
+                        continue
+                    cantidad = archivos_por_clase.get(letra, 0)
+                    if cantidad >= max_recordings_per_class:
+                        continue
+                    archivos_limitados.append(path)
+                    archivos_por_clase[letra] = cantidad + 1
+                archivos = archivos_limitados
             
             if tp=="Letters":
                 bef='A'
@@ -182,15 +208,17 @@ def build_dataset(base_dir=None, usuarios=None, tp_comandos=None, verbose=True,
 
                     # Un solo "window" = el trial (o el recorte P300) completo
                     if use_win_size:
-                        window_size = window_size
+                        current_window_size = min(window_size, n_samples)
+                        current_overlap = window_overlap
                     else:
-                        window_size=n_samples
+                        current_window_size = n_samples
+                        current_overlap = 0.0
                     feat_df = extractor.extract_features(
                         signals,
                         channel_names=channel_names,
                         available_channel_names=channel_names,
-                        window_size=window_size,
-                        overlap=window_overlap,
+                        window_size=current_window_size,
+                        overlap=current_overlap,
                     )
 
                     # B) NUEVO: Extracción automática de ERP usando TU método

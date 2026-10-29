@@ -1,22 +1,22 @@
 {
   "version": "2.3.0",
-  "fecha_utc": "2026-10-21T21:15:31.300534+00:00",
+  "fecha_utc": "2026-10-28T20:38:07.937405+00:00",
   "captures": "C:\\Users\\usuario\\Desktop\\APP_BCI_PYQUE\\captures",
   "salida": "C:\\Users\\usuario\\Desktop\\APP_BCI_PYQUE\\utils\\chequeo_calidad\\UserJorge",
   "usuario": "UserJorge",
-  "archivos": 1599,
-  "A": 1225,
-  "B": 190,
-  "C": 184,
+  "archivos": 1653,
+  "A": 1434,
+  "B": 1,
+  "C": 218,
   "codigos_C": {
-    "REFERENCIA_INESTABLE": 76,
-    "ESTRUCTURA": 24,
-    "ANOMALIA_EXTENSA": 87,
-    "REFERENCIA_CONTAMINADA": 28
+    "REFERENCIA_INESTABLE": 81,
+    "ESTRUCTURA": 48,
+    "ANOMALIA_EXTENSA": 88,
+    "REFERENCIA_CONTAMINADA": 34
   },
-  "segmentos_corregidos": 214,
-  "muestras_modificadas": 53869,
+  "segmentos_corregidos": 2,
+  "muestras_modificadas": 94,
   "archivos_con_amplificacion": 0,
-  "archivos_con_canales_no_utilizables": 441,
-  "rescatados_A_B_con_canales_no_utilizables": 393
+  "archivos_con_canales_no_utilizables": 369,
+  "rescatados_A_B_con_canales_no_utilizables": 318
 }

@@ -1,2 +1,2 @@
 usuario,n_trials,mejor_nivel,mejor_grupo,mejor_feature_set,mejor_clasificador,accuracy_mean,f1_macro_mean
-UserAlexJ,5120,comando_fino_por_color_grupo,Controls,Metricas_ERP,RF,1.0,1.0
+UserAlexJ,4800,comando_fino_por_color_grupo,Controls,Beta_Gamma_ERP,Ensamble_MLP_SVMRBF,0.8958333333333334,0.8957337310502369

@@ -921,7 +921,19 @@ def save_confusion_matrices_per_user(usuario, best_per_group, figures_dir):
         print(f"   ✓ Matriz guardada en: {out_path}")
 
 
-def train_optimized_hierarchical(output_dir=None,channels = None,fs=None,use_p300window=False,apply_baseline_correction=None,verbose=True,semilla=None):
+def train_optimized_hierarchical(
+    output_dir=None,
+    channels=None,
+    fs=None,
+    use_p300window=None,
+    apply_baseline_correction=None,
+    use_win_size=None,
+    window_size=None,
+    window_overlap=None,
+    max_recordings_per_class=None,
+    verbose=True,
+    semilla=None,
+):
     output_dir = output_dir or config.OUTPUT_DIR
     FEATURES_CSV = os.path.join(output_dir, "features_dataset.csv")
     RESULTS_CSV = os.path.join(output_dir, "resultados_modelos.csv")
@@ -929,7 +941,23 @@ def train_optimized_hierarchical(output_dir=None,channels = None,fs=None,use_p30
     MODELS_DIR = os.path.join(output_dir, "models")
     fs= fs if fs is not None else config.FS
     channels = channels if channels is not None else config.CHANNEL_NAMES
+    use_p300window = (
+        config.USE_P300_WINDOW_ONLY
+        if use_p300window is None
+        else use_p300window
+    )
     apply_baseline_correction = apply_baseline_correction if apply_baseline_correction is not None else config.APPLY_BASELINE_CORRECTION
+    use_win_size = (
+        config.USE_WIN_SIZE if use_win_size is None else use_win_size
+    )
+    window_size = (
+        config.WINDOW_SIZE if window_size is None else window_size
+    )
+    window_overlap = (
+        config.WINDOW_OVERLAP
+        if window_overlap is None
+        else window_overlap
+    )
     semilla = semilla if semilla is not None else config.RANDOM_STATE
     print("\n" + "="*100)
     print("ENTRENAMIENTO JERÁRQUICO: COLOR → SUPER-GRUPO → COMANDO FINO")
@@ -1006,12 +1034,16 @@ def train_optimized_hierarchical(output_dir=None,channels = None,fs=None,use_p30
             "usuario": usuario,
             "color": final_bundles["color"],
             "por_color": final_bundles["por_color"],
-            "channel_names": config.CHANNEL_NAMES,
-            "fs": config.FS,
-            "use_p300_window_only": config.USE_P300_WINDOW_ONLY,
+            "channel_names": channels,
+            "fs": fs,
+            "use_p300_window_only": use_p300window,
             "p300_window_s": config.P300_WINDOW_S,
-            "apply_baseline_correction": config.APPLY_BASELINE_CORRECTION,
+            "apply_baseline_correction": apply_baseline_correction,
             "baseline_window_s": config.BASELINE_WINDOW_S,
+            "use_win_size": use_win_size,
+            "window_size": window_size,
+            "window_overlap": window_overlap,
+            "max_recordings_per_class": max_recordings_per_class,
             "log_transform_power": True,
             "use_flash_segmentation": True,
             "n_flashes": 2,  # 2 flashes por grupo en protocolo real

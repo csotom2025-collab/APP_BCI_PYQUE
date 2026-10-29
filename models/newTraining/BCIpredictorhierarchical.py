@@ -82,9 +82,15 @@ class HierarchicalBCIPredictor:
         self.max_peak_threshold = getattr(config, "MAX_PEAK_THRESHOLD", 150.0)
 
         # Configuración de ventaneo idéntica a data_loader.py
-        self.use_win_size = getattr(config, "USE_WIN_SIZE", True)
-        self.window_size = getattr(config, "WINDOW_SIZE", 192)
-        self.window_overlap = getattr(config, "WINDOW_OVERLAP", 0.89)
+        self.use_win_size = self.bundle.get(
+            "use_win_size", getattr(config, "USE_WIN_SIZE", True)
+        )
+        self.window_size = self.bundle.get(
+            "window_size", getattr(config, "WINDOW_SIZE", 192)
+        )
+        self.window_overlap = self.bundle.get(
+            "window_overlap", getattr(config, "WINDOW_OVERLAP", 0.89)
+        )
 
         self.last_artifact_info = {}
         self.last_quality_filter_info = {}

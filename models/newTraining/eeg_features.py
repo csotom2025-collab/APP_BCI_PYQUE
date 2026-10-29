@@ -5,21 +5,15 @@ Contiene la funcion extract_features original (provista por el usuario),
 envuelta en una clase con fs y un metodo `safe` para sanitizar nombres de canal.
 """
 
-from scipy.stats import _mannwhitneyu
-from scipy.signal import signaltools
-from pandas.core import window
-from joblib import compressor
+
 import re
 import numpy as np
 import pandas as pd
 from scipy import stats
 import scipy.signal as signal
 from sklearn.decomposition import FastICA
+import pywt
 
-try:
-    import pywt
-except ImportError:
-    pywt = None
 
 
 class EEGFeatureExtractor:
@@ -156,75 +150,53 @@ class EEGFeatureExtractor:
                     window_features[f'{cname}_beta_rel'] = window_features[f'{cname}_beta_Abs'] / total_power
                     window_features[f'{cname}_gamma_rel'] = window_features[f'{cname}_gamma_Abs'] / total_power
                 else:
-                    window_features[f'{cname}_delta_rel'] = 0.0
-                    window_features[f'{cname}_theta_rel'] = 0.0
-                    window_features[f'{cname}_alpha_rel'] = 0.0
-                    window_features[f'{cname}_beta_rel'] = 0.0
-                    window_features[f'{cname}_gamma_rel'] = 0.0
+                    for stat in ('delta_rel', 'theta_rel', 'alpha_rel', 'beta_rel', 'gamma_rel'):
+                        window_features[f'{cname}_{stat}'] = 0.0
+                
+                # --- Wavelet DWT (db4) ---
+                try:
+                    level = pywt.dwt_max_level(len(channel_data), 'db4')
+                    
+                    coeffs = pywt.wavedec(channel_data, 'db4', level=level)
+                    energies = [float(np.sum(np.asarray(c)**2)) for c in coeffs]
+                    total_w_energy = sum(energies) if sum(energies) > 0 else 1.0
 
-                # --- Caracteristicas Wavelet Discreta (DWT) usando db4 nivel 5 ---
-                if pywt is None:
+                    # Adaptamos las llaves para registrar el nivel efectivo real (wA4)
+                    window_features[f'{cname}_wA4_energy'] = energies[0]
+                    window_features[f'{cname}_wA4_rel'] = (energies[0] / total_w_energy)
+                    
+                    # Estadísticas con la Wavelet de Aproximación (Nivel efectivo real)
+                    print(len(coeffs[0]), len(channel_data))
+                    wA_approx = np.asarray(coeffs[0])
+                    window_features[f'{cname}_wA4_std'] = float(np.std(wA_approx))
+                    window_features[f'{cname}_wA4_mean'] = float(np.mean(wA_approx))
+                    window_features[f'{cname}_wA4_var'] = float(np.var(wA_approx))
+                    window_features[f'{cname}_wA4_rms'] = float(np.sqrt(np.mean(wA_approx**2)))
+                    window_features[f'{cname}_wA4_skewness'] = float(stats.skew(wA_approx))
+                    window_features[f'{cname}_wA4_kurtosis'] = float(stats.kurtosis(wA_approx))
+                    
+                    # Rellenamos de forma dinámica los detalles (wD1 a wD5)
+                    # Si lvl supera el nivel calculado (ej. nivel 5), se guardará automáticamente como 0.0
+                    for lvl in range(1, 6):
+                        if lvl <= level:
+                            idx = level - lvl + 1
+                            e = energies[idx]
+                            rel = e / total_w_energy
+                        else:
+                            e = 0.0
+                            rel = 0.0
+                        window_features[f'{cname}_wD{lvl}_energy'] = e
+                        window_features[f'{cname}_wD{lvl}_rel'] = rel
+                        
+                except Exception as e:
+                    print(f"[ERROR] Falló extracción Wavelet en canal {cname}: {e}")
                     for lvl in range(1, 6):
                         window_features[f'{cname}_wD{lvl}_energy'] = 0.0
                         window_features[f'{cname}_wD{lvl}_rel'] = 0.0
-                    window_features[f'{cname}_wA5_energy'] = 0.0
-                    window_features[f'{cname}_wA5_rel'] = 0.0
-                    window_features[f'{cname}_wA5_std'] = 0.0
-                    window_features[f'{cname}_wA5_mean'] = 0.0
-                    window_features[f'{cname}_wA5_var'] = 0.0
-                    window_features[f'{cname}_wA5_rms'] = 0.0
-                    window_features[f'{cname}_wA5_skewness'] = 0.0
-                    window_features[f'{cname}_wA5_kurtosis'] = 0.0
-                else:
-                    try:
-                        max_level = pywt.dwt_max_level(len(channel_data), 'db4')
-                        # Bajamos el límite a 4 de forma ideal para ventanas de 192 muestras
-                        level = min(4, max_level) 
+                    
+                    for stat in ('wA4_energy', 'wA4_rel', 'wA4_std', 'wA4_mean', 'wA4_var', 'wA4_rms', 'wA4_skewness', 'wA4_kurtosis'):
+                        window_features[f'{cname}_{stat}'] = 0.0
                         
-                        coeffs = pywt.wavedec(channel_data, 'db4', level=level)
-                        energies = [float(np.sum(np.asarray(c)**2)) for c in coeffs]
-                        total_w_energy = sum(energies) if sum(energies) > 0 else 1.0
-
-                        # Adaptamos las llaves para registrar el nivel efectivo real (wA4)
-                        window_features[f'{cname}_wA4_energy'] = energies[0]
-                        window_features[f'{cname}_wA4_rel'] = (energies[0] / total_w_energy)
-                        
-                        # Estadísticas con la Wavelet de Aproximación (Nivel efectivo real)
-                        wA_approx = np.asarray(coeffs[0])
-                        window_features[f'{cname}_wA4_std'] = float(np.std(wA_approx))
-                        window_features[f'{cname}_wA4_mean'] = float(np.mean(wA_approx))
-                        window_features[f'{cname}_wA4_var'] = float(np.var(wA_approx))
-                        window_features[f'{cname}_wA4_rms'] = float(np.sqrt(np.mean(wA_approx**2)))
-                        window_features[f'{cname}_wA4_skewness'] = float(stats.skew(wA_approx))
-                        window_features[f'{cname}_wA4_kurtosis'] = float(stats.kurtosis(wA_approx))
-                        
-                        # Rellenamos de forma dinámica los detalles (wD1 a wD5)
-                        # Si lvl supera el nivel calculado (ej. nivel 5), se guardará automáticamente como 0.0
-                        for lvl in range(1, 6):
-                            if lvl <= level:
-                                idx = level - lvl + 1
-                                e = energies[idx]
-                                rel = e / total_w_energy
-                            else:
-                                e = 0.0
-                                rel = 0.0
-                            window_features[f'{cname}_wD{lvl}_energy'] = e
-                            window_features[f'{cname}_wD{lvl}_rel'] = rel
-                            
-                    except Exception as e:
-                        print(f"[ERROR] Falló extracción Wavelet en canal {cname}: {e}")
-                        for lvl in range(1, 6):
-                            window_features[f'{cname}_wD{lvl}_energy'] = 0.0
-                            window_features[f'{cname}_wD{lvl}_rel'] = 0.0
-                        window_features[f'{cname}_wA4_energy'] = 0.0
-                        window_features[f'{cname}_wA4_rel'] = 0.0
-                        window_features[f'{cname}_wA4_std'] = 0.0
-                        window_features[f'{cname}_wA4_mean'] = 0.0
-                        window_features[f'{cname}_wA4_var'] = 0.0
-                        window_features[f'{cname}_wA4_rms'] = 0.0
-                        window_features[f'{cname}_wA4_skewness'] = 0.0
-                        window_features[f'{cname}_wA4_kurtosis'] = 0.0
-
 
                 # --- Welch PSD: Optimizado para Ventanas de 1.5s (192 muestras) ---
                 try:
@@ -246,7 +218,7 @@ class EEGFeatureExtractor:
                     welch_alpha_mask = (welch_freqs > 8.0)  & (welch_freqs <= 14.0)
                     welch_beta_mask  = (welch_freqs > 14.0) & (welch_freqs <= 30.0)
                     # Limitamos gamma a 40 Hz ya que tu filtro pasa banda corta ahí
-                    welch_gamma_mask = (welch_freqs > 30.0) & (welch_freqs <= 40.0) 
+                    welch_gamma_mask = (welch_freqs > 30.0)
 
                     welch_mask = [
                         ('delta', welch_delta_mask),
@@ -441,8 +413,9 @@ def get_feature_sets(all_cols):
                          ["_Abs", "_rel"])],
 
         # --- NUEVO GRUPO: Métricas morfológicas puras de la onda ERP -
-        "Metricas_ERP": [c for c in all_cols if "_p300_" in c],
-        
+        "Beta_Gamma_ERP": [c for c in all_cols if any(k in c for k in 
+                               ["beta_", "gamma_", "_p300_"])],
+
         # --- NUEVO GRUPO: Combinación de características Espectrales + ERP ---
         "Espectral_Mas_ERP": [c for c in all_cols if any(k in c for k in 
                                ["welch_", "delta_rel", "theta_rel", "alpha_rel", "beta_rel", "gamma_rel", "_p300_"])],

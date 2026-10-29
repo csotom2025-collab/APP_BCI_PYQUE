@@ -20,7 +20,8 @@ class controllerTraining():
                     output_dir="trainingOutputs",
                     commandTypes=["Letters","Numbers","Controls"],
                     channels=None,fs=None,use_p300window=False,apply_baseline_correction=True,
-                    seed=42):
+                    seed=42,max_recordings_per_class=None,use_win_size=None,
+                    window_size=None,window_overlap=None):
         if not os.path.exists(dataPath):
             print("no existe la ruta")
             return
@@ -53,6 +54,10 @@ class controllerTraining():
                 channel_names=channels,
                 apply_baseline=apply_baseline_correction,
                 use_p300_window_only=use_p300window,
+                use_win_size=use_win_size,
+                window_size=window_size,
+                window_overlap=window_overlap,
+                max_recordings_per_class=max_recordings_per_class,
             )
             path_features_csv = os.path.join(output_dir, "features_dataset.csv")
             dataset.to_csv(path_features_csv, index=False)
@@ -60,7 +65,13 @@ class controllerTraining():
             print(f"Shape: {dataset.shape}")
             print(f"Clases (labels) encontradas: {sorted(dataset['label'].unique())}")
             train_optimized_hierarchical(output_dir=output_dir,channels = channels,fs=fs,
-                                         use_p300window=use_p300window,apply_baseline_correction=apply_baseline_correction,verbose=True,semilla=seed)
+                                         use_p300window=use_p300window,
+                                         apply_baseline_correction=apply_baseline_correction,
+                                         use_win_size=use_win_size,
+                                         window_size=window_size,
+                                         window_overlap=window_overlap,
+                                         max_recordings_per_class=max_recordings_per_class,
+                                         verbose=True,semilla=seed)
 
 
         #df = self.create_df(dataPath)

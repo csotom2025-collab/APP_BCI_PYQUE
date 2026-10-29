@@ -1,6 +1,6 @@
 {
   "fs": 128.0,
-  "n_muestras_min": 240,
+  "n_muestras_min": 256,
   "ventana_ms": 250.0,
   "escala_canal": {
     "F3": 0.889,

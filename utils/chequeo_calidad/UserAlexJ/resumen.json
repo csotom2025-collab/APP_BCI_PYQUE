@@ -1,15 +1,16 @@
 {
   "version": "2.3.0",
-  "fecha_utc": "2026-10-22T20:44:55.388290+00:00",
+  "fecha_utc": "2026-10-28T20:42:34.897364+00:00",
   "captures": "C:\\Users\\usuario\\Desktop\\APP_BCI_PYQUE\\captures",
   "salida": "C:\\Users\\usuario\\Desktop\\APP_BCI_PYQUE\\utils\\chequeo_calidad\\UserAlexJ",
   "usuario": "UserAlexJ",
-  "archivos": 1280,
+  "archivos": 1291,
   "A": 1279,
   "B": 0,
-  "C": 1,
+  "C": 12,
   "codigos_C": {
-    "DUPLICADO": 1
+    "DUPLICADO": 1,
+    "ETIQUETA": 11
   },
   "segmentos_corregidos": 0,
   "muestras_modificadas": 0,

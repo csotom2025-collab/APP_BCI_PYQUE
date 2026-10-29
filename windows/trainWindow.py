@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
+    QDoubleSpinBox,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -138,10 +139,13 @@ class DatasetPreparationThread(QThread):
     completed = pyqtSignal(dict)
     failed = pyqtSignal(str)
 
-    def __init__(self, user, project_root, parent=None):
+    def __init__(
+        self, user, project_root, minimum_recordings, parent=None
+    ):
         super().__init__(parent)
         self.user = user
         self.project_root = Path(project_root)
+        self.minimum_recordings = minimum_recordings
         self.captures_dir = self.project_root / "captures"
         self.quality_dir = (
             self.project_root / "utils" / "chequeo_calidad"
@@ -241,7 +245,7 @@ class DatasetPreparationThread(QThread):
                 "--captures",
                 self.captures_dir,
                 "--trials-objetivo",
-                MINIMUM_RECORDINGS_PER_CLASS,
+                self.minimum_recordings,
             )
 
             self.stage_changed.emit(
@@ -290,9 +294,10 @@ class DatasetPreparationThread(QThread):
                 "--output-dir",
                 self.quality_dir,
                 "--minimum",
-                MINIMUM_RECORDINGS_PER_CLASS,
+                self.minimum_recordings,
             )
             result = self._read_balance_report()
+            result["minimo_requerido"] = self.minimum_recordings
             result["eliminacion_aprobada"] = (
                 invalid_count == 0 or self._delete_approved
             )
@@ -420,7 +425,7 @@ class TrainWindow(QMainWindow):
         
     def setup_ui(self):
         self.setWindowTitle("Ventana de Entrenamiento")
-        self.resize(1000, 590)
+        self.resize(1100, 720)
         main_layout = QVBoxLayout()
         main_layout.addWidget(QLabel("Ventana de Entrenamiento"))
 
@@ -476,6 +481,43 @@ class TrainWindow(QMainWindow):
         self.seed_spinbox.setRange(0, 9999)
         self.seed_spinbox.setValue(42)
 
+        self.recordings_limit_spinbox = QSpinBox()
+        self.recordings_limit_spinbox.setRange(1, 100000)
+        self.recordings_limit_spinbox.setValue(
+            MINIMUM_RECORDINGS_PER_CLASS
+        )
+        self.recordings_limit_spinbox.setToolTip(
+            "Máximo de grabaciones que se procesan por clase durante el "
+            "entrenamiento y mínimo requerido por clase al verificar."
+        )
+
+        self.use_window_size_checkbox = QCheckBox(
+            "Usar tamaño de ventana fijo"
+        )
+        self.use_window_size_checkbox.setChecked(training_config.USE_WIN_SIZE)
+        self.window_size_spinbox = QSpinBox()
+        self.window_size_spinbox.setRange(1, 100000)
+        self.window_size_spinbox.setValue(training_config.WINDOW_SIZE)
+        self.window_overlap_spinbox = QDoubleSpinBox()
+        self.window_overlap_spinbox.setDecimals(2)
+        self.window_overlap_spinbox.setRange(0.0, 0.99)
+        self.window_overlap_spinbox.setSingleStep(0.01)
+        self.window_overlap_spinbox.setValue(
+            training_config.WINDOW_OVERLAP
+        )
+        self.use_window_size_checkbox.toggled.connect(
+            self.window_size_spinbox.setEnabled
+        )
+        self.use_window_size_checkbox.toggled.connect(
+            self.window_overlap_spinbox.setEnabled
+        )
+        self.window_size_spinbox.setEnabled(
+            self.use_window_size_checkbox.isChecked()
+        )
+        self.window_overlap_spinbox.setEnabled(
+            self.use_window_size_checkbox.isChecked()
+        )
+
         signal_layout.addWidget(self.use_p300_window_checkbox, 0, 0, 1, 2)
         signal_layout.addWidget(
             self.apply_baseline_correction_checkbox, 1, 0, 1, 2
@@ -484,6 +526,15 @@ class TrainWindow(QMainWindow):
         signal_layout.addWidget(self.fs_spinbox, 2, 1)
         signal_layout.addWidget(QLabel("Semilla (Seed):"), 3, 0)
         signal_layout.addWidget(self.seed_spinbox, 3, 1)
+        signal_layout.addWidget(
+            QLabel("Máximo/mínimo de grabaciones por clase:"), 4, 0
+        )
+        signal_layout.addWidget(self.recordings_limit_spinbox, 4, 1)
+        signal_layout.addWidget(self.use_window_size_checkbox, 5, 0, 1, 2)
+        signal_layout.addWidget(QLabel("Tamaño de ventana (muestras):"), 6, 0)
+        signal_layout.addWidget(self.window_size_spinbox, 6, 1)
+        signal_layout.addWidget(QLabel("Solapamiento de ventana:"), 7, 0)
+        signal_layout.addWidget(self.window_overlap_spinbox, 7, 1)
         left_layout.addWidget(signal_group)
 
         command_group = QGroupBox("Tipos de Comando")
@@ -645,6 +696,10 @@ class TrainWindow(QMainWindow):
             "use_p300window": self.getUseP300Window(),
             "apply_baseline_correction": self.getApplyBaselineCorrection(),
             "seed": self.getSelectedSeed(),
+            "max_recordings_per_class": self.recordings_limit_spinbox.value(),
+            "use_win_size": self.use_window_size_checkbox.isChecked(),
+            "window_size": self.window_size_spinbox.value(),
+            "window_overlap": self.window_overlap_spinbox.value(),
         }
         self.button_start_training.setEnabled(False)
         self.button_check_dataset.setEnabled(False)
@@ -678,7 +733,10 @@ class TrainWindow(QMainWindow):
             "Preparando y verificando las grabaciones..."
         )
         self.dataset_preparation_thread = DatasetPreparationThread(
-            user, project_root, self
+            user,
+            project_root,
+            self.recordings_limit_spinbox.value(),
+            self,
         )
         self.dataset_preparation_thread.stage_changed.connect(
             self.training_status_label.setText
@@ -787,7 +845,7 @@ class TrainWindow(QMainWindow):
 
     def _on_dataset_preparation_completed(self, result):
         user = result["usuario"]
-        minimum = MINIMUM_RECORDINGS_PER_CLASS
+        minimum = result["minimo_requerido"]
         total_missing = result["total_faltantes"]
         if total_missing:
             details = "\n".join(

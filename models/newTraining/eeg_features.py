@@ -153,7 +153,7 @@ class EEGFeatureExtractor:
                     for stat in ('delta_rel', 'theta_rel', 'alpha_rel', 'beta_rel', 'gamma_rel'):
                         window_features[f'{cname}_{stat}'] = 0.0
                 
-                # --- Wavelet DWT (db4) ---
+                                # --- Wavelet DWT (db4) ---
                 try:
                     level = pywt.dwt_max_level(len(channel_data), 'db4')
                     
@@ -166,37 +166,63 @@ class EEGFeatureExtractor:
                     window_features[f'{cname}_wA4_rel'] = (energies[0] / total_w_energy)
                     
                     # Estadísticas con la Wavelet de Aproximación (Nivel efectivo real)
-                    print(len(coeffs[0]), len(channel_data))
                     wA_approx = np.asarray(coeffs[0])
                     window_features[f'{cname}_wA4_std'] = float(np.std(wA_approx))
                     window_features[f'{cname}_wA4_mean'] = float(np.mean(wA_approx))
                     window_features[f'{cname}_wA4_var'] = float(np.var(wA_approx))
                     window_features[f'{cname}_wA4_rms'] = float(np.sqrt(np.mean(wA_approx**2)))
-                    window_features[f'{cname}_wA4_skewness'] = float(stats.skew(wA_approx))
-                    window_features[f'{cname}_wA4_kurtosis'] = float(stats.kurtosis(wA_approx))
                     
-                    # Rellenamos de forma dinámica los detalles (wD1 a wD5)
-                    # Si lvl supera el nivel calculado (ej. nivel 5), se guardará automáticamente como 0.0
+                    # Protección contra NaN para skew y kurtosis en wA4
+                    sk_a = stats.skew(wA_approx)
+                    window_features[f'{cname}_wA4_skewness'] = float(sk_a) if not np.isnan(sk_a) else 0.0
+                    kt_a = stats.kurtosis(wA_approx)
+                    window_features[f'{cname}_wA4_kurtosis'] = float(kt_a) if not np.isnan(kt_a) else 0.0
+                    
+                    # Rellenamos de forma dinámica los detalles (wD1 a wD5) con todas sus estadísticas
                     for lvl in range(1, 6):
                         if lvl <= level:
                             idx = level - lvl + 1
+                            coef_actual = np.asarray(coeffs[idx])
+                            
+                            # Energía y energía relativa
                             e = energies[idx]
                             rel = e / total_w_energy
+                            
+                            # Estadísticas por nivel de detalle
+                            std_d = float(np.std(coef_actual))
+                            mean_d = float(np.mean(coef_actual))
+                            var_d = float(np.var(coef_actual))
+                            rms_d = float(np.sqrt(np.mean(coef_actual**2)))
+                            
+                            # Protección contra NaN para skew y kurtosis en detalles
+                            sk_d = stats.skew(coef_actual)
+                            sk_d = float(sk_d) if not np.isnan(sk_d) else 0.0
+                            kt_d = stats.kurtosis(coef_actual)
+                            kt_d = float(kt_d) if not np.isnan(kt_d) else 0.0
                         else:
-                            e = 0.0
-                            rel = 0.0
+                            # Si el nivel calculado es menor, rellenamos con 0.0 para mantener la estructura tabular
+                            e, rel, std_d, mean_d, var_d, rms_d, sk_d, kt_d = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+                        
+                        # Guardado dinámico en el diccionario
                         window_features[f'{cname}_wD{lvl}_energy'] = e
                         window_features[f'{cname}_wD{lvl}_rel'] = rel
+                        window_features[f'{cname}_wD{lvl}_std'] = std_d
+                        window_features[f'{cname}_wD{lvl}_mean'] = mean_d
+                        window_features[f'{cname}_wD{lvl}_var'] = var_d
+                        window_features[f'{cname}_wD{lvl}_rms'] = rms_d
+                        window_features[f'{cname}_wD{lvl}_skewness'] = sk_d
+                        window_features[f'{cname}_wD{lvl}_kurtosis'] = kt_d
                         
                 except Exception as e:
                     print(f"[ERROR] Falló extracción Wavelet en canal {cname}: {e}")
-                    for lvl in range(1, 6):
-                        window_features[f'{cname}_wD{lvl}_energy'] = 0.0
-                        window_features[f'{cname}_wD{lvl}_rel'] = 0.0
-                    
+                    # Inicialización limpia en caso de error para evitar inconsistencias en el dataframe final
                     for stat in ('wA4_energy', 'wA4_rel', 'wA4_std', 'wA4_mean', 'wA4_var', 'wA4_rms', 'wA4_skewness', 'wA4_kurtosis'):
                         window_features[f'{cname}_{stat}'] = 0.0
                         
+                    for lvl in range(1, 6):
+                        for stat in ('energy', 'rel', 'std', 'mean', 'var', 'rms', 'skewness', 'kurtosis'):
+                            window_features[f'{cname}_wD{lvl}_{stat}'] = 0.0
+       
 
                 # --- Welch PSD: Optimizado para Ventanas de 1.5s (192 muestras) ---
                 try:
@@ -371,10 +397,16 @@ def get_feature_sets(all_cols):
     Agrupa las columnas de caracteristicas en subconjuntos tematicos
     (estadisticas, frecuencia absoluta/relativa, wavelets, etc.)
     """
-    # Actualiza esta línea específica en tu script de entrenamiento jerárquico:
-    wA_keys = ["wA4", "wA4_std", "wA4_rms", "wA4_skewness", "wA4_kurtosis", "wA4_energy", "wA4_rel"]
-    wD_keys = ["wD1", "wD2", "wD3", "wD4", "wD5"] 
+    # --- Configuración de llaves para el entrenamiento jerárquico ---
+    wA_keys = ["wA4_energy", "wA4_rel", "wA4_std", "wA4_mean", "wA4_var", "wA4_rms", "wA4_skewness", "wA4_kurtosis"]
+    
+    # Genera dinámicamente: wD1_energy, wD1_rel, wD1_std... hasta wD5_kurtosis
+    wD_stats = ["energy", "rel", "std", "mean", "var", "rms", "skewness", "kurtosis"]
+    wD_keys = [f"wD{lvl}_{stat}" for lvl in range(1, 6) for stat in wD_stats]
+    
+    # Lista completa combinada
     wav_keys = wA_keys + wD_keys
+
 
 
     sets = {

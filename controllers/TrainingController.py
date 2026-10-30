@@ -21,12 +21,13 @@ class controllerTraining():
                     commandTypes=["Letters","Numbers","Controls"],
                     channels=None,fs=None,use_p300window=False,apply_baseline_correction=True,
                     seed=42,max_recordings_per_class=None,use_win_size=None,
-                    window_size=None,window_overlap=None):
+                    window_size=None,window_overlap=None,progress_callback=None):
         if not os.path.exists(dataPath):
-            print("no existe la ruta")
-            return
+            raise FileNotFoundError(f"No existe la ruta de datos: {dataPath}")
         print(modelType)
         if modelType== "mamagievo":
+            if progress_callback:
+                progress_callback("Entrenando modelos LDA...")
             print("lda")
             self.pipeline_lda = PipelineCompletoLDA(base_output_dir="resultsALL/")
             self.pipeline_lda.separar_archivos_csv(usuario=user)
@@ -42,6 +43,8 @@ class controllerTraining():
             
             print("LDA")
         if modelType == "lda":
+            if progress_callback:
+                progress_callback("Preparando las características EEG...")
             print("empezando a entrenar el eñ modelo con lo nuevo")
             print(f"canaless {channels} fs {fs} use_p300window {use_p300window} apply_baseline_correction {apply_baseline_correction}, output_dir {output_dir},user {user}, dataPath {dataPath}, commandTypes {commandTypes}")
             print("tiposde comando",commandTypes)
@@ -64,6 +67,8 @@ class controllerTraining():
             print(f"\nDataset guardado en: {path_features_csv}")
             print(f"Shape: {dataset.shape}")
             print(f"Clases (labels) encontradas: {sorted(dataset['label'].unique())}")
+            if progress_callback:
+                progress_callback("Dataset listo. Iniciando evaluación de modelos...")
             train_optimized_hierarchical(output_dir=output_dir,channels = channels,fs=fs,
                                          use_p300window=use_p300window,
                                          apply_baseline_correction=apply_baseline_correction,
@@ -71,7 +76,8 @@ class controllerTraining():
                                          window_size=window_size,
                                          window_overlap=window_overlap,
                                          max_recordings_per_class=max_recordings_per_class,
-                                         verbose=True,semilla=seed)
+                                         verbose=True,semilla=seed,
+                                         progress_callback=progress_callback)
 
 
         #df = self.create_df(dataPath)

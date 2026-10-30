@@ -61,6 +61,7 @@ MINIMUM_RECORDINGS_PER_CLASS = 30
 class TrainingThread(QThread):
     completed = pyqtSignal()
     failed = pyqtSignal(str)
+    progress = pyqtSignal(str)
 
     def __init__(self, training_args, parent=None):
         super().__init__(parent)
@@ -68,7 +69,24 @@ class TrainingThread(QThread):
 
     def run(self):
         try:
-            controllerTraining().train_model(**self.training_args)
+            args = self.training_args
+            controllerTraining().train_model(
+                user=args["user"],
+                dataPath=args["dataPath"],
+                modelType=args["modelType"],
+                output_dir=args["output_dir"],
+                commandTypes=args["commandTypes"],
+                channels=args["channels"],
+                fs=args["fs"],
+                use_p300window=args["use_p300window"],
+                apply_baseline_correction=args["apply_baseline_correction"],
+                seed=args["seed"],
+                max_recordings_per_class=args["max_recordings_per_class"],
+                use_win_size=args["use_win_size"],
+                window_size=args["window_size"],
+                window_overlap=args["window_overlap"],
+                progress_callback=self.progress.emit,
+            )
         except Exception as error:
             error_traceback = traceback.format_exc()
             print(error_traceback, file=sys.stderr)
@@ -706,6 +724,7 @@ class TrainWindow(QMainWindow):
         self.button_visualize_lda.setEnabled(False)
         self.training_status_label.setText("Entrenamiento en curso...")
         self.training_thread = TrainingThread(training_args, self)
+        self.training_thread.progress.connect(self.training_status_label.setText)
         self.training_thread.completed.connect(self._on_training_completed)
         self.training_thread.failed.connect(self._on_training_failed)
         self.training_thread.finished.connect(self._on_training_thread_finished)

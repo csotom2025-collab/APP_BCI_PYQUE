@@ -16,6 +16,7 @@ Protocolo asumido:
 """
 
 from datetime import datetime
+from typing import Callable, Optional
 from sklearn.ensemble import RandomForestClassifier
 import os
 import json
@@ -43,6 +44,14 @@ from xgboost import XGBClassifier
 from models.newTraining.lda_utils import SafeLDA, ZeroThresholdClassifier
 import models.newTraining.config as config
 from models.newTraining.eeg_features import get_feature_sets, log_transform_power_columns
+
+
+CV_N_JOBS = min(2, max(1, (os.cpu_count() or 2) - 1))
+
+
+def report_progress(progress_callback, message):
+    if progress_callback is not None:
+        progress_callback(message)
 
 
 def normalize_string_columns(df, columns):
@@ -232,7 +241,7 @@ def evaluate_combination(df_subset, feature_cols, group_name, clf_name, clf,
     pipe = build_pipeline_hierarchical(clf, n_components, X.shape[1], k_best)
     
     try:
-        y_pred_oof = cross_val_predict(pipe, X, y, cv=skf, n_jobs=-1)
+        y_pred_oof = cross_val_predict(pipe, X, y, cv=skf, n_jobs=CV_N_JOBS)
 
         fold_acc = []
         fold_f1 = []
@@ -256,7 +265,9 @@ def evaluate_combination(df_subset, feature_cols, group_name, clf_name, clf,
 # ===========================================================================================
 # PASO 4: EVALUACIÓN EXHAUSTIVA (todos los classificadores × feature_sets × grupos)
 # ===========================================================================================
-def evaluate_all_hierarchical(df, verbose=True, seed=42):
+def evaluate_all_hierarchical(
+    df, verbose=True, seed=42, progress_callback=None
+):
     """
     Evalúa TODAS las combinaciones:
     - 6 clasificadores
@@ -297,6 +308,10 @@ def evaluate_all_hierarchical(df, verbose=True, seed=42):
         if verbose:
             print(f"\n{set_name} ({len(cols)} features):")
         for clf_name, clf in color_classifiers.items():
+            report_progress(
+                progress_callback,
+                f"Evaluando color: {set_name} / {clf_name}...",
+            )
             acc_m, acc_s, f1_m, f1_s, y_pred, le, y_true = evaluate_combination(
                 df_for_color, cols, "color", clf_name, clf,
                 n_components=1, k_best=250, cv_splits=5, verbose=verbose
@@ -361,6 +376,10 @@ def evaluate_all_hierarchical(df, verbose=True, seed=42):
 
         for set_name, cols in feature_sets.items():
             for clf_name, clf in super_classifiers.items():
+                report_progress(
+                    progress_callback,
+                    f"Evaluando supergrupo {color}: {set_name} / {clf_name}...",
+                )
                 acc_m, acc_s, f1_m, f1_s, y_pred, le, y_true = evaluate_combination(
                     df_super, cols, f"super-{color}", clf_name, clf,
                     n_components=2, k_best=250, cv_splits=5, verbose=verbose
@@ -438,6 +457,10 @@ def evaluate_all_hierarchical(df, verbose=True, seed=42):
 
             for set_name, cols in feature_sets.items():
                 for clf_name, clf in fine_classifiers.items():
+                    report_progress(
+                        progress_callback,
+                        f"Evaluando {color}/{grupo}: {set_name} / {clf_name}...",
+                    )
                     acc_m, acc_s, f1_m, f1_s, y_pred, le, y_true = evaluate_combination(
                         df_fine, cols, f"{color}-{grupo}", clf_name, clf,
                         n_components=n_components, k_best=250,
@@ -493,7 +516,7 @@ def evaluate_all_hierarchical(df, verbose=True, seed=42):
 # ===========================================================================================
 # PASO 5: ENTRENAR MODELOS GANADORES Y TOP 5 POR GRUPO
 # ===========================================================================================
-def train_final_models(df, best_per_group):
+def train_final_models(df, best_per_group, progress_callback=None):
     """Entrena los modelos de color y los modelos super/fino separados por color."""
 
     validate_color_labels(df)
@@ -501,7 +524,7 @@ def train_final_models(df, best_per_group):
     df_color_stage = df_color.copy()
     df_color_stage["label"] = df_color_stage["color"]
 
-    def fit_bundle(df_subset, model_info):
+    def fit_bundle(df_subset, model_info, model_name):
         if "fixed_label" in model_info:
             return {
                 "fixed_label": model_info["fixed_label"],
@@ -515,6 +538,7 @@ def train_final_models(df, best_per_group):
         y = le.fit_transform(df_subset["label"].astype(str))
         X = df_subset[model_info["cols"]].to_numpy()
         X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+        report_progress(progress_callback, f"Ajustando modelo final: {model_name}...")
         pipeline = build_pipeline_hierarchical(
             model_info["clf"], model_info["n_components"], X.shape[1], k_best=250
         )
@@ -535,7 +559,9 @@ def train_final_models(df, best_per_group):
     print("ENTRENANDO MODELO FINAL: COLOR")
     print("="*100)
     final_bundles = {
-        "color": fit_bundle(df_color_stage, best_per_group["color"]),
+        "color": fit_bundle(
+            df_color_stage, best_per_group["color"], "color"
+        ),
         "por_color": {},
     }
 
@@ -547,7 +573,8 @@ def train_final_models(df, best_per_group):
         df_super["label"] = df_super["tpComando"]
         hierarchy = {
             "super_clase": fit_bundle(
-                df_super, best_per_group[f"super_clase_{color}"]
+                df_super, best_per_group[f"super_clase_{color}"],
+                f"supergrupo {color}",
             ),
             "por_grupo": {},
         }
@@ -557,7 +584,8 @@ def train_final_models(df, best_per_group):
                 df_color_subset["tpComando"] == grupo
             ].reset_index(drop=True)
             fine_bundle = fit_bundle(
-                df_fine, best_per_group[f"{color}_{grupo}"]
+                df_fine, best_per_group[f"{color}_{grupo}"],
+                f"{color}/{grupo}",
             )
             hierarchy["por_grupo"][grupo] = fine_bundle
             if "fixed_label" in fine_bundle:
@@ -572,7 +600,9 @@ def train_final_models(df, best_per_group):
     return final_bundles
 
 
-def train_top_models_by_category(df, results_df, seed=42):
+def train_top_models_by_category(
+    df, results_df, seed=42, progress_callback=None
+):
     """Entrena los candidatos solicitados para cada ranking y categoría."""
     meta_cols = ["usuario", "tpComando", "letra", "trial", "label", "color"]
     feature_cols = [col for col in df.columns if col not in meta_cols]
@@ -664,6 +694,10 @@ def train_top_models_by_category(df, results_df, seed=42):
 
         top_models[category] = []
         for rank, (_, row) in enumerate(category_results.head(top_n).iterrows(), 1):
+            report_progress(
+                progress_callback,
+                f"Entrenando candidatos top: {category}, modelo {rank}/{top_n}...",
+            )
             nivel = row["nivel"]
             color = row.get("color")
             if pd.isna(color):
@@ -752,6 +786,10 @@ def train_top_models_by_category(df, results_df, seed=42):
                     model_n_components = max(
                         1, min(len(label_encoder.classes_) - 1, 50)
                     )
+                report_progress(
+                    progress_callback,
+                    f"Validando candidato top: {category}, modelo {rank}/{top_n}...",
+                )
                 cv_result = evaluate_combination(
                     eval_df,
                     cols,
@@ -836,7 +874,9 @@ def _to_inference_bundle(model):
     }
 
 
-def save_top_model_artifacts(usuario_models_dir, top_models_by_category):
+def save_top_model_artifacts(
+    usuario_models_dir, top_models_by_category, progress_callback=None
+):
     """Guarda cada modelo completo y cada paso ajustado del pipeline por separado."""
     artifacts_dir = os.path.join(usuario_models_dir, "top_modelos")
     os.makedirs(artifacts_dir, exist_ok=True)
@@ -848,6 +888,11 @@ def save_top_model_artifacts(usuario_models_dir, top_models_by_category):
         os.makedirs(category_dir, exist_ok=True)
 
         for model in models:
+            report_progress(
+                progress_callback,
+                f"Guardando artefactos: {category}, modelo "
+                f"{model['rank']}/{len(models)}...",
+            )
             color = model["color"] or "todos"
             parts = (
                 f"top_{model['rank']:02d}",
@@ -933,6 +978,7 @@ def train_optimized_hierarchical(
     max_recordings_per_class=None,
     verbose=True,
     semilla=None,
+    progress_callback: Optional[Callable[[str], None]] = None,
 ):
     output_dir = output_dir or config.OUTPUT_DIR
     FEATURES_CSV = os.path.join(output_dir, "features_dataset.csv")
@@ -966,6 +1012,7 @@ def train_optimized_hierarchical(
     
     # Cargar y preparar datos
     print("\n1) Cargando dataset...")
+    report_progress(progress_callback, "Cargando el dataset de características...")
     df = pd.read_csv(FEATURES_CSV)
     df = normalize_string_columns(df, ["usuario", "tpComando", "letra", "label", "color"])
     validate_color_labels(df)
@@ -990,10 +1037,19 @@ def train_optimized_hierarchical(
         
         # Paso 1-4: Evaluación exhaustiva (solo para este usuario)
         print(f"\n2) Evaluando TODAS las combinaciones para {usuario}...")
+        report_progress(
+            progress_callback,
+            f"Evaluando combinaciones de modelos para {usuario}...",
+        )
         print("   Esto puede tomar 5-15 minutos por usuario...")
         ini=datetime.now()  
         print("Incio de evaluacion exhaustiva",ini)
-        results_df, best_per_group = evaluate_all_hierarchical(df_usuario, verbose=False,seed = semilla)
+        results_df, best_per_group = evaluate_all_hierarchical(
+            df_usuario,
+            verbose=False,
+            seed=semilla,
+            progress_callback=progress_callback,
+        )
         fin=datetime.now()
         print("Fin de evaluacion exhaustiva",fin)
         print("Tiempo de evaluacion exhaustiva",fin-ini)
@@ -1004,6 +1060,10 @@ def train_optimized_hierarchical(
         out_csv = os.path.join(usuario_dir, "evaluacion_jerarquica_completa.csv")
         results_df.to_csv(out_csv, index=False)
         print(f"   ✓ Tabla guardada en: {out_csv}")
+        report_progress(
+            progress_callback,
+            "Evaluación completa. Guardando matrices de confusión...",
+        )
 
         # Guardar matrices de confusión del mejor modelo por nivel
         usuario_figures_dir = os.path.join(FIGURES_DIR, usuario)
@@ -1021,9 +1081,18 @@ def train_optimized_hierarchical(
         
         # Paso 5: Entrenar modelos finales para este usuario
         print(f"\n3) Entrenando modelos finales por color para {usuario}...")
-        final_bundles = train_final_models(df_usuario, best_per_group)
+        report_progress(
+            progress_callback,
+            f"Ajustando modelos finales para {usuario}...",
+        )
+        final_bundles = train_final_models(
+            df_usuario, best_per_group, progress_callback=progress_callback
+        )
         top_models_by_category = train_top_models_by_category(
-            df_usuario, results_df, seed=semilla
+            df_usuario,
+            results_df,
+            seed=semilla,
+            progress_callback=progress_callback,
         )
         
         # Guardar bundle final POR USUARIO
@@ -1053,6 +1122,7 @@ def train_optimized_hierarchical(
         }
         
         out_bundle = os.path.join(usuario_models_dir, "hierarchical_bundle_optimizado.joblib")
+        report_progress(progress_callback, "Guardando el modelo jerárquico...")
         joblib.dump(hierarchy_bundle, out_bundle)
         print(f"   ✓ Bundle guardado en: {out_bundle}")
 
@@ -1074,7 +1144,9 @@ def train_optimized_hierarchical(
             print(f"   ✓ Cascada completa top {rank} guardada: {cascade_path}")
 
         top_models_dir = save_top_model_artifacts(
-            usuario_models_dir, top_models_by_category
+            usuario_models_dir,
+            top_models_by_category,
+            progress_callback=progress_callback,
         )
         print(f"   ✓ 45 modelos individuales y sus capas guardados en: {top_models_dir}")
         for category, models in top_models_by_category.items():
@@ -1109,6 +1181,7 @@ def train_optimized_hierarchical(
     print("\n" + "="*100)
     print("ENTRENAMIENTO COMPLETADO PARA TODOS LOS USUARIOS")
     print("="*100)
+    report_progress(progress_callback, "Entrenamiento completado.")
     print(f"\nEstructura generada:")
     for usuario in usuarios:
         print(f"\n{usuario}:")

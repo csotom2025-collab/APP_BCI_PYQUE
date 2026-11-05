@@ -32,18 +32,19 @@ modelo_path = os.path.join(
     "trainingOutputs",
     "models",
     "UserAlexJ",
-    #"top_cascadas",
-    "top_modelos",
-    "color"
-    "top_01_color_todos_Green_Blue_Metricas_ERP_RF.joblib",
+    "top_cascadas",
+    #"top_modelos",
+    #"color"
+    #hierarchical_bundle_optimizado_top_1
+    "hierarchical_bundle_optimizado_top_1.joblib",
 )
-#letters  = [¨A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z","Ñ"]
+#Letters  = [¨A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z","Ñ"]
 #Numbers  = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
 #Controls = ["⟵", "↩", "───"]
 #recordings = ["UNKNOWN"]
-comands=["UNKNOWN"]
-tip="recordings"
-file=[i for  i in range(0,10)]
+comands=["H","O","N","D"]
+tip="Letters"
+file=[i for  i in range(30,50)]
 greenComd = ["A", "C", "F", "R", "V", "I", "M", "J", "L", "Q", "U", "B", "X",
              "4", "0", "2", "8", "W", "6", "⟵"]
 blueComd = ["S", "G", "E", "T", "Z", "N", "Y", "O", "P", "Ñ", "D", "H", "1",

@@ -56,12 +56,20 @@ class SpellerConfigurationWindow(QWidget):
         self.stimulus_mode.addItem("Teclado completo (una vez)", "all")
         self.layout.addWidget(QLabel("Estímulo:"), 4, 0)
         self.layout.addWidget(self.stimulus_mode, 4, 1)
+        self.stimulus_category = QComboBox()
+        self.stimulus_category.addItem("Letras", "letters")
+        self.stimulus_category.addItem("Números", "numbers")
+        self.stimulus_category.addItem("Controles", "controls")
+        self.stimulus_category.addItem("Todo el teclado", "all")
+        self.stimulus_category.setCurrentIndex(3)
+        self.layout.addWidget(QLabel("Teclas a iluminar:"), 5, 0)
+        self.layout.addWidget(self.stimulus_category, 5, 1)
         # self.save_button = QPushButton("Guardar Configuración")
         # self.save_button.clicked.connect(self.save_configuration)
         #self.layout.addWidget(self.save_button, 3, 0, 1, 2)
         self.start_capture_trial_button = QPushButton("Iniciar CapturaOnlinetiral")
         self.start_capture_trial_button.clicked.connect(self.start_capture_trial)
-        self.layout.addWidget(self.start_capture_trial_button,5,0,1,2)
+        self.layout.addWidget(self.start_capture_trial_button,6,0,1,2)
         self.hide()
     def save_configuration(self):
         self.user = self.user_list.currentText()
@@ -253,10 +261,14 @@ class SpellerConfigurationWindow(QWidget):
         if self.keyboard_window:
             self.keyboard_window.add_character(caracter_predicho)
     def start_chess_flashes(self):
-        self.keyboard_window.start_paradigm(times=2)
+        self.keyboard_window.start_paradigm(
+            times=1, category=self.stimulus_category.currentData()
+        )
 
     def start_full_keyboard_flash(self):
-        self.keyboard_window.flash_all_buttons()
+        self.keyboard_window.flash_buttons_by_category(
+            self.stimulus_category.currentData()
+        )
 
 
     def closeEvent(self, event: QCloseEvent):

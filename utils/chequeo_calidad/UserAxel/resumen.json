@@ -1,0 +1,24 @@
+{
+  "version": "2.3.0",
+  "fecha_utc": "2026-11-04T20:16:45.228735+00:00",
+  "captures": "C:\\Users\\usuario\\Desktop\\APP_BCI_PYQUE\\captures",
+  "salida": "C:\\Users\\usuario\\Desktop\\APP_BCI_PYQUE\\utils\\chequeo_calidad\\UserAxel",
+  "usuario": "UserAxel",
+  "archivos": 1212,
+  "A": 540,
+  "B": 468,
+  "C": 204,
+  "codigos_C": {
+    "REFERENCIA_CONTAMINADA": 103,
+    "REFERENCIA_INESTABLE": 91,
+    "ESTRUCTURA": 15,
+    "ANOMALIA_EXTENSA": 36,
+    "REFERENCIA_INSUFICIENTE": 6,
+    "CANAL_INVALIDO": 1
+  },
+  "segmentos_corregidos": 923,
+  "muestras_modificadas": 161830,
+  "archivos_con_amplificacion": 96,
+  "archivos_con_canales_no_utilizables": 325,
+  "rescatados_A_B_con_canales_no_utilizables": 243
+}

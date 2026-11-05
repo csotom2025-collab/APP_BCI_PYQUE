@@ -1,156 +1,594 @@
-2026-10-27 13:16:44 [INFO]: =======================================================================================
-2026-10-27 13:16:45 [INFO]: ------------------>cvs name captures/UserAlexJ/recordings/UserAlexJ_UNKNOWN_0.csv<----------------
-2026-10-27 13:16:45 [INFO]: Color real Desconocido
-2026-10-27 13:16:45 [INFO]: Color predicho Green (confianza 60.8%)
-2026-10-27 13:16:45 [INFO]: Probabilidades de color {'Green': np.float64(0.6084923933446804), 'Blue': np.float64(0.3915076066553196)}
-2026-10-27 13:16:45 [INFO]: Ventana 1: color predicho Green (confianza 54.9%); probabilidades {'Green': np.float64(0.5488044130856798), 'Blue': np.float64(0.45119558691432027)}
-2026-10-27 13:16:45 [INFO]: {'ventana': 1, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'U', 'confianza_grupo': 0.9385787739858695, 'confianza_comando': 0.18683942358219247}
-2026-10-27 13:16:45 [INFO]: Ventana 2: color predicho Green (confianza 53.2%); probabilidades {'Green': np.float64(0.5315074607178889), 'Blue': np.float64(0.4684925392821111)}
-2026-10-27 13:16:45 [INFO]: {'ventana': 2, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'U', 'confianza_grupo': 0.932922450514893, 'confianza_comando': 0.18683942358219247}
-2026-10-27 13:16:45 [INFO]: Ventana 3: color predicho Green (confianza 63.0%); probabilidades {'Green': np.float64(0.6298784240568104), 'Blue': np.float64(0.3701215759431895)}
-2026-10-27 13:16:45 [INFO]: {'ventana': 3, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'U', 'confianza_grupo': 0.8542209185362537, 'confianza_comando': 0.18683942358219247}
-2026-10-27 13:16:45 [INFO]: Ventana 4: color predicho Green (confianza 63.8%); probabilidades {'Green': np.float64(0.6377444050568194), 'Blue': np.float64(0.36225559494318066)}
-2026-10-27 13:16:45 [INFO]: {'ventana': 4, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'U', 'confianza_grupo': 0.8418880870031651, 'confianza_comando': 0.18683942358219247}
-2026-10-27 13:16:45 [INFO]: Comando predicho U
-2026-10-27 13:16:45 [INFO]: Grupo predicho Letters
-2026-10-27 13:16:45 [INFO]: ----------------------------------------------------------------
-2026-10-27 13:16:45 [INFO]: ------------------>cvs name captures/UserAlexJ/recordings/UserAlexJ_UNKNOWN_1.csv<----------------
-2026-10-27 13:16:45 [INFO]: Color real Desconocido
-2026-10-27 13:16:45 [INFO]: Color predicho Blue (confianza 72.2%)
-2026-10-27 13:16:45 [INFO]: Probabilidades de color {'Blue': np.float64(0.7221274472186838), 'Green': np.float64(0.27787255278131623)}
-2026-10-27 13:16:45 [INFO]: Ventana 1: color predicho Blue (confianza 65.7%); probabilidades {'Blue': np.float64(0.6568468347105099), 'Green': np.float64(0.3431531652894902)}
-2026-10-27 13:16:45 [INFO]: {'ventana': 1, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'K', 'confianza_grupo': 0.9225566066026883, 'confianza_comando': 0.16492242109532626}
-2026-10-27 13:16:45 [INFO]: Ventana 2: color predicho Blue (confianza 70.0%); probabilidades {'Blue': np.float64(0.7001431507184617), 'Green': np.float64(0.2998568492815384)}
-2026-10-27 13:16:45 [INFO]: {'ventana': 2, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'K', 'confianza_grupo': 0.9353460825548183, 'confianza_comando': 0.16492242109532626}
-2026-10-27 13:16:45 [INFO]: Ventana 3: color predicho Blue (confianza 71.0%); probabilidades {'Blue': np.float64(0.7098084907054999), 'Green': np.float64(0.2901915092945001)}
-2026-10-27 13:16:45 [INFO]: {'ventana': 3, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'K', 'confianza_grupo': 0.9104441535059968, 'confianza_comando': 0.16492242109532626}
-2026-10-27 13:16:45 [INFO]: Ventana 4: color predicho Blue (confianza 65.8%); probabilidades {'Blue': np.float64(0.6582818289069227), 'Green': np.float64(0.3417181710930774)}
-2026-10-27 13:16:45 [INFO]: {'ventana': 4, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'K', 'confianza_grupo': 0.9165560416486287, 'confianza_comando': 0.16492242109532626}
-2026-10-27 13:16:45 [INFO]: Comando predicho Ñ
-2026-10-27 13:16:45 [INFO]: Grupo predicho Letters
-2026-10-27 13:16:45 [INFO]: ----------------------------------------------------------------
-2026-10-27 13:16:45 [INFO]: ------------------>cvs name captures/UserAlexJ/recordings/UserAlexJ_UNKNOWN_2.csv<----------------
-2026-10-27 13:16:45 [INFO]: Color real Desconocido
-2026-10-27 13:16:45 [INFO]: Color predicho Green (confianza 55.3%)
-2026-10-27 13:16:45 [INFO]: Probabilidades de color {'Green': np.float64(0.553090334764543), 'Blue': np.float64(0.44690966523545705)}
-2026-10-27 13:16:45 [INFO]: Ventana 1: color predicho Green (confianza 62.4%); probabilidades {'Green': np.float64(0.6243297266588705), 'Blue': np.float64(0.3756702733411293)}
-2026-10-27 13:16:45 [INFO]: {'ventana': 1, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'A', 'confianza_grupo': 0.8305557227809802, 'confianza_comando': 0.19262209811895045}
-2026-10-27 13:16:45 [INFO]: Ventana 2: color predicho Green (confianza 59.3%); probabilidades {'Green': np.float64(0.5933317792302389), 'Blue': np.float64(0.406668220769761)}
-2026-10-27 13:16:45 [INFO]: {'ventana': 2, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'A', 'confianza_grupo': 0.6777788159932739, 'confianza_comando': 0.19262209811895045}
-2026-10-27 13:16:45 [INFO]: Ventana 3: color predicho Blue (confianza 53.7%); probabilidades {'Blue': np.float64(0.5368073341419745), 'Green': np.float64(0.4631926658580257)}
-2026-10-27 13:16:45 [INFO]: {'ventana': 3, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'A', 'confianza_grupo': 0.8510435383101629, 'confianza_comando': 0.19262209811895045}
-2026-10-27 13:16:45 [INFO]: Ventana 4: color predicho Blue (confianza 51.5%); probabilidades {'Blue': np.float64(0.5149648313680647), 'Green': np.float64(0.4850351686319354)}
-2026-10-27 13:16:45 [INFO]: {'ventana': 4, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'A', 'confianza_grupo': 0.9205837664489203, 'confianza_comando': 0.19262209811895045}
-2026-10-27 13:16:45 [INFO]: Comando predicho V
-2026-10-27 13:16:45 [INFO]: Grupo predicho Letters
-2026-10-27 13:16:45 [INFO]: ----------------------------------------------------------------
-2026-10-27 13:16:46 [INFO]: ------------------>cvs name captures/UserAlexJ/recordings/UserAlexJ_UNKNOWN_3.csv<----------------
-2026-10-27 13:16:46 [INFO]: Color real Desconocido
-2026-10-27 13:16:46 [INFO]: Color predicho Green (confianza 55.1%)
-2026-10-27 13:16:46 [INFO]: Probabilidades de color {'Green': np.float64(0.5508456662028577), 'Blue': np.float64(0.4491543337971423)}
-2026-10-27 13:16:46 [INFO]: Ventana 1: color predicho Green (confianza 66.2%); probabilidades {'Green': np.float64(0.6615602597528045), 'Blue': np.float64(0.3384397402471953)}
-2026-10-27 13:16:46 [INFO]: {'ventana': 1, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'V', 'confianza_grupo': 0.8987735010891318, 'confianza_comando': 0.7134373615780863}
-2026-10-27 13:16:46 [INFO]: Ventana 2: color predicho Green (confianza 57.3%); probabilidades {'Green': np.float64(0.5731729320858961), 'Blue': np.float64(0.42682706791410374)}
-2026-10-27 13:16:46 [INFO]: {'ventana': 2, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'V', 'confianza_grupo': 0.8871384709458029, 'confianza_comando': 0.7134373615780863}
-2026-10-27 13:16:46 [INFO]: Ventana 3: color predicho Blue (confianza 60.4%); probabilidades {'Blue': np.float64(0.6037795615804373), 'Green': np.float64(0.39622043841956284)}
-2026-10-27 13:16:46 [INFO]: {'ventana': 3, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'V', 'confianza_grupo': 0.8606048088578482, 'confianza_comando': 0.7134373615780863}
-2026-10-27 13:16:46 [INFO]: Ventana 4: color predicho Green (confianza 52.4%); probabilidades {'Green': np.float64(0.5244997780887887), 'Blue': np.float64(0.4755002219112115)}
-2026-10-27 13:16:46 [INFO]: {'ventana': 4, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'V', 'confianza_grupo': 0.7346040642871751, 'confianza_comando': 0.7134373615780863}
-2026-10-27 13:16:46 [INFO]: Comando predicho V
-2026-10-27 13:16:46 [INFO]: Grupo predicho Letters
-2026-10-27 13:16:46 [INFO]: ----------------------------------------------------------------
-2026-10-27 13:16:46 [INFO]: ------------------>cvs name captures/UserAlexJ/recordings/UserAlexJ_UNKNOWN_4.csv<----------------
-2026-10-27 13:16:46 [INFO]: Color real Desconocido
-2026-10-27 13:16:46 [INFO]: Color predicho Blue (confianza 50.3%)
-2026-10-27 13:16:46 [INFO]: Probabilidades de color {'Blue': np.float64(0.5027958916364819), 'Green': np.float64(0.49720410836351814)}
-2026-10-27 13:16:46 [INFO]: Ventana 1: color predicho Blue (confianza 50.8%); probabilidades {'Blue': np.float64(0.5078650064249596), 'Green': np.float64(0.49213499357504037)}
-2026-10-27 13:16:46 [INFO]: {'ventana': 1, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'Y', 'confianza_grupo': 0.6049678617220839, 'confianza_comando': 0.5620068327602944}
-2026-10-27 13:16:46 [INFO]: Ventana 2: color predicho Blue (confianza 50.9%); probabilidades {'Blue': np.float64(0.5093285976435182), 'Green': np.float64(0.49067140235648193)}
-2026-10-27 13:16:46 [INFO]: {'ventana': 2, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'Y', 'confianza_grupo': 0.8884470170762705, 'confianza_comando': 0.5620068327602944}
-2026-10-27 13:16:46 [INFO]: Ventana 3: color predicho Blue (confianza 51.4%); probabilidades {'Blue': np.float64(0.514208324542584), 'Green': np.float64(0.485791675457416)}
-2026-10-27 13:16:46 [INFO]: {'ventana': 3, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'Y', 'confianza_grupo': 0.9085204803567716, 'confianza_comando': 0.5620068327602944}
-2026-10-27 13:16:46 [INFO]: Ventana 4: color predicho Green (confianza 51.9%); probabilidades {'Green': np.float64(0.5186282880315023), 'Blue': np.float64(0.48137171196849776)}
-2026-10-27 13:16:46 [INFO]: {'ventana': 4, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'Y', 'confianza_grupo': 0.9118638250381557, 'confianza_comando': 0.5620068327602944}
-2026-10-27 13:16:46 [INFO]: Comando predicho Y
-2026-10-27 13:16:46 [INFO]: Grupo predicho Letters
-2026-10-27 13:16:46 [INFO]: ----------------------------------------------------------------
-2026-10-27 13:16:46 [INFO]: ------------------>cvs name captures/UserAlexJ/recordings/UserAlexJ_UNKNOWN_5.csv<----------------
-2026-10-27 13:16:46 [INFO]: Color real Desconocido
-2026-10-27 13:16:46 [INFO]: Color predicho Blue (confianza 68.5%)
-2026-10-27 13:16:46 [INFO]: Probabilidades de color {'Blue': np.float64(0.6854245290307384), 'Green': np.float64(0.31457547096926164)}
-2026-10-27 13:16:46 [INFO]: Ventana 1: color predicho Blue (confianza 63.3%); probabilidades {'Blue': np.float64(0.6327824323276613), 'Green': np.float64(0.36721756767233865)}
-2026-10-27 13:16:46 [INFO]: {'ventana': 1, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'Y', 'confianza_grupo': 0.915344560653515, 'confianza_comando': 0.3252869104459489}
-2026-10-27 13:16:46 [INFO]: Ventana 2: color predicho Blue (confianza 71.6%); probabilidades {'Blue': np.float64(0.7160291203595756), 'Green': np.float64(0.28397087964042445)}
-2026-10-27 13:16:46 [INFO]: {'ventana': 2, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'Y', 'confianza_grupo': 0.9212780003340536, 'confianza_comando': 0.3252869104459489}
-2026-10-27 13:16:46 [INFO]: Ventana 3: color predicho Blue (confianza 58.7%); probabilidades {'Blue': np.float64(0.5872394240678176), 'Green': np.float64(0.4127605759321825)}
-2026-10-27 13:16:46 [INFO]: {'ventana': 3, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'Y', 'confianza_grupo': 0.9242874768704099, 'confianza_comando': 0.3252869104459489}
-2026-10-27 13:16:46 [INFO]: Ventana 4: color predicho Blue (confianza 66.0%); probabilidades {'Blue': np.float64(0.6603789792257114), 'Green': np.float64(0.33962102077428846)}
-2026-10-27 13:16:46 [INFO]: {'ventana': 4, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'Y', 'confianza_grupo': 0.9265860930732567, 'confianza_comando': 0.3252869104459489}
-2026-10-27 13:16:46 [INFO]: Comando predicho S
-2026-10-27 13:16:46 [INFO]: Grupo predicho Letters
-2026-10-27 13:16:46 [INFO]: ----------------------------------------------------------------
-2026-10-27 13:16:47 [INFO]: ------------------>cvs name captures/UserAlexJ/recordings/UserAlexJ_UNKNOWN_6.csv<----------------
-2026-10-27 13:16:47 [INFO]: Color real Desconocido
-2026-10-27 13:16:47 [INFO]: Color predicho Green (confianza 69.2%)
-2026-10-27 13:16:47 [INFO]: Probabilidades de color {'Green': np.float64(0.6924769534063019), 'Blue': np.float64(0.3075230465936981)}
-2026-10-27 13:16:47 [INFO]: Ventana 1: color predicho Green (confianza 74.2%); probabilidades {'Green': np.float64(0.7420906697278271), 'Blue': np.float64(0.25790933027217283)}
-2026-10-27 13:16:47 [INFO]: {'ventana': 1, 'color': 'Green', 'grupo_voto': 'Controls', 'grupo_final': 'Controls', 'comando': '\u27f5', 'confianza_grupo': 0.7480006538851223, 'confianza_comando': 1.0}
-2026-10-27 13:16:47 [INFO]: Ventana 2: color predicho Green (confianza 64.7%); probabilidades {'Green': np.float64(0.6467583283360713), 'Blue': np.float64(0.3532416716639288)}
-2026-10-27 13:16:47 [INFO]: {'ventana': 2, 'color': 'Green', 'grupo_voto': 'Controls', 'grupo_final': 'Controls', 'comando': '\u27f5', 'confianza_grupo': 0.7857054357423542, 'confianza_comando': 1.0}
-2026-10-27 13:16:47 [INFO]: Ventana 3: color predicho Green (confianza 63.7%); probabilidades {'Green': np.float64(0.6374920895972171), 'Blue': np.float64(0.3625079104027829)}
-2026-10-27 13:16:47 [INFO]: {'ventana': 3, 'color': 'Green', 'grupo_voto': 'Controls', 'grupo_final': 'Controls', 'comando': '\u27f5', 'confianza_grupo': 0.8737359980171623, 'confianza_comando': 1.0}
-2026-10-27 13:16:47 [INFO]: Ventana 4: color predicho Green (confianza 59.6%); probabilidades {'Green': np.float64(0.5959835404061274), 'Blue': np.float64(0.4040164595938724)}
-2026-10-27 13:16:47 [INFO]: {'ventana': 4, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Controls', 'comando': '\u27f5', 'confianza_grupo': 0.795967848214234, 'confianza_comando': 1.0}
-2026-10-27 13:16:47 [INFO]: Comando predicho \u27f5
-2026-10-27 13:16:47 [INFO]: Grupo predicho Controls
-2026-10-27 13:16:47 [INFO]: ----------------------------------------------------------------
-2026-10-27 13:16:47 [INFO]: ------------------>cvs name captures/UserAlexJ/recordings/UserAlexJ_UNKNOWN_7.csv<----------------
-2026-10-27 13:16:47 [INFO]: Color real Desconocido
-2026-10-27 13:16:47 [INFO]: Color predicho Green (confianza 54.2%)
-2026-10-27 13:16:47 [INFO]: Probabilidades de color {'Green': np.float64(0.5420083113032196), 'Blue': np.float64(0.4579916886967804)}
-2026-10-27 13:16:47 [INFO]: Ventana 1: color predicho Blue (confianza 68.2%); probabilidades {'Blue': np.float64(0.6819505027359254), 'Green': np.float64(0.31804949726407444)}
-2026-10-27 13:16:47 [INFO]: {'ventana': 1, 'color': 'Blue', 'grupo_voto': 'Controls', 'grupo_final': 'Numbers', 'comando': '4', 'confianza_grupo': 0.45585034451209616, 'confianza_comando': 0.9724062014765971}
-2026-10-27 13:16:47 [INFO]: Ventana 2: color predicho Green (confianza 58.7%); probabilidades {'Green': np.float64(0.5867308735955241), 'Blue': np.float64(0.4132691264044758)}
-2026-10-27 13:16:47 [INFO]: {'ventana': 2, 'color': 'Green', 'grupo_voto': 'Numbers', 'grupo_final': 'Numbers', 'comando': '4', 'confianza_grupo': 0.440518520964764, 'confianza_comando': 0.9083389550108084}
-2026-10-27 13:16:47 [INFO]: Ventana 3: color predicho Green (confianza 62.8%); probabilidades {'Green': np.float64(0.6277452909025133), 'Blue': np.float64(0.37225470909748676)}
-2026-10-27 13:16:47 [INFO]: {'ventana': 3, 'color': 'Green', 'grupo_voto': 'Numbers', 'grupo_final': 'Numbers', 'comando': '4', 'confianza_grupo': 0.5188600227806807, 'confianza_comando': 0.9667395475751921}
-2026-10-27 13:16:47 [INFO]: Ventana 4: color predicho Green (confianza 60.6%); probabilidades {'Green': np.float64(0.6057697845189053), 'Blue': np.float64(0.39423021548109455)}
-2026-10-27 13:16:47 [INFO]: {'ventana': 4, 'color': 'Green', 'grupo_voto': 'Numbers', 'grupo_final': 'Numbers', 'comando': '4', 'confianza_grupo': 0.4808824056417338, 'confianza_comando': 0.7633844774509813}
-2026-10-27 13:16:47 [INFO]: Comando predicho 4
-2026-10-27 13:16:47 [INFO]: Grupo predicho Numbers
-2026-10-27 13:16:47 [INFO]: ----------------------------------------------------------------
-2026-10-27 13:16:47 [INFO]: ------------------>cvs name captures/UserAlexJ/recordings/UserAlexJ_UNKNOWN_8.csv<----------------
-2026-10-27 13:16:47 [INFO]: Color real Desconocido
-2026-10-27 13:16:47 [INFO]: Color predicho Green (confianza 61.1%)
-2026-10-27 13:16:47 [INFO]: Probabilidades de color {'Green': np.float64(0.6111659364185282), 'Blue': np.float64(0.38883406358147177)}
-2026-10-27 13:16:47 [INFO]: Ventana 1: color predicho Green (confianza 73.6%); probabilidades {'Green': np.float64(0.7357966694333513), 'Blue': np.float64(0.2642033305666488)}
-2026-10-27 13:16:47 [INFO]: {'ventana': 1, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'J', 'confianza_grupo': 0.8434156946927562, 'confianza_comando': 0.20488258074945}
-2026-10-27 13:16:47 [INFO]: Ventana 2: color predicho Green (confianza 69.8%); probabilidades {'Green': np.float64(0.6979172834178301), 'Blue': np.float64(0.30208271658217)}
-2026-10-27 13:16:47 [INFO]: {'ventana': 2, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'J', 'confianza_grupo': 0.646602253765205, 'confianza_comando': 0.20488258074945}
-2026-10-27 13:16:47 [INFO]: Ventana 3: color predicho Blue (confianza 65.4%); probabilidades {'Blue': np.float64(0.6539104805955408), 'Green': np.float64(0.34608951940445926)}
-2026-10-27 13:16:47 [INFO]: {'ventana': 3, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'J', 'confianza_grupo': 0.7233765716873181, 'confianza_comando': 0.20488258074945}
-2026-10-27 13:16:47 [INFO]: Ventana 4: color predicho Green (confianza 55.4%); probabilidades {'Green': np.float64(0.5544931594299872), 'Blue': np.float64(0.44550684057001266)}
-2026-10-27 13:16:47 [INFO]: {'ventana': 4, 'color': 'Green', 'grupo_voto': 'Controls', 'grupo_final': 'Letters', 'comando': 'J', 'confianza_grupo': 0.37690553531800564, 'confianza_comando': 0.20488258074945}
-2026-10-27 13:16:47 [INFO]: Comando predicho J
-2026-10-27 13:16:47 [INFO]: Grupo predicho Letters
-2026-10-27 13:16:47 [INFO]: ----------------------------------------------------------------
-2026-10-27 13:16:48 [INFO]: ------------------>cvs name captures/UserAlexJ/recordings/UserAlexJ_UNKNOWN_9.csv<----------------
-2026-10-27 13:16:48 [INFO]: Color real Desconocido
-2026-10-27 13:16:48 [INFO]: Color predicho Blue (confianza 69.2%)
-2026-10-27 13:16:48 [INFO]: Probabilidades de color {'Blue': np.float64(0.6917602388407056), 'Green': np.float64(0.30823976115929436)}
-2026-10-27 13:16:48 [INFO]: Ventana 1: color predicho Blue (confianza 61.8%); probabilidades {'Blue': np.float64(0.6178924412696611), 'Green': np.float64(0.3821075587303388)}
-2026-10-27 13:16:48 [INFO]: {'ventana': 1, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'Ñ', 'confianza_grupo': 0.7780732915562646, 'confianza_comando': 0.3671623261657881}
-2026-10-27 13:16:48 [INFO]: Ventana 2: color predicho Blue (confianza 72.0%); probabilidades {'Blue': np.float64(0.7202209613006697), 'Green': np.float64(0.2797790386993304)}
-2026-10-27 13:16:48 [INFO]: {'ventana': 2, 'color': 'Blue', 'grupo_voto': 'Numbers', 'grupo_final': 'Letters', 'comando': 'Ñ', 'confianza_grupo': 0.7080367663286522, 'confianza_comando': 0.3671623261657881}
-2026-10-27 13:16:48 [INFO]: Ventana 3: color predicho Blue (confianza 64.0%); probabilidades {'Blue': np.float64(0.6395135171097802), 'Green': np.float64(0.36048648289021995)}
-2026-10-27 13:16:48 [INFO]: {'ventana': 3, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'Ñ', 'confianza_grupo': 0.8300141140187708, 'confianza_comando': 0.3671623261657881}
-2026-10-27 13:16:48 [INFO]: Ventana 4: color predicho Blue (confianza 64.2%); probabilidades {'Blue': np.float64(0.6415202288865866), 'Green': np.float64(0.3584797711134135)}
-2026-10-27 13:16:48 [INFO]: {'ventana': 4, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'Ñ', 'confianza_grupo': 0.8687216422884156, 'confianza_comando': 0.3671623261657881}
-2026-10-27 13:16:48 [INFO]: Comando predicho O
-2026-10-27 13:16:48 [INFO]: Grupo predicho Letters
-2026-10-27 13:16:48 [INFO]: ----------------------------------------------------------------
-2026-10-27 13:16:48 [INFO]: Del Comando UNKNOWN Total Archivos 10
-2026-10-27 13:16:48 [INFO]: Comando Reales Predichos, 0
-2026-10-27 13:16:48 [INFO]: Grupo Real Predicho, 0
-2026-10-27 13:16:48 [INFO]: Color Real Predicho, 0
-2026-10-27 13:16:48 [INFO]: =======================================================================================
+2026-11-05 11:59:21 [INFO]: =======================================================================================
+2026-11-05 11:59:21 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_H_30.csv<----------------
+2026-11-05 11:59:21 [INFO]: Color real Blue
+2026-11-05 11:59:21 [INFO]: Color predicho Blue (confianza 72.9%)
+2026-11-05 11:59:21 [INFO]: Probabilidades de color {'Blue': np.float64(0.72926325642767), 'Green': np.float64(0.27073674357232996)}
+2026-11-05 11:59:21 [INFO]: Ventana 1: color predicho Blue (confianza 57.1%); probabilidades {'Blue': np.float64(0.5713853085481593), 'Green': np.float64(0.4286146914518406)}
+2026-11-05 11:59:21 [INFO]: {'ventana': 1, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'H', 'confianza_grupo': 0.9715410020162445, 'confianza_comando': 0.9840634107352307}
+2026-11-05 11:59:21 [INFO]: Ventana 2: color predicho Blue (confianza 62.2%); probabilidades {'Blue': np.float64(0.6218864879986264), 'Green': np.float64(0.3781135120013736)}
+2026-11-05 11:59:21 [INFO]: {'ventana': 2, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'H', 'confianza_grupo': 0.8867470506713621, 'confianza_comando': 0.9830054145502336}
+2026-11-05 11:59:21 [INFO]: Ventana 3: color predicho Blue (confianza 71.0%); probabilidades {'Blue': np.float64(0.7096873043169774), 'Green': np.float64(0.29031269568302265)}
+2026-11-05 11:59:21 [INFO]: {'ventana': 3, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'H', 'confianza_grupo': 0.7609717799071085, 'confianza_comando': 0.8457084861113449}
+2026-11-05 11:59:21 [INFO]: Ventana 4: color predicho Blue (confianza 80.9%); probabilidades {'Blue': np.float64(0.8093073862243453), 'Green': np.float64(0.19069261377565477)}
+2026-11-05 11:59:21 [INFO]: {'ventana': 4, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'H', 'confianza_grupo': 0.6496873651046027, 'confianza_comando': 0.547318476662519}
+2026-11-05 11:59:21 [INFO]: Comando predicho H
+2026-11-05 11:59:21 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:21 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:21 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_H_31.csv<----------------
+2026-11-05 11:59:21 [INFO]: Color real Blue
+2026-11-05 11:59:21 [INFO]: Color predicho Blue (confianza 85.3%)
+2026-11-05 11:59:21 [INFO]: Probabilidades de color {'Blue': np.float64(0.8526869583063478), 'Green': np.float64(0.14731304169365225)}
+2026-11-05 11:59:21 [INFO]: Ventana 1: color predicho Blue (confianza 89.7%); probabilidades {'Blue': np.float64(0.8969494746726617), 'Green': np.float64(0.10305052532733826)}
+2026-11-05 11:59:21 [INFO]: {'ventana': 1, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'H', 'confianza_grupo': 0.9847701458207416, 'confianza_comando': 0.8605735388776187}
+2026-11-05 11:59:21 [INFO]: Ventana 2: color predicho Blue (confianza 81.5%); probabilidades {'Blue': np.float64(0.8154625687862785), 'Green': np.float64(0.1845374312137215)}
+2026-11-05 11:59:21 [INFO]: {'ventana': 2, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'H', 'confianza_grupo': 0.9429608639819909, 'confianza_comando': 0.9439931052734609}
+2026-11-05 11:59:21 [INFO]: Ventana 3: color predicho Blue (confianza 69.4%); probabilidades {'Blue': np.float64(0.694159495321459), 'Green': np.float64(0.30584050467854085)}
+2026-11-05 11:59:21 [INFO]: {'ventana': 3, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'H', 'confianza_grupo': 0.9121137835373352, 'confianza_comando': 0.94970340189099}
+2026-11-05 11:59:21 [INFO]: Ventana 4: color predicho Blue (confianza 74.5%); probabilidades {'Blue': np.float64(0.7446845074141215), 'Green': np.float64(0.2553154925858786)}
+2026-11-05 11:59:21 [INFO]: {'ventana': 4, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'H', 'confianza_grupo': 0.9285904106370565, 'confianza_comando': 0.9604544692883943}
+2026-11-05 11:59:21 [INFO]: Comando predicho H
+2026-11-05 11:59:21 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:21 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:22 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_H_32.csv<----------------
+2026-11-05 11:59:22 [INFO]: Color real Blue
+2026-11-05 11:59:22 [INFO]: Color predicho Blue (confianza 73.2%)
+2026-11-05 11:59:22 [INFO]: Probabilidades de color {'Blue': np.float64(0.7315673627099529), 'Green': np.float64(0.26843263729004707)}
+2026-11-05 11:59:22 [INFO]: Ventana 1: color predicho Blue (confianza 67.1%); probabilidades {'Blue': np.float64(0.6712496783309635), 'Green': np.float64(0.3287503216690365)}
+2026-11-05 11:59:22 [INFO]: {'ventana': 1, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'H', 'confianza_grupo': 0.9871752122408549, 'confianza_comando': 0.8254815875374044}
+2026-11-05 11:59:22 [INFO]: Ventana 2: color predicho Blue (confianza 79.3%); probabilidades {'Blue': np.float64(0.7931993822196866), 'Green': np.float64(0.20680061778031358)}
+2026-11-05 11:59:22 [INFO]: {'ventana': 2, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'H', 'confianza_grupo': 0.9893873629793283, 'confianza_comando': 0.9771330053309419}
+2026-11-05 11:59:22 [INFO]: Ventana 3: color predicho Blue (confianza 68.7%); probabilidades {'Blue': np.float64(0.6869360365869156), 'Green': np.float64(0.3130639634130842)}
+2026-11-05 11:59:22 [INFO]: {'ventana': 3, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'H', 'confianza_grupo': 0.9784905416936489, 'confianza_comando': 0.9811565637135373}
+2026-11-05 11:59:22 [INFO]: Ventana 4: color predicho Blue (confianza 57.6%); probabilidades {'Blue': np.float64(0.5758526478883123), 'Green': np.float64(0.4241473521116878)}
+2026-11-05 11:59:22 [INFO]: {'ventana': 4, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'H', 'confianza_grupo': 0.9268134749873651, 'confianza_comando': 0.9348935733652612}
+2026-11-05 11:59:22 [INFO]: Comando predicho H
+2026-11-05 11:59:22 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:22 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:22 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_H_33.csv<----------------
+2026-11-05 11:59:22 [INFO]: Color real Blue
+2026-11-05 11:59:22 [INFO]: Color predicho Blue (confianza 65.3%)
+2026-11-05 11:59:22 [INFO]: Probabilidades de color {'Blue': np.float64(0.6526340081973835), 'Green': np.float64(0.3473659918026165)}
+2026-11-05 11:59:22 [INFO]: Ventana 1: color predicho Blue (confianza 75.8%); probabilidades {'Blue': np.float64(0.7577874335347181), 'Green': np.float64(0.2422125664652817)}
+2026-11-05 11:59:22 [INFO]: {'ventana': 1, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'H', 'confianza_grupo': 0.9591968832810748, 'confianza_comando': 0.9377140628709673}
+2026-11-05 11:59:22 [INFO]: Ventana 2: color predicho Blue (confianza 69.9%); probabilidades {'Blue': np.float64(0.6989281375715147), 'Green': np.float64(0.3010718624284855)}
+2026-11-05 11:59:22 [INFO]: {'ventana': 2, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'H', 'confianza_grupo': 0.9725557410841768, 'confianza_comando': 0.9108057289386258}
+2026-11-05 11:59:22 [INFO]: Ventana 3: color predicho Blue (confianza 53.6%); probabilidades {'Blue': np.float64(0.536064150781313), 'Green': np.float64(0.4639358492186871)}
+2026-11-05 11:59:22 [INFO]: {'ventana': 3, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'H', 'confianza_grupo': 0.9883155799366877, 'confianza_comando': 0.9031870773884061}
+2026-11-05 11:59:22 [INFO]: Ventana 4: color predicho Green (confianza 53.3%); probabilidades {'Green': np.float64(0.5329150276336178), 'Blue': np.float64(0.46708497236638236)}
+2026-11-05 11:59:22 [INFO]: {'ventana': 4, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'H', 'confianza_grupo': 0.9842713464645259, 'confianza_comando': 0.8835124122839768}
+2026-11-05 11:59:22 [INFO]: Comando predicho H
+2026-11-05 11:59:22 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:22 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:22 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_H_34.csv no existe
+2026-11-05 11:59:22 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_H_35.csv no existe
+2026-11-05 11:59:22 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_H_36.csv no existe
+2026-11-05 11:59:22 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_H_37.csv no existe
+2026-11-05 11:59:22 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_H_38.csv no existe
+2026-11-05 11:59:22 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_H_39.csv no existe
+2026-11-05 11:59:22 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_H_40.csv no existe
+2026-11-05 11:59:22 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_H_41.csv no existe
+2026-11-05 11:59:22 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_H_42.csv no existe
+2026-11-05 11:59:22 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_H_43.csv no existe
+2026-11-05 11:59:22 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_H_44.csv no existe
+2026-11-05 11:59:22 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_H_45.csv no existe
+2026-11-05 11:59:22 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_H_46.csv no existe
+2026-11-05 11:59:22 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_H_47.csv no existe
+2026-11-05 11:59:22 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_H_48.csv no existe
+2026-11-05 11:59:22 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_H_49.csv no existe
+2026-11-05 11:59:22 [INFO]: Del Comando H Total Archivos 4
+2026-11-05 11:59:22 [INFO]: Comando Reales Predichos, 4
+2026-11-05 11:59:22 [INFO]: Grupo Real Predicho, 4
+2026-11-05 11:59:22 [INFO]: Color Real Predicho, 4
+2026-11-05 11:59:22 [INFO]: =======================================================================================
+2026-11-05 11:59:22 [INFO]: =======================================================================================
+2026-11-05 11:59:23 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_O_30.csv<----------------
+2026-11-05 11:59:23 [INFO]: Color real Blue
+2026-11-05 11:59:23 [INFO]: Color predicho Green (confianza 84.8%)
+2026-11-05 11:59:23 [INFO]: Probabilidades de color {'Green': np.float64(0.8476515636590164), 'Blue': np.float64(0.1523484363409836)}
+2026-11-05 11:59:23 [INFO]: Ventana 1: color predicho Green (confianza 78.7%); probabilidades {'Green': np.float64(0.7868333698439819), 'Blue': np.float64(0.21316663015601836)}
+2026-11-05 11:59:23 [INFO]: {'ventana': 1, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'I', 'confianza_grupo': 0.9228957095552408, 'confianza_comando': 0.5863755815074589}
+2026-11-05 11:59:23 [INFO]: Ventana 2: color predicho Green (confianza 77.0%); probabilidades {'Green': np.float64(0.7696974638430369), 'Blue': np.float64(0.23030253615696294)}
+2026-11-05 11:59:23 [INFO]: {'ventana': 2, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'I', 'confianza_grupo': 0.9162023325771212, 'confianza_comando': 0.5820809780082561}
+2026-11-05 11:59:23 [INFO]: Ventana 3: color predicho Green (confianza 82.0%); probabilidades {'Green': np.float64(0.8200379787306009), 'Blue': np.float64(0.1799620212693992)}
+2026-11-05 11:59:23 [INFO]: {'ventana': 3, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'I', 'confianza_grupo': 0.9084321643390031, 'confianza_comando': 0.35815844991627704}
+2026-11-05 11:59:23 [INFO]: Ventana 4: color predicho Green (confianza 79.7%); probabilidades {'Green': np.float64(0.7971766893154946), 'Blue': np.float64(0.20282331068450538)}
+2026-11-05 11:59:23 [INFO]: {'ventana': 4, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'I', 'confianza_grupo': 0.6765184186873269, 'confianza_comando': 0.5548368201107134}
+2026-11-05 11:59:23 [INFO]: Comando predicho I
+2026-11-05 11:59:23 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:23 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:23 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_O_31.csv<----------------
+2026-11-05 11:59:23 [INFO]: Color real Blue
+2026-11-05 11:59:23 [INFO]: Color predicho Green (confianza 74.5%)
+2026-11-05 11:59:23 [INFO]: Probabilidades de color {'Green': np.float64(0.744853185715451), 'Blue': np.float64(0.255146814284549)}
+2026-11-05 11:59:23 [INFO]: Ventana 1: color predicho Green (confianza 68.1%); probabilidades {'Green': np.float64(0.6806971479776), 'Blue': np.float64(0.31930285202240005)}
+2026-11-05 11:59:23 [INFO]: {'ventana': 1, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'I', 'confianza_grupo': 0.9217288027951017, 'confianza_comando': 0.6236084140316166}
+2026-11-05 11:59:23 [INFO]: Ventana 2: color predicho Green (confianza 70.1%); probabilidades {'Green': np.float64(0.7012338469560291), 'Blue': np.float64(0.2987661530439711)}
+2026-11-05 11:59:23 [INFO]: {'ventana': 2, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'I', 'confianza_grupo': 0.9239359674404456, 'confianza_comando': 0.8151748016240046}
+2026-11-05 11:59:23 [INFO]: Ventana 3: color predicho Green (confianza 68.0%); probabilidades {'Green': np.float64(0.679930770732942), 'Blue': np.float64(0.3200692292670578)}
+2026-11-05 11:59:23 [INFO]: {'ventana': 3, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'I', 'confianza_grupo': 0.9136929401051798, 'confianza_comando': 0.7972666802405415}
+2026-11-05 11:59:23 [INFO]: Ventana 4: color predicho Green (confianza 73.1%); probabilidades {'Green': np.float64(0.7314417336761008), 'Blue': np.float64(0.2685582663238993)}
+2026-11-05 11:59:23 [INFO]: {'ventana': 4, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'I', 'confianza_grupo': 0.9115232681742188, 'confianza_comando': 0.8442568072148243}
+2026-11-05 11:59:23 [INFO]: Comando predicho I
+2026-11-05 11:59:23 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:23 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:24 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_O_32.csv<----------------
+2026-11-05 11:59:24 [INFO]: Color real Blue
+2026-11-05 11:59:24 [INFO]: Color predicho Green (confianza 56.6%)
+2026-11-05 11:59:24 [INFO]: Probabilidades de color {'Green': np.float64(0.565582028319183), 'Blue': np.float64(0.43441797168081697)}
+2026-11-05 11:59:24 [INFO]: Ventana 1: color predicho Green (confianza 78.0%); probabilidades {'Green': np.float64(0.7798335328709598), 'Blue': np.float64(0.22016646712904003)}
+2026-11-05 11:59:24 [INFO]: {'ventana': 1, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'L', 'confianza_grupo': 0.8683234079713363, 'confianza_comando': 0.9536637490605542}
+2026-11-05 11:59:24 [INFO]: Ventana 2: color predicho Green (confianza 62.1%); probabilidades {'Green': np.float64(0.6210069866593745), 'Blue': np.float64(0.37899301334062535)}
+2026-11-05 11:59:24 [INFO]: {'ventana': 2, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'L', 'confianza_grupo': 0.9234952170557649, 'confianza_comando': 0.9859817681398546}
+2026-11-05 11:59:24 [INFO]: Ventana 3: color predicho Blue (confianza 58.0%); probabilidades {'Blue': np.float64(0.580161225900375), 'Green': np.float64(0.41983877409962517)}
+2026-11-05 11:59:24 [INFO]: {'ventana': 3, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'L', 'confianza_grupo': 0.9168186312707255, 'confianza_comando': 0.9667421452538627}
+2026-11-05 11:59:24 [INFO]: Ventana 4: color predicho Blue (confianza 64.4%); probabilidades {'Blue': np.float64(0.6444885316332987), 'Green': np.float64(0.35551146836670133)}
+2026-11-05 11:59:24 [INFO]: {'ventana': 4, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'L', 'confianza_grupo': 0.8915174805422806, 'confianza_comando': 0.9701496671416265}
+2026-11-05 11:59:24 [INFO]: Comando predicho L
+2026-11-05 11:59:24 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:24 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:24 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_O_33.csv<----------------
+2026-11-05 11:59:24 [INFO]: Color real Blue
+2026-11-05 11:59:24 [INFO]: Color predicho Green (confianza 56.3%)
+2026-11-05 11:59:24 [INFO]: Probabilidades de color {'Green': np.float64(0.5634705490260983), 'Blue': np.float64(0.4365294509739017)}
+2026-11-05 11:59:24 [INFO]: Ventana 1: color predicho Blue (confianza 58.4%); probabilidades {'Blue': np.float64(0.5838815001382359), 'Green': np.float64(0.4161184998617641)}
+2026-11-05 11:59:24 [INFO]: {'ventana': 1, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'A', 'confianza_grupo': 0.919316489121498, 'confianza_comando': 0.29072974815797886}
+2026-11-05 11:59:24 [INFO]: Ventana 2: color predicho Green (confianza 60.7%); probabilidades {'Green': np.float64(0.6069007063389968), 'Blue': np.float64(0.393099293661003)}
+2026-11-05 11:59:24 [INFO]: {'ventana': 2, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'U', 'confianza_grupo': 0.9013987901647326, 'confianza_comando': 0.40317315518539104}
+2026-11-05 11:59:24 [INFO]: Ventana 3: color predicho Green (confianza 55.2%); probabilidades {'Green': np.float64(0.5518738027349307), 'Blue': np.float64(0.4481261972650693)}
+2026-11-05 11:59:24 [INFO]: {'ventana': 3, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'I', 'confianza_grupo': 0.9116675346949701, 'confianza_comando': 0.5038062353648326}
+2026-11-05 11:59:24 [INFO]: Ventana 4: color predicho Green (confianza 62.4%); probabilidades {'Green': np.float64(0.6238035984709221), 'Blue': np.float64(0.3761964015290779)}
+2026-11-05 11:59:24 [INFO]: {'ventana': 4, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'U', 'confianza_grupo': 0.930375860223734, 'confianza_comando': 0.43152086343854823}
+2026-11-05 11:59:24 [INFO]: Comando predicho U
+2026-11-05 11:59:24 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:24 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:24 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_O_34.csv<----------------
+2026-11-05 11:59:24 [INFO]: Color real Blue
+2026-11-05 11:59:24 [INFO]: Color predicho Green (confianza 51.1%)
+2026-11-05 11:59:24 [INFO]: Probabilidades de color {'Green': np.float64(0.510735310795135), 'Blue': np.float64(0.489264689204865)}
+2026-11-05 11:59:24 [INFO]: Ventana 1: color predicho Green (confianza 56.1%); probabilidades {'Green': np.float64(0.5609075862619116), 'Blue': np.float64(0.43909241373808827)}
+2026-11-05 11:59:24 [INFO]: {'ventana': 1, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'R', 'confianza_grupo': 0.9217640659825396, 'confianza_comando': 0.9102346202054421}
+2026-11-05 11:59:24 [INFO]: Ventana 2: color predicho Green (confianza 53.1%); probabilidades {'Green': np.float64(0.5306317461704971), 'Blue': np.float64(0.469368253829503)}
+2026-11-05 11:59:24 [INFO]: {'ventana': 2, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'R', 'confianza_grupo': 0.9357298734852567, 'confianza_comando': 0.8764896761728327}
+2026-11-05 11:59:24 [INFO]: Ventana 3: color predicho Blue (confianza 57.9%); probabilidades {'Blue': np.float64(0.5794875292258921), 'Green': np.float64(0.42051247077410786)}
+2026-11-05 11:59:24 [INFO]: {'ventana': 3, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'R', 'confianza_grupo': 0.9303040607941131, 'confianza_comando': 0.7684234200472608}
+2026-11-05 11:59:24 [INFO]: Ventana 4: color predicho Green (confianza 52.0%); probabilidades {'Green': np.float64(0.5202168372334967), 'Blue': np.float64(0.47978316276650346)}
+2026-11-05 11:59:24 [INFO]: {'ventana': 4, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'I', 'confianza_grupo': 0.9353916706790233, 'confianza_comando': 0.8701341087892291}
+2026-11-05 11:59:24 [INFO]: Comando predicho R
+2026-11-05 11:59:24 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:24 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:24 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_O_35.csv no existe
+2026-11-05 11:59:25 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_O_36.csv<----------------
+2026-11-05 11:59:25 [INFO]: Color real Blue
+2026-11-05 11:59:25 [INFO]: Color predicho Green (confianza 78.2%)
+2026-11-05 11:59:25 [INFO]: Probabilidades de color {'Green': np.float64(0.7818059088680502), 'Blue': np.float64(0.21819409113194976)}
+2026-11-05 11:59:25 [INFO]: Ventana 1: color predicho Green (confianza 82.1%); probabilidades {'Green': np.float64(0.8207603677115386), 'Blue': np.float64(0.1792396322884615)}
+2026-11-05 11:59:25 [INFO]: {'ventana': 1, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'B', 'confianza_grupo': 0.6366437023834209, 'confianza_comando': 0.7846083039755029}
+2026-11-05 11:59:25 [INFO]: Ventana 2: color predicho Green (confianza 85.8%); probabilidades {'Green': np.float64(0.8578467019223909), 'Blue': np.float64(0.1421532980776093)}
+2026-11-05 11:59:25 [INFO]: {'ventana': 2, 'color': 'Green', 'grupo_voto': 'Numbers', 'grupo_final': 'Letters', 'comando': 'B', 'confianza_grupo': 0.7045822272395984, 'confianza_comando': 0.8229607558981464}
+2026-11-05 11:59:25 [INFO]: Ventana 3: color predicho Green (confianza 69.6%); probabilidades {'Green': np.float64(0.6955679830084796), 'Blue': np.float64(0.3044320169915207)}
+2026-11-05 11:59:25 [INFO]: {'ventana': 3, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'B', 'confianza_grupo': 0.9134731432595041, 'confianza_comando': 0.7260500362398663}
+2026-11-05 11:59:25 [INFO]: Ventana 4: color predicho Blue (confianza 53.3%); probabilidades {'Blue': np.float64(0.5331768437005899), 'Green': np.float64(0.46682315629940996)}
+2026-11-05 11:59:25 [INFO]: {'ventana': 4, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'B', 'confianza_grupo': 0.7153419521513231, 'confianza_comando': 0.6226741502698482}
+2026-11-05 11:59:25 [INFO]: Comando predicho B
+2026-11-05 11:59:25 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:25 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:25 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_O_37.csv<----------------
+2026-11-05 11:59:25 [INFO]: Color real Blue
+2026-11-05 11:59:25 [INFO]: Color predicho Green (confianza 66.4%)
+2026-11-05 11:59:25 [INFO]: Probabilidades de color {'Green': np.float64(0.6637349492256431), 'Blue': np.float64(0.33626505077435687)}
+2026-11-05 11:59:25 [INFO]: Ventana 1: color predicho Blue (confianza 51.3%); probabilidades {'Blue': np.float64(0.5129648744285419), 'Green': np.float64(0.4870351255714581)}
+2026-11-05 11:59:25 [INFO]: {'ventana': 1, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'L', 'confianza_grupo': 0.9146570901555761, 'confianza_comando': 0.4397435709753173}
+2026-11-05 11:59:25 [INFO]: Ventana 2: color predicho Green (confianza 70.7%); probabilidades {'Green': np.float64(0.7072814433221813), 'Blue': np.float64(0.2927185566778186)}
+2026-11-05 11:59:25 [INFO]: {'ventana': 2, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'L', 'confianza_grupo': 0.9099727089019822, 'confianza_comando': 0.8402358616562017}
+2026-11-05 11:59:25 [INFO]: Ventana 3: color predicho Green (confianza 73.4%); probabilidades {'Green': np.float64(0.73375571488254), 'Blue': np.float64(0.26624428511746023)}
+2026-11-05 11:59:25 [INFO]: {'ventana': 3, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'L', 'confianza_grupo': 0.9030208456863326, 'confianza_comando': 0.8950624020853366}
+2026-11-05 11:59:25 [INFO]: Ventana 4: color predicho Green (confianza 57.2%); probabilidades {'Green': np.float64(0.5719089425531219), 'Blue': np.float64(0.42809105744687814)}
+2026-11-05 11:59:25 [INFO]: {'ventana': 4, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'L', 'confianza_grupo': 0.9086332596718246, 'confianza_comando': 0.9505133399798433}
+2026-11-05 11:59:25 [INFO]: Comando predicho L
+2026-11-05 11:59:25 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:25 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:26 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_O_38.csv<----------------
+2026-11-05 11:59:26 [INFO]: Color real Blue
+2026-11-05 11:59:26 [INFO]: Color predicho Blue (confianza 61.9%)
+2026-11-05 11:59:26 [INFO]: Probabilidades de color {'Blue': np.float64(0.6187182480000212), 'Green': np.float64(0.3812817519999788)}
+2026-11-05 11:59:26 [INFO]: Ventana 1: color predicho Blue (confianza 59.2%); probabilidades {'Blue': np.float64(0.5922840540394246), 'Green': np.float64(0.4077159459605752)}
+2026-11-05 11:59:26 [INFO]: {'ventana': 1, 'color': 'Blue', 'grupo_voto': 'Numbers', 'grupo_final': 'Letters', 'comando': 'O', 'confianza_grupo': 0.671823093781529, 'confianza_comando': 0.9989469961687525}
+2026-11-05 11:59:26 [INFO]: Ventana 2: color predicho Blue (confianza 74.3%); probabilidades {'Blue': np.float64(0.7427105825018779), 'Green': np.float64(0.2572894174981221)}
+2026-11-05 11:59:26 [INFO]: {'ventana': 2, 'color': 'Blue', 'grupo_voto': 'Numbers', 'grupo_final': 'Letters', 'comando': 'O', 'confianza_grupo': 0.5266589597529688, 'confianza_comando': 0.9991203802828472}
+2026-11-05 11:59:26 [INFO]: Ventana 3: color predicho Blue (confianza 63.8%); probabilidades {'Blue': np.float64(0.6382937534244121), 'Green': np.float64(0.36170624657558803)}
+2026-11-05 11:59:26 [INFO]: {'ventana': 3, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'O', 'confianza_grupo': 0.6526919745835809, 'confianza_comando': 0.985721938816406}
+2026-11-05 11:59:26 [INFO]: Ventana 4: color predicho Green (confianza 61.9%); probabilidades {'Green': np.float64(0.6188067504491012), 'Blue': np.float64(0.38119324955089884)}
+2026-11-05 11:59:26 [INFO]: {'ventana': 4, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'O', 'confianza_grupo': 0.9438796037566651, 'confianza_comando': 0.9879737218703797}
+2026-11-05 11:59:26 [INFO]: Comando predicho O
+2026-11-05 11:59:26 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:26 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:26 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_O_39.csv<----------------
+2026-11-05 11:59:26 [INFO]: Color real Blue
+2026-11-05 11:59:26 [INFO]: Color predicho Blue (confianza 66.8%)
+2026-11-05 11:59:26 [INFO]: Probabilidades de color {'Blue': np.float64(0.6677752134985857), 'Green': np.float64(0.33222478650141435)}
+2026-11-05 11:59:26 [INFO]: Ventana 1: color predicho Blue (confianza 80.8%); probabilidades {'Blue': np.float64(0.8075218533663407), 'Green': np.float64(0.1924781466336593)}
+2026-11-05 11:59:26 [INFO]: {'ventana': 1, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'O', 'confianza_grupo': 0.8306454753097267, 'confianza_comando': 0.9859664808986441}
+2026-11-05 11:59:26 [INFO]: Ventana 2: color predicho Blue (confianza 63.8%); probabilidades {'Blue': np.float64(0.6377972899678823), 'Green': np.float64(0.36220271003211757)}
+2026-11-05 11:59:26 [INFO]: {'ventana': 2, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'O', 'confianza_grupo': 0.8775851763395065, 'confianza_comando': 0.9803933297763461}
+2026-11-05 11:59:26 [INFO]: Ventana 3: color predicho Green (confianza 52.7%); probabilidades {'Green': np.float64(0.5265427326576935), 'Blue': np.float64(0.47345726734230653)}
+2026-11-05 11:59:26 [INFO]: {'ventana': 3, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'O', 'confianza_grupo': 0.9423550625639614, 'confianza_comando': 0.986424111543357}
+2026-11-05 11:59:26 [INFO]: Ventana 4: color predicho Blue (confianza 57.6%); probabilidades {'Blue': np.float64(0.5758586285214181), 'Green': np.float64(0.42414137147858194)}
+2026-11-05 11:59:26 [INFO]: {'ventana': 4, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'O', 'confianza_grupo': 0.949430555181488, 'confianza_comando': 0.9482449565998862}
+2026-11-05 11:59:26 [INFO]: Comando predicho O
+2026-11-05 11:59:26 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:26 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:26 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_O_40.csv no existe
+2026-11-05 11:59:26 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_O_41.csv no existe
+2026-11-05 11:59:26 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_O_42.csv no existe
+2026-11-05 11:59:26 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_O_43.csv no existe
+2026-11-05 11:59:26 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_O_44.csv no existe
+2026-11-05 11:59:26 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_O_45.csv no existe
+2026-11-05 11:59:26 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_O_46.csv no existe
+2026-11-05 11:59:26 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_O_47.csv no existe
+2026-11-05 11:59:26 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_O_48.csv no existe
+2026-11-05 11:59:26 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_O_49.csv no existe
+2026-11-05 11:59:26 [INFO]: Del Comando O Total Archivos 9
+2026-11-05 11:59:26 [INFO]: Comando Reales Predichos, 2
+2026-11-05 11:59:26 [INFO]: Grupo Real Predicho, 9
+2026-11-05 11:59:26 [INFO]: Color Real Predicho, 2
+2026-11-05 11:59:26 [INFO]: =======================================================================================
+2026-11-05 11:59:26 [INFO]: =======================================================================================
+2026-11-05 11:59:26 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_N_30.csv<----------------
+2026-11-05 11:59:26 [INFO]: Color real Blue
+2026-11-05 11:59:26 [INFO]: Color predicho Blue (confianza 65.8%)
+2026-11-05 11:59:26 [INFO]: Probabilidades de color {'Blue': np.float64(0.6577307578756286), 'Green': np.float64(0.3422692421243714)}
+2026-11-05 11:59:26 [INFO]: Ventana 1: color predicho Blue (confianza 50.0%); probabilidades {'Blue': np.float64(0.5), 'Green': np.float64(0.5)}
+2026-11-05 11:59:26 [INFO]: {'ventana': 1, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.9950447009076713, 'confianza_comando': 0.9318455490519626}
+2026-11-05 11:59:26 [INFO]: Ventana 2: color predicho Blue (confianza 69.7%); probabilidades {'Blue': np.float64(0.6965266994255508), 'Green': np.float64(0.30347330057444893)}
+2026-11-05 11:59:26 [INFO]: {'ventana': 2, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.9900431752838554, 'confianza_comando': 0.927914059387447}
+2026-11-05 11:59:26 [INFO]: Ventana 3: color predicho Blue (confianza 72.8%); probabilidades {'Blue': np.float64(0.7284063142628474), 'Green': np.float64(0.2715936857371524)}
+2026-11-05 11:59:26 [INFO]: {'ventana': 3, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.9962996648260363, 'confianza_comando': 0.960086168555226}
+2026-11-05 11:59:26 [INFO]: Ventana 4: color predicho Blue (confianza 55.8%); probabilidades {'Blue': np.float64(0.5578144914772056), 'Green': np.float64(0.4421855085227945)}
+2026-11-05 11:59:26 [INFO]: {'ventana': 4, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.9879660297458354, 'confianza_comando': 0.9380500337092981}
+2026-11-05 11:59:26 [INFO]: Comando predicho N
+2026-11-05 11:59:26 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:26 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:27 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_N_31.csv<----------------
+2026-11-05 11:59:27 [INFO]: Color real Blue
+2026-11-05 11:59:27 [INFO]: Color predicho Blue (confianza 53.0%)
+2026-11-05 11:59:27 [INFO]: Probabilidades de color {'Blue': np.float64(0.5299402592479935), 'Green': np.float64(0.4700597407520065)}
+2026-11-05 11:59:27 [INFO]: Ventana 1: color predicho Blue (confianza 61.1%); probabilidades {'Blue': np.float64(0.6107922257133351), 'Green': np.float64(0.3892077742866648)}
+2026-11-05 11:59:27 [INFO]: {'ventana': 1, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.902802521982341, 'confianza_comando': 0.9122527421298956}
+2026-11-05 11:59:27 [INFO]: Ventana 2: color predicho Blue (confianza 51.1%); probabilidades {'Blue': np.float64(0.5112999388467596), 'Green': np.float64(0.4887000611532405)}
+2026-11-05 11:59:27 [INFO]: {'ventana': 2, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.9465012396237934, 'confianza_comando': 0.9073963035613655}
+2026-11-05 11:59:27 [INFO]: Ventana 3: color predicho Green (confianza 52.5%); probabilidades {'Green': np.float64(0.5247643722027218), 'Blue': np.float64(0.4752356277972784)}
+2026-11-05 11:59:27 [INFO]: {'ventana': 3, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.9501881036076704, 'confianza_comando': 0.8039251792651914}
+2026-11-05 11:59:27 [INFO]: Ventana 4: color predicho Green (confianza 50.0%); probabilidades {'Blue': np.float64(0.5), 'Green': np.float64(0.5)}
+2026-11-05 11:59:27 [INFO]: {'ventana': 4, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.921065000358922, 'confianza_comando': 0.5338055358785729}
+2026-11-05 11:59:27 [INFO]: Comando predicho N
+2026-11-05 11:59:27 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:27 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:27 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_N_32.csv<----------------
+2026-11-05 11:59:27 [INFO]: Color real Blue
+2026-11-05 11:59:27 [INFO]: Color predicho Blue (confianza 50.3%)
+2026-11-05 11:59:27 [INFO]: Probabilidades de color {'Blue': np.float64(0.503093490270826), 'Green': np.float64(0.4969065097291741)}
+2026-11-05 11:59:27 [INFO]: Ventana 1: color predicho Green (confianza 56.4%); probabilidades {'Green': np.float64(0.5639591161043651), 'Blue': np.float64(0.43604088389563506)}
+2026-11-05 11:59:27 [INFO]: {'ventana': 1, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.9364689787849502, 'confianza_comando': 0.9555107075022734}
+2026-11-05 11:59:27 [INFO]: Ventana 2: color predicho Blue (confianza 62.5%); probabilidades {'Blue': np.float64(0.6254005096513603), 'Green': np.float64(0.3745994903486397)}
+2026-11-05 11:59:27 [INFO]: {'ventana': 2, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.8954306021370485, 'confianza_comando': 0.950370488964869}
+2026-11-05 11:59:27 [INFO]: Ventana 3: color predicho Blue (confianza 51.2%); probabilidades {'Blue': np.float64(0.5123270055022152), 'Green': np.float64(0.4876729944977847)}
+2026-11-05 11:59:27 [INFO]: {'ventana': 3, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.8245152547800598, 'confianza_comando': 0.9048379020835179}
+2026-11-05 11:59:27 [INFO]: Ventana 4: color predicho Green (confianza 56.5%); probabilidades {'Green': np.float64(0.5654873307032636), 'Blue': np.float64(0.43451266929673626)}
+2026-11-05 11:59:27 [INFO]: {'ventana': 4, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.6301858931171582, 'confianza_comando': 0.9424510855389143}
+2026-11-05 11:59:27 [INFO]: Comando predicho N
+2026-11-05 11:59:27 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:27 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:28 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_N_33.csv<----------------
+2026-11-05 11:59:28 [INFO]: Color real Blue
+2026-11-05 11:59:28 [INFO]: Color predicho Blue (confianza 51.6%)
+2026-11-05 11:59:28 [INFO]: Probabilidades de color {'Blue': np.float64(0.5163089411796364), 'Green': np.float64(0.4836910588203636)}
+2026-11-05 11:59:28 [INFO]: Ventana 1: color predicho Blue (confianza 56.3%); probabilidades {'Blue': np.float64(0.562543000979516), 'Green': np.float64(0.43745699902048407)}
+2026-11-05 11:59:28 [INFO]: {'ventana': 1, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.8025916256802746, 'confianza_comando': 0.9057755126660375}
+2026-11-05 11:59:28 [INFO]: Ventana 2: color predicho Blue (confianza 58.5%); probabilidades {'Blue': np.float64(0.5854908476903429), 'Green': np.float64(0.41450915230965707)}
+2026-11-05 11:59:28 [INFO]: {'ventana': 2, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.9538075652580326, 'confianza_comando': 0.9257174009204209}
+2026-11-05 11:59:28 [INFO]: Ventana 3: color predicho Green (confianza 64.0%); probabilidades {'Green': np.float64(0.6398337058416941), 'Blue': np.float64(0.3601662941583058)}
+2026-11-05 11:59:28 [INFO]: {'ventana': 3, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.8718967882904777, 'confianza_comando': 0.8992392023581642}
+2026-11-05 11:59:28 [INFO]: Ventana 4: color predicho Blue (confianza 54.4%); probabilidades {'Blue': np.float64(0.5441556061247969), 'Green': np.float64(0.4558443938752032)}
+2026-11-05 11:59:28 [INFO]: {'ventana': 4, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.9204704286949551, 'confianza_comando': 0.8844324146128602}
+2026-11-05 11:59:28 [INFO]: Comando predicho N
+2026-11-05 11:59:28 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:28 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:28 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_N_34.csv<----------------
+2026-11-05 11:59:28 [INFO]: Color real Blue
+2026-11-05 11:59:28 [INFO]: Color predicho Blue (confianza 76.9%)
+2026-11-05 11:59:28 [INFO]: Probabilidades de color {'Blue': np.float64(0.7692396646903662), 'Green': np.float64(0.23076033530963377)}
+2026-11-05 11:59:28 [INFO]: Ventana 1: color predicho Blue (confianza 71.9%); probabilidades {'Blue': np.float64(0.719300901077972), 'Green': np.float64(0.2806990989220281)}
+2026-11-05 11:59:28 [INFO]: {'ventana': 1, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.8970039361190096, 'confianza_comando': 0.9819959994618205}
+2026-11-05 11:59:28 [INFO]: Ventana 2: color predicho Blue (confianza 66.6%); probabilidades {'Blue': np.float64(0.6662720494515226), 'Green': np.float64(0.33372795054847737)}
+2026-11-05 11:59:28 [INFO]: {'ventana': 2, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.884734032342774, 'confianza_comando': 0.9659233125291864}
+2026-11-05 11:59:28 [INFO]: Ventana 3: color predicho Blue (confianza 65.0%); probabilidades {'Blue': np.float64(0.6495286411997049), 'Green': np.float64(0.3504713588002952)}
+2026-11-05 11:59:28 [INFO]: {'ventana': 3, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.6142032453801777, 'confianza_comando': 0.9552032856161256}
+2026-11-05 11:59:28 [INFO]: Ventana 4: color predicho Blue (confianza 82.2%); probabilidades {'Blue': np.float64(0.8215381664270072), 'Green': np.float64(0.17846183357299245)}
+2026-11-05 11:59:28 [INFO]: {'ventana': 4, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.560118897495485, 'confianza_comando': 0.9570859356032477}
+2026-11-05 11:59:28 [INFO]: Comando predicho N
+2026-11-05 11:59:28 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:28 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:28 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_N_35.csv no existe
+2026-11-05 11:59:28 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_N_36.csv no existe
+2026-11-05 11:59:29 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_N_37.csv<----------------
+2026-11-05 11:59:29 [INFO]: Color real Blue
+2026-11-05 11:59:29 [INFO]: Color predicho Blue (confianza 52.8%)
+2026-11-05 11:59:29 [INFO]: Probabilidades de color {'Blue': np.float64(0.5276629596117606), 'Green': np.float64(0.4723370403882394)}
+2026-11-05 11:59:29 [INFO]: Ventana 1: color predicho Green (confianza 51.1%); probabilidades {'Green': np.float64(0.5105650080015903), 'Blue': np.float64(0.48943499199840945)}
+2026-11-05 11:59:29 [INFO]: {'ventana': 1, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.7310190283792257, 'confianza_comando': 0.8231940878381262}
+2026-11-05 11:59:29 [INFO]: Ventana 2: color predicho Green (confianza 52.4%); probabilidades {'Green': np.float64(0.5240538817031298), 'Blue': np.float64(0.47594611829687034)}
+2026-11-05 11:59:29 [INFO]: {'ventana': 2, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.7389255100117896, 'confianza_comando': 0.8935709638974276}
+2026-11-05 11:59:29 [INFO]: Ventana 3: color predicho Blue (confianza 56.3%); probabilidades {'Blue': np.float64(0.5628995942165844), 'Green': np.float64(0.4371004057834155)}
+2026-11-05 11:59:29 [INFO]: {'ventana': 3, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.8333554458730701, 'confianza_comando': 0.8874015057246865}
+2026-11-05 11:59:29 [INFO]: Ventana 4: color predicho Blue (confianza 56.0%); probabilidades {'Blue': np.float64(0.5604009272503714), 'Green': np.float64(0.43959907274962867)}
+2026-11-05 11:59:29 [INFO]: {'ventana': 4, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.8504653379272961, 'confianza_comando': 0.8496573906417632}
+2026-11-05 11:59:29 [INFO]: Comando predicho N
+2026-11-05 11:59:29 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:29 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:29 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_N_38.csv<----------------
+2026-11-05 11:59:29 [INFO]: Color real Blue
+2026-11-05 11:59:29 [INFO]: Color predicho Blue (confianza 54.6%)
+2026-11-05 11:59:29 [INFO]: Probabilidades de color {'Blue': np.float64(0.5463211470696239), 'Green': np.float64(0.4536788529303762)}
+2026-11-05 11:59:29 [INFO]: Ventana 1: color predicho Blue (confianza 63.5%); probabilidades {'Blue': np.float64(0.6349501988168199), 'Green': np.float64(0.36504980118318003)}
+2026-11-05 11:59:29 [INFO]: {'ventana': 1, 'color': 'Blue', 'grupo_voto': 'Controls', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.4054104349885476, 'confianza_comando': 0.936707776725979}
+2026-11-05 11:59:29 [INFO]: Ventana 2: color predicho Green (confianza 51.3%); probabilidades {'Green': np.float64(0.5130112444985511), 'Blue': np.float64(0.48698875550144904)}
+2026-11-05 11:59:29 [INFO]: {'ventana': 2, 'color': 'Green', 'grupo_voto': 'Numbers', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.5002658117434462, 'confianza_comando': 0.9308301486327857}
+2026-11-05 11:59:29 [INFO]: Ventana 3: color predicho Blue (confianza 55.6%); probabilidades {'Blue': np.float64(0.5557517922176397), 'Green': np.float64(0.44424820778236024)}
+2026-11-05 11:59:29 [INFO]: {'ventana': 3, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.4418585539383833, 'confianza_comando': 0.9221656512251917}
+2026-11-05 11:59:29 [INFO]: Ventana 4: color predicho Green (confianza 53.5%); probabilidades {'Green': np.float64(0.534617046338147), 'Blue': np.float64(0.46538295366185317)}
+2026-11-05 11:59:29 [INFO]: {'ventana': 4, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'N', 'confianza_grupo': 0.6667107430402737, 'confianza_comando': 0.9330150594139216}
+2026-11-05 11:59:29 [INFO]: Comando predicho N
+2026-11-05 11:59:29 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:29 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:29 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_N_39.csv<----------------
+2026-11-05 11:59:29 [INFO]: Color real Blue
+2026-11-05 11:59:29 [INFO]: Color predicho Green (confianza 57.2%)
+2026-11-05 11:59:29 [INFO]: Probabilidades de color {'Green': np.float64(0.5721134872333087), 'Blue': np.float64(0.4278865127666913)}
+2026-11-05 11:59:29 [INFO]: Ventana 1: color predicho Green (confianza 56.1%); probabilidades {'Green': np.float64(0.5607427471078366), 'Blue': np.float64(0.43925725289216344)}
+2026-11-05 11:59:29 [INFO]: {'ventana': 1, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Numbers', 'comando': '6', 'confianza_grupo': 0.9210300086122983, 'confianza_comando': 0.591940983749099}
+2026-11-05 11:59:29 [INFO]: Ventana 2: color predicho Green (confianza 54.2%); probabilidades {'Green': np.float64(0.5421915888508951), 'Blue': np.float64(0.4578084111491048)}
+2026-11-05 11:59:29 [INFO]: {'ventana': 2, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Numbers', 'comando': '2', 'confianza_grupo': 0.8881695831324594, 'confianza_comando': 0.8765154871145674}
+2026-11-05 11:59:29 [INFO]: Ventana 3: color predicho Green (confianza 51.3%); probabilidades {'Green': np.float64(0.5126584158133916), 'Blue': np.float64(0.4873415841866085)}
+2026-11-05 11:59:29 [INFO]: {'ventana': 3, 'color': 'Green', 'grupo_voto': 'Numbers', 'grupo_final': 'Numbers', 'comando': '2', 'confianza_grupo': 0.9051051899435861, 'confianza_comando': 0.8592612343422158}
+2026-11-05 11:59:29 [INFO]: Ventana 4: color predicho Green (confianza 61.0%); probabilidades {'Green': np.float64(0.6101053251048072), 'Blue': np.float64(0.38989467489519275)}
+2026-11-05 11:59:29 [INFO]: {'ventana': 4, 'color': 'Green', 'grupo_voto': 'Numbers', 'grupo_final': 'Numbers', 'comando': '6', 'confianza_grupo': 0.9653402589228406, 'confianza_comando': 0.6533038740804382}
+2026-11-05 11:59:29 [INFO]: Comando predicho 2
+2026-11-05 11:59:29 [INFO]: Grupo predicho Numbers
+2026-11-05 11:59:29 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:30 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_N_40.csv<----------------
+2026-11-05 11:59:30 [INFO]: Color real Blue
+2026-11-05 11:59:30 [INFO]: Color predicho Green (confianza 59.3%)
+2026-11-05 11:59:30 [INFO]: Probabilidades de color {'Green': np.float64(0.5929902943542302), 'Blue': np.float64(0.40700970564576977)}
+2026-11-05 11:59:30 [INFO]: Ventana 1: color predicho Green (confianza 51.8%); probabilidades {'Green': np.float64(0.5177115812990182), 'Blue': np.float64(0.48228841870098177)}
+2026-11-05 11:59:30 [INFO]: {'ventana': 1, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'A', 'confianza_grupo': 0.911701400881326, 'confianza_comando': 0.5041054145362818}
+2026-11-05 11:59:30 [INFO]: Ventana 2: color predicho Green (confianza 58.4%); probabilidades {'Green': np.float64(0.5839331110469913), 'Blue': np.float64(0.41606688895300875)}
+2026-11-05 11:59:30 [INFO]: {'ventana': 2, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'I', 'confianza_grupo': 0.9239872720179988, 'confianza_comando': 0.5453123407712155}
+2026-11-05 11:59:30 [INFO]: Ventana 3: color predicho Green (confianza 58.2%); probabilidades {'Green': np.float64(0.5817973120171713), 'Blue': np.float64(0.41820268798282845)}
+2026-11-05 11:59:30 [INFO]: {'ventana': 3, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'I', 'confianza_grupo': 0.9245058507815651, 'confianza_comando': 0.9048599482031892}
+2026-11-05 11:59:30 [INFO]: Ventana 4: color predicho Green (confianza 60.9%); probabilidades {'Green': np.float64(0.6094225740518521), 'Blue': np.float64(0.3905774259481478)}
+2026-11-05 11:59:30 [INFO]: {'ventana': 4, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'I', 'confianza_grupo': 0.9197697590156992, 'confianza_comando': 0.633447963170565}
+2026-11-05 11:59:30 [INFO]: Comando predicho I
+2026-11-05 11:59:30 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:30 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:30 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_N_41.csv no existe
+2026-11-05 11:59:30 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_N_42.csv no existe
+2026-11-05 11:59:30 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_N_43.csv no existe
+2026-11-05 11:59:30 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_N_44.csv no existe
+2026-11-05 11:59:30 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_N_45.csv no existe
+2026-11-05 11:59:30 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_N_46.csv no existe
+2026-11-05 11:59:30 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_N_47.csv no existe
+2026-11-05 11:59:30 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_N_48.csv no existe
+2026-11-05 11:59:30 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_N_49.csv no existe
+2026-11-05 11:59:30 [INFO]: Del Comando N Total Archivos 9
+2026-11-05 11:59:30 [INFO]: Comando Reales Predichos, 7
+2026-11-05 11:59:30 [INFO]: Grupo Real Predicho, 8
+2026-11-05 11:59:30 [INFO]: Color Real Predicho, 7
+2026-11-05 11:59:30 [INFO]: =======================================================================================
+2026-11-05 11:59:30 [INFO]: =======================================================================================
+2026-11-05 11:59:30 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_D_30.csv<----------------
+2026-11-05 11:59:30 [INFO]: Color real Blue
+2026-11-05 11:59:30 [INFO]: Color predicho Green (confianza 74.0%)
+2026-11-05 11:59:30 [INFO]: Probabilidades de color {'Green': np.float64(0.7403141078430888), 'Blue': np.float64(0.2596858921569112)}
+2026-11-05 11:59:30 [INFO]: Ventana 1: color predicho Green (confianza 70.6%); probabilidades {'Green': np.float64(0.7057197903077541), 'Blue': np.float64(0.2942802096922457)}
+2026-11-05 11:59:30 [INFO]: {'ventana': 1, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'I', 'confianza_grupo': 0.9199546335043035, 'confianza_comando': 0.8329822352439871}
+2026-11-05 11:59:30 [INFO]: Ventana 2: color predicho Green (confianza 66.7%); probabilidades {'Green': np.float64(0.6673572049422613), 'Blue': np.float64(0.3326427950577387)}
+2026-11-05 11:59:30 [INFO]: {'ventana': 2, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'I', 'confianza_grupo': 0.9207394466089212, 'confianza_comando': 0.9718179445480417}
+2026-11-05 11:59:30 [INFO]: Ventana 3: color predicho Green (confianza 72.3%); probabilidades {'Green': np.float64(0.7228411963122289), 'Blue': np.float64(0.27715880368777107)}
+2026-11-05 11:59:30 [INFO]: {'ventana': 3, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'I', 'confianza_grupo': 0.9200776602004587, 'confianza_comando': 0.99490605530646}
+2026-11-05 11:59:30 [INFO]: Ventana 4: color predicho Green (confianza 68.2%); probabilidades {'Green': np.float64(0.6816182812255713), 'Blue': np.float64(0.31838171877442867)}
+2026-11-05 11:59:30 [INFO]: {'ventana': 4, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'L', 'confianza_grupo': 0.9243082976576511, 'confianza_comando': 0.5771297423834527}
+2026-11-05 11:59:30 [INFO]: Comando predicho I
+2026-11-05 11:59:30 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:30 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:31 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_D_31.csv<----------------
+2026-11-05 11:59:31 [INFO]: Color real Blue
+2026-11-05 11:59:31 [INFO]: Color predicho Green (confianza 58.8%)
+2026-11-05 11:59:31 [INFO]: Probabilidades de color {'Green': np.float64(0.5875096359990414), 'Blue': np.float64(0.4124903640009586)}
+2026-11-05 11:59:31 [INFO]: Ventana 1: color predicho Blue (confianza 50.9%); probabilidades {'Blue': np.float64(0.5088104209541422), 'Green': np.float64(0.4911895790458577)}
+2026-11-05 11:59:31 [INFO]: {'ventana': 1, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'C', 'confianza_grupo': 0.9289388345505214, 'confianza_comando': 0.5353246834919834}
+2026-11-05 11:59:31 [INFO]: Ventana 2: color predicho Blue (confianza 52.7%); probabilidades {'Blue': np.float64(0.5265157005805721), 'Green': np.float64(0.47348429941942805)}
+2026-11-05 11:59:31 [INFO]: {'ventana': 2, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'C', 'confianza_grupo': 0.9409088539870609, 'confianza_comando': 0.6232887496645909}
+2026-11-05 11:59:31 [INFO]: Ventana 3: color predicho Green (confianza 70.8%); probabilidades {'Green': np.float64(0.7075278295910953), 'Blue': np.float64(0.29247217040890505)}
+2026-11-05 11:59:31 [INFO]: {'ventana': 3, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'C', 'confianza_grupo': 0.82580470584211, 'confianza_comando': 0.6724943675622466}
+2026-11-05 11:59:31 [INFO]: Ventana 4: color predicho Green (confianza 59.0%); probabilidades {'Green': np.float64(0.5903397802384078), 'Blue': np.float64(0.40966021976159217)}
+2026-11-05 11:59:31 [INFO]: {'ventana': 4, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'C', 'confianza_grupo': 0.8850518951447502, 'confianza_comando': 0.6708471797690021}
+2026-11-05 11:59:31 [INFO]: Comando predicho C
+2026-11-05 11:59:31 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:31 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:31 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_D_32.csv<----------------
+2026-11-05 11:59:31 [INFO]: Color real Blue
+2026-11-05 11:59:31 [INFO]: Color predicho Green (confianza 64.1%)
+2026-11-05 11:59:31 [INFO]: Probabilidades de color {'Green': np.float64(0.6407262494871581), 'Blue': np.float64(0.35927375051284194)}
+2026-11-05 11:59:31 [INFO]: Ventana 1: color predicho Green (confianza 62.1%); probabilidades {'Green': np.float64(0.6213470344056502), 'Blue': np.float64(0.3786529655943498)}
+2026-11-05 11:59:31 [INFO]: {'ventana': 1, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'A', 'confianza_grupo': 0.9432519664141427, 'confianza_comando': 0.43067489446564833}
+2026-11-05 11:59:31 [INFO]: Ventana 2: color predicho Green (confianza 55.6%); probabilidades {'Green': np.float64(0.5558654154114341), 'Blue': np.float64(0.4441345845885661)}
+2026-11-05 11:59:31 [INFO]: {'ventana': 2, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'X', 'confianza_grupo': 0.9327802015066792, 'confianza_comando': 0.6464647613867087}
+2026-11-05 11:59:31 [INFO]: Ventana 3: color predicho Green (confianza 64.8%); probabilidades {'Green': np.float64(0.6475399507662443), 'Blue': np.float64(0.35246004923375573)}
+2026-11-05 11:59:31 [INFO]: {'ventana': 3, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'L', 'confianza_grupo': 0.9361290805106519, 'confianza_comando': 0.6353088068292813}
+2026-11-05 11:59:31 [INFO]: Ventana 4: color predicho Green (confianza 62.3%); probabilidades {'Green': np.float64(0.6227993428103433), 'Blue': np.float64(0.37720065718965673)}
+2026-11-05 11:59:31 [INFO]: {'ventana': 4, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'L', 'confianza_grupo': 0.9342054639734971, 'confianza_comando': 0.6098035627195331}
+2026-11-05 11:59:31 [INFO]: Comando predicho L
+2026-11-05 11:59:31 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:31 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:31 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_D_33.csv<----------------
+2026-11-05 11:59:31 [INFO]: Color real Blue
+2026-11-05 11:59:31 [INFO]: Color predicho Green (confianza 57.8%)
+2026-11-05 11:59:31 [INFO]: Probabilidades de color {'Green': np.float64(0.5784160420285817), 'Blue': np.float64(0.42158395797141834)}
+2026-11-05 11:59:31 [INFO]: Ventana 1: color predicho Green (confianza 53.1%); probabilidades {'Green': np.float64(0.5313203966563531), 'Blue': np.float64(0.4686796033436471)}
+2026-11-05 11:59:31 [INFO]: {'ventana': 1, 'color': 'Green', 'grupo_voto': 'Numbers', 'grupo_final': 'Letters', 'comando': 'R', 'confianza_grupo': 0.6110882050687688, 'confianza_comando': 0.5482298131668966}
+2026-11-05 11:59:31 [INFO]: Ventana 2: color predicho Blue (confianza 59.8%); probabilidades {'Blue': np.float64(0.5976995656155139), 'Green': np.float64(0.40230043438448626)}
+2026-11-05 11:59:31 [INFO]: {'ventana': 2, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'R', 'confianza_grupo': 0.8976534800050431, 'confianza_comando': 0.5360677556788921}
+2026-11-05 11:59:31 [INFO]: Ventana 3: color predicho Green (confianza 60.5%); probabilidades {'Green': np.float64(0.6054957637907102), 'Blue': np.float64(0.39450423620929)}
+2026-11-05 11:59:31 [INFO]: {'ventana': 3, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'U', 'confianza_grupo': 0.9189128315930434, 'confianza_comando': 0.7402635916199077}
+2026-11-05 11:59:31 [INFO]: Ventana 4: color predicho Green (confianza 69.8%); probabilidades {'Green': np.float64(0.6976074829975331), 'Blue': np.float64(0.30239251700246667)}
+2026-11-05 11:59:31 [INFO]: {'ventana': 4, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'R', 'confianza_grupo': 0.9200962015050379, 'confianza_comando': 0.4768232054995971}
+2026-11-05 11:59:31 [INFO]: Comando predicho R
+2026-11-05 11:59:31 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:31 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:32 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_D_34.csv<----------------
+2026-11-05 11:59:32 [INFO]: Color real Blue
+2026-11-05 11:59:32 [INFO]: Color predicho Blue (confianza 67.5%)
+2026-11-05 11:59:32 [INFO]: Probabilidades de color {'Blue': np.float64(0.6747279642480584), 'Green': np.float64(0.3252720357519416)}
+2026-11-05 11:59:32 [INFO]: Ventana 1: color predicho Blue (confianza 75.8%); probabilidades {'Blue': np.float64(0.7578394318027756), 'Green': np.float64(0.24216056819722445)}
+2026-11-05 11:59:32 [INFO]: {'ventana': 1, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.5836490539787033, 'confianza_comando': 0.9596956758743962}
+2026-11-05 11:59:32 [INFO]: Ventana 2: color predicho Blue (confianza 66.3%); probabilidades {'Blue': np.float64(0.6627564823954335), 'Green': np.float64(0.33724351760456656)}
+2026-11-05 11:59:32 [INFO]: {'ventana': 2, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.8096504267867028, 'confianza_comando': 0.9852456307282158}
+2026-11-05 11:59:32 [INFO]: Ventana 3: color predicho Blue (confianza 63.0%); probabilidades {'Blue': np.float64(0.6303707651468801), 'Green': np.float64(0.36962923485312)}
+2026-11-05 11:59:32 [INFO]: {'ventana': 3, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.9020518621645267, 'confianza_comando': 0.9644920619440176}
+2026-11-05 11:59:32 [INFO]: Ventana 4: color predicho Green (confianza 51.6%); probabilidades {'Green': np.float64(0.5158377182357174), 'Blue': np.float64(0.4841622817642824)}
+2026-11-05 11:59:32 [INFO]: {'ventana': 4, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.9083533515673994, 'confianza_comando': 0.9372134104381727}
+2026-11-05 11:59:32 [INFO]: Comando predicho D
+2026-11-05 11:59:32 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:32 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:32 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_D_35.csv<----------------
+2026-11-05 11:59:32 [INFO]: Color real Blue
+2026-11-05 11:59:32 [INFO]: Color predicho Green (confianza 54.2%)
+2026-11-05 11:59:32 [INFO]: Probabilidades de color {'Green': np.float64(0.5420518906465517), 'Blue': np.float64(0.4579481093534483)}
+2026-11-05 11:59:32 [INFO]: Ventana 1: color predicho Green (confianza 60.9%); probabilidades {'Green': np.float64(0.6090180930289146), 'Blue': np.float64(0.3909819069710852)}
+2026-11-05 11:59:32 [INFO]: {'ventana': 1, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'Q', 'confianza_grupo': 0.9496346163141207, 'confianza_comando': 0.5904548546152131}
+2026-11-05 11:59:32 [INFO]: Ventana 2: color predicho Green (confianza 54.5%); probabilidades {'Green': np.float64(0.5445232757944333), 'Blue': np.float64(0.4554767242055666)}
+2026-11-05 11:59:32 [INFO]: {'ventana': 2, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'Q', 'confianza_grupo': 0.9314348188274216, 'confianza_comando': 0.7635946224385209}
+2026-11-05 11:59:32 [INFO]: Ventana 3: color predicho Green (confianza 54.9%); probabilidades {'Green': np.float64(0.5488183254464089), 'Blue': np.float64(0.45118167455359104)}
+2026-11-05 11:59:32 [INFO]: {'ventana': 3, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'Q', 'confianza_grupo': 0.944194451431986, 'confianza_comando': 0.9777402180447183}
+2026-11-05 11:59:32 [INFO]: Ventana 4: color predicho Blue (confianza 57.2%); probabilidades {'Blue': np.float64(0.5718817451779419), 'Green': np.float64(0.42811825482205806)}
+2026-11-05 11:59:32 [INFO]: {'ventana': 4, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'Q', 'confianza_grupo': 0.9126177934196177, 'confianza_comando': 0.5033651149842192}
+2026-11-05 11:59:32 [INFO]: Comando predicho Q
+2026-11-05 11:59:32 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:32 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:33 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_D_36.csv<----------------
+2026-11-05 11:59:33 [INFO]: Color real Blue
+2026-11-05 11:59:33 [INFO]: Color predicho Blue (confianza 90.4%)
+2026-11-05 11:59:33 [INFO]: Probabilidades de color {'Blue': np.float64(0.9038768998688504), 'Green': np.float64(0.09612310013114961)}
+2026-11-05 11:59:33 [INFO]: Ventana 1: color predicho Blue (confianza 93.2%); probabilidades {'Blue': np.float64(0.9322473621867772), 'Green': np.float64(0.06775263781322277)}
+2026-11-05 11:59:33 [INFO]: {'ventana': 1, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.9997809176092866, 'confianza_comando': 0.9474445266845338}
+2026-11-05 11:59:33 [INFO]: Ventana 2: color predicho Blue (confianza 90.7%); probabilidades {'Blue': np.float64(0.9074841927249724), 'Green': np.float64(0.0925158072750274)}
+2026-11-05 11:59:33 [INFO]: {'ventana': 2, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.9996500673340327, 'confianza_comando': 0.9731395685094071}
+2026-11-05 11:59:33 [INFO]: Ventana 3: color predicho Blue (confianza 77.4%); probabilidades {'Blue': np.float64(0.7742720882629663), 'Green': np.float64(0.2257279117370337)}
+2026-11-05 11:59:33 [INFO]: {'ventana': 3, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.9990203149711778, 'confianza_comando': 0.9611173518587167}
+2026-11-05 11:59:33 [INFO]: Ventana 4: color predicho Blue (confianza 71.7%); probabilidades {'Blue': np.float64(0.7171945378820443), 'Green': np.float64(0.28280546211795543)}
+2026-11-05 11:59:33 [INFO]: {'ventana': 4, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.9941402942154862, 'confianza_comando': 0.8793665587927515}
+2026-11-05 11:59:33 [INFO]: Comando predicho D
+2026-11-05 11:59:33 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:33 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:33 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_D_37.csv<----------------
+2026-11-05 11:59:33 [INFO]: Color real Blue
+2026-11-05 11:59:33 [INFO]: Color predicho Blue (confianza 52.3%)
+2026-11-05 11:59:33 [INFO]: Probabilidades de color {'Blue': np.float64(0.5227016703940122), 'Green': np.float64(0.4772983296059879)}
+2026-11-05 11:59:33 [INFO]: Ventana 1: color predicho Blue (confianza 58.5%); probabilidades {'Blue': np.float64(0.584803159799714), 'Green': np.float64(0.4151968402002862)}
+2026-11-05 11:59:33 [INFO]: {'ventana': 1, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.9819981561163267, 'confianza_comando': 0.9466191991441051}
+2026-11-05 11:59:33 [INFO]: Ventana 2: color predicho Green (confianza 50.9%); probabilidades {'Green': np.float64(0.5087732709677084), 'Blue': np.float64(0.49122672903229153)}
+2026-11-05 11:59:33 [INFO]: {'ventana': 2, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.9819853147586907, 'confianza_comando': 0.9743819309292295}
+2026-11-05 11:59:33 [INFO]: Ventana 3: color predicho Blue (confianza 54.8%); probabilidades {'Blue': np.float64(0.5479498724116549), 'Green': np.float64(0.4520501275883452)}
+2026-11-05 11:59:33 [INFO]: {'ventana': 3, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.9818338604384106, 'confianza_comando': 0.9614438865136159}
+2026-11-05 11:59:33 [INFO]: Ventana 4: color predicho Green (confianza 55.1%); probabilidades {'Green': np.float64(0.5513785160502854), 'Blue': np.float64(0.4486214839497146)}
+2026-11-05 11:59:33 [INFO]: {'ventana': 4, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.8979121560115844, 'confianza_comando': 0.956999824381416}
+2026-11-05 11:59:33 [INFO]: Comando predicho D
+2026-11-05 11:59:33 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:33 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:34 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_D_38.csv<----------------
+2026-11-05 11:59:34 [INFO]: Color real Blue
+2026-11-05 11:59:34 [INFO]: Color predicho Blue (confianza 57.1%)
+2026-11-05 11:59:34 [INFO]: Probabilidades de color {'Blue': np.float64(0.5709366937180336), 'Green': np.float64(0.4290633062819664)}
+2026-11-05 11:59:34 [INFO]: Ventana 1: color predicho Blue (confianza 68.7%); probabilidades {'Blue': np.float64(0.6866861586847288), 'Green': np.float64(0.3133138413152712)}
+2026-11-05 11:59:34 [INFO]: {'ventana': 1, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.9775171023965843, 'confianza_comando': 0.9649562345137603}
+2026-11-05 11:59:34 [INFO]: Ventana 2: color predicho Blue (confianza 51.3%); probabilidades {'Blue': np.float64(0.5128373082058996), 'Green': np.float64(0.48716269179410043)}
+2026-11-05 11:59:34 [INFO]: {'ventana': 2, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.9820317914947688, 'confianza_comando': 0.8846389150980443}
+2026-11-05 11:59:34 [INFO]: Ventana 3: color predicho Green (confianza 59.5%); probabilidades {'Green': np.float64(0.595285993645896), 'Blue': np.float64(0.404714006354104)}
+2026-11-05 11:59:34 [INFO]: {'ventana': 3, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.9823547642814531, 'confianza_comando': 0.6045873546575543}
+2026-11-05 11:59:34 [INFO]: Ventana 4: color predicho Blue (confianza 61.1%); probabilidades {'Blue': np.float64(0.6111456940730211), 'Green': np.float64(0.3888543059269791)}
+2026-11-05 11:59:34 [INFO]: {'ventana': 4, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.9974525465659699, 'confianza_comando': 0.6500560214987047}
+2026-11-05 11:59:34 [INFO]: Comando predicho D
+2026-11-05 11:59:34 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:34 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:34 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_D_39.csv<----------------
+2026-11-05 11:59:34 [INFO]: Color real Blue
+2026-11-05 11:59:34 [INFO]: Color predicho Green (confianza 61.4%)
+2026-11-05 11:59:34 [INFO]: Probabilidades de color {'Green': np.float64(0.6142912341574756), 'Blue': np.float64(0.38570876584252445)}
+2026-11-05 11:59:34 [INFO]: Ventana 1: color predicho Green (confianza 54.5%); probabilidades {'Green': np.float64(0.5446910735794344), 'Blue': np.float64(0.45530892642056564)}
+2026-11-05 11:59:34 [INFO]: {'ventana': 1, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'M', 'confianza_grupo': 0.9157348616183911, 'confianza_comando': 0.5535964053352711}
+2026-11-05 11:59:34 [INFO]: Ventana 2: color predicho Green (confianza 63.5%); probabilidades {'Green': np.float64(0.6351555511668513), 'Blue': np.float64(0.3648444488331486)}
+2026-11-05 11:59:34 [INFO]: {'ventana': 2, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'J', 'confianza_grupo': 0.9179721339054554, 'confianza_comando': 0.4667755262823678}
+2026-11-05 11:59:34 [INFO]: Ventana 3: color predicho Green (confianza 62.3%); probabilidades {'Green': np.float64(0.6225919358958403), 'Blue': np.float64(0.37740806410415967)}
+2026-11-05 11:59:34 [INFO]: {'ventana': 3, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'M', 'confianza_grupo': 0.9247494448122667, 'confianza_comando': 0.5866447497679084}
+2026-11-05 11:59:34 [INFO]: Ventana 4: color predicho Green (confianza 56.0%); probabilidades {'Green': np.float64(0.5604683743411509), 'Blue': np.float64(0.43953162565884907)}
+2026-11-05 11:59:34 [INFO]: {'ventana': 4, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'C', 'confianza_grupo': 0.9134356704427857, 'confianza_comando': 0.3824249831370299}
+2026-11-05 11:59:34 [INFO]: Comando predicho M
+2026-11-05 11:59:34 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:34 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:34 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_D_40.csv<----------------
+2026-11-05 11:59:34 [INFO]: Color real Blue
+2026-11-05 11:59:34 [INFO]: Color predicho Blue (confianza 64.6%)
+2026-11-05 11:59:34 [INFO]: Probabilidades de color {'Blue': np.float64(0.645783844832817), 'Green': np.float64(0.3542161551671829)}
+2026-11-05 11:59:34 [INFO]: Ventana 1: color predicho Green (confianza 51.6%); probabilidades {'Green': np.float64(0.5155865499300074), 'Blue': np.float64(0.48441345006999265)}
+2026-11-05 11:59:34 [INFO]: {'ventana': 1, 'color': 'Green', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.9354120332474515, 'confianza_comando': 0.8153250242988634}
+2026-11-05 11:59:34 [INFO]: Ventana 2: color predicho Blue (confianza 56.2%); probabilidades {'Blue': np.float64(0.5622483888212941), 'Green': np.float64(0.43775161117870576)}
+2026-11-05 11:59:34 [INFO]: {'ventana': 2, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.9144648424941912, 'confianza_comando': 0.9535874942888105}
+2026-11-05 11:59:34 [INFO]: Ventana 3: color predicho Blue (confianza 68.1%); probabilidades {'Blue': np.float64(0.6810380463516855), 'Green': np.float64(0.3189619536483145)}
+2026-11-05 11:59:34 [INFO]: {'ventana': 3, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.8376347946251333, 'confianza_comando': 0.9615751595711061}
+2026-11-05 11:59:34 [INFO]: Ventana 4: color predicho Blue (confianza 72.2%); probabilidades {'Blue': np.float64(0.7218976658388766), 'Green': np.float64(0.27810233416112357)}
+2026-11-05 11:59:34 [INFO]: {'ventana': 4, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.8228920319441517, 'confianza_comando': 0.6388189172964861}
+2026-11-05 11:59:34 [INFO]: Comando predicho D
+2026-11-05 11:59:34 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:34 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:34 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_D_41.csv no existe
+2026-11-05 11:59:34 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_D_42.csv no existe
+2026-11-05 11:59:35 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_D_43.csv<----------------
+2026-11-05 11:59:35 [INFO]: Color real Blue
+2026-11-05 11:59:35 [INFO]: Color predicho Blue (confianza 81.5%)
+2026-11-05 11:59:35 [INFO]: Probabilidades de color {'Blue': np.float64(0.8145365419250841), 'Green': np.float64(0.18546345807491593)}
+2026-11-05 11:59:35 [INFO]: Ventana 1: color predicho Blue (confianza 69.3%); probabilidades {'Blue': np.float64(0.6928510532142955), 'Green': np.float64(0.3071489467857047)}
+2026-11-05 11:59:35 [INFO]: {'ventana': 1, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.9013130538343602, 'confianza_comando': 0.748337039702403}
+2026-11-05 11:59:35 [INFO]: Ventana 2: color predicho Blue (confianza 87.1%); probabilidades {'Blue': np.float64(0.8709297931901038), 'Green': np.float64(0.12907020680989617)}
+2026-11-05 11:59:35 [INFO]: {'ventana': 2, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.9753339070286344, 'confianza_comando': 0.9563455629264441}
+2026-11-05 11:59:35 [INFO]: Ventana 3: color predicho Blue (confianza 79.2%); probabilidades {'Blue': np.float64(0.7924829032886707), 'Green': np.float64(0.20751709671132917)}
+2026-11-05 11:59:35 [INFO]: {'ventana': 3, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.9808682419997582, 'confianza_comando': 0.9432480102450138}
+2026-11-05 11:59:35 [INFO]: Ventana 4: color predicho Blue (confianza 64.5%); probabilidades {'Blue': np.float64(0.6452065891140392), 'Green': np.float64(0.3547934108859607)}
+2026-11-05 11:59:35 [INFO]: {'ventana': 4, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.9913503506310571, 'confianza_comando': 0.9444941027439404}
+2026-11-05 11:59:35 [INFO]: Comando predicho D
+2026-11-05 11:59:35 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:35 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:35 [INFO]: ------------------>cvs name captures/UserAlexJ/Letters/UserAlexJ_D_44.csv<----------------
+2026-11-05 11:59:35 [INFO]: Color real Blue
+2026-11-05 11:59:35 [INFO]: Color predicho Blue (confianza 76.9%)
+2026-11-05 11:59:35 [INFO]: Probabilidades de color {'Blue': np.float64(0.7693016338778238), 'Green': np.float64(0.23069836612217615)}
+2026-11-05 11:59:35 [INFO]: Ventana 1: color predicho Blue (confianza 84.8%); probabilidades {'Blue': np.float64(0.8483645167790262), 'Green': np.float64(0.15163548322097378)}
+2026-11-05 11:59:35 [INFO]: {'ventana': 1, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.9984137023572192, 'confianza_comando': 0.9432922796030129}
+2026-11-05 11:59:35 [INFO]: Ventana 2: color predicho Blue (confianza 71.8%); probabilidades {'Blue': np.float64(0.7181547683242058), 'Green': np.float64(0.2818452316757941)}
+2026-11-05 11:59:35 [INFO]: {'ventana': 2, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.9957668817573802, 'confianza_comando': 0.7712918740898913}
+2026-11-05 11:59:35 [INFO]: Ventana 3: color predicho Blue (confianza 65.5%); probabilidades {'Blue': np.float64(0.6551223001943568), 'Green': np.float64(0.34487769980564326)}
+2026-11-05 11:59:35 [INFO]: {'ventana': 3, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.9969334094270996, 'confianza_comando': 0.9454288536558582}
+2026-11-05 11:59:35 [INFO]: Ventana 4: color predicho Blue (confianza 61.9%); probabilidades {'Blue': np.float64(0.6194630803037243), 'Green': np.float64(0.3805369196962756)}
+2026-11-05 11:59:35 [INFO]: {'ventana': 4, 'color': 'Blue', 'grupo_voto': 'Letters', 'grupo_final': 'Letters', 'comando': 'D', 'confianza_grupo': 0.9960405161478838, 'confianza_comando': 0.9270664470436627}
+2026-11-05 11:59:35 [INFO]: Comando predicho D
+2026-11-05 11:59:35 [INFO]: Grupo predicho Letters
+2026-11-05 11:59:35 [INFO]: ----------------------------------------------------------------
+2026-11-05 11:59:35 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_D_45.csv no existe
+2026-11-05 11:59:35 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_D_46.csv no existe
+2026-11-05 11:59:35 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_D_47.csv no existe
+2026-11-05 11:59:35 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_D_48.csv no existe
+2026-11-05 11:59:35 [INFO]: El archivo captures/UserAlexJ/Letters/UserAlexJ_D_49.csv no existe
+2026-11-05 11:59:35 [INFO]: Del Comando D Total Archivos 13
+2026-11-05 11:59:35 [INFO]: Comando Reales Predichos, 7
+2026-11-05 11:59:35 [INFO]: Grupo Real Predicho, 13
+2026-11-05 11:59:35 [INFO]: Color Real Predicho, 7
+2026-11-05 11:59:35 [INFO]: =======================================================================================

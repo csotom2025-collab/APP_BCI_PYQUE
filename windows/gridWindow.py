@@ -432,11 +432,30 @@ class KeyboardWindow(QWidget):
         # Restaurar el tema actual después del flash
         QTimer.singleShot(int(duration * 1000), lambda: self.reapply_button_theme(button))
 
-    def flash_all_buttons(self, duration=0.5):
-        """Ilumina todas las teclas simultáneamente durante un único flash."""
+    def flash_buttons_by_category(self, category="all", duration=0.5):
+        """Ilumina simultáneamente las teclas de una categoría."""
         for button in self.buttons_list:
+            if not self.button_matches_category(button, category):
+                continue
             color = "#00FF00" if button.text() in greenComd else "#0096FF"
             self.flash_button(button, duration=duration, COLOR=color)
+
+    def flash_all_buttons(self, duration=0.5):
+        """Ilumina todas las teclas simultáneamente durante un único flash."""
+        self.flash_buttons_by_category("all", duration)
+
+    @staticmethod
+    def button_matches_category(button, category):
+        text = button.text()
+        if category == "all":
+            return True
+        if category == "letters":
+            return text.isalpha()
+        if category == "numbers":
+            return text.isdigit()
+        if category == "controls":
+            return text in {"───", "⟵", "↩"}
+        return False
 
     def reapply_button_theme(self, button):
         """Reaplica el tema actual a un botón específico"""
@@ -522,9 +541,10 @@ class KeyboardWindow(QWidget):
             return
         self.output_line.add_character(char)
 
-    def start_paradigm(self,times=5):
+    def start_paradigm(self, times=5, category="all"):
         """Inicia el ciclo de épocas con el paradigma de ajedrez"""
         self.init_time= time.time()
+        self.active_stimulus_category = category
         self.theme_button.setEnabled(False) # Bloquear botón mientras corre
         self.current_epoca = 0
         self.num_epocas = times     # Configurable
@@ -577,7 +597,11 @@ class KeyboardWindow(QWidget):
                 # Lógica de tablero de ajedrez
                 if (r + c) % 2 == group_id:
                     button = self.grid_letters_layout.itemAtPosition(r, c).widget()
-                    
+                    if not self.button_matches_category(
+                        button, self.active_stimulus_category
+                    ):
+                        continue
+
                     if active:
                         # Usar tus listas de comandos para decidir el color del flash
                         color = "#00FF00" if button.text() in greenComd else "#0096FF"

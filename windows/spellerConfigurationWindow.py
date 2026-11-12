@@ -27,6 +27,9 @@ class SpellerConfigurationWindow(QWidget):
         self.model_categories = {
             "Modelo jerárquico completo": None,
             "Cascadas completas (Top 5)": "cascadas",
+            "Cascadas de letras (Top 5)": "cascadas_letras",
+            "Cascadas de números (Top 5)": "cascadas_numeros",
+            "Cascadas de comandos (Top 5)": "cascadas_comandos",
             "Top general": "general",
             "Top color": "color",
             "Top supergrupo": "super",
@@ -125,6 +128,21 @@ class SpellerConfigurationWindow(QWidget):
                             model for model in os.listdir(category_dir)
                             if model.startswith("hierarchical_bundle_optimizado_top_")
                             and model.endswith(".joblib")
+                            and os.path.isfile(os.path.join(category_dir, model))
+                        )
+                        for model in models:
+                            self.models_available.addItem(
+                                model, os.path.join(category_dir, model)
+                            )
+                elif category.startswith("cascadas_"):
+                    cascade_category = category[len("cascadas_"):]
+                    category_dir = os.path.join(
+                        user_model_dir, "top_cascadas", cascade_category
+                    )
+                    if os.path.isdir(category_dir):
+                        models = sorted(
+                            model for model in os.listdir(category_dir)
+                            if model.endswith(".joblib")
                             and os.path.isfile(os.path.join(category_dir, model))
                         )
                         for model in models:

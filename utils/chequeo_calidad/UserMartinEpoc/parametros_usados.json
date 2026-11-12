@@ -1,6 +1,22 @@
 {
   "fs": 128.0,
-  "n_muestras_min": 240,
+  "n_muestras_min": 256,
+  "canales": [
+    "F3",
+    "FC5",
+    "AF3",
+    "F7",
+    "T7",
+    "P7",
+    "O1",
+    "O2",
+    "P8",
+    "T8",
+    "F8",
+    "AF4",
+    "FC6",
+    "F4"
+  ],
   "ventana_ms": 250.0,
   "escala_canal": {
     "F3": 0.889,
@@ -20,6 +36,7 @@
   },
   "sigma_log_archivo": 0.3224,
   "inflacion_sigma_ventana": 1.4,
+  "limite_pico_uv": 150.0,
   "z_deteccion": 4.0,
   "z_inicio": 2.0,
   "q_objetivo": 1.0,

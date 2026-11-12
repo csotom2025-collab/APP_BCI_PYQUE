@@ -537,6 +537,177 @@ def plot_lda_projections(df_usuario, bundle, out_dir, usuario):
     return out_path
 
 
+def plot_specialized_lda_projection(
+    df_usuario, model, group, out_dir, usuario
+):
+    """Genera una proyección LDA para la clase fina de una cascada especializada."""
+    df_group = df_usuario[
+        df_usuario["tpComando"].astype(str) == group
+    ].reset_index(drop=True).copy()
+    fig, ax = plt.subplots(figsize=(12, 8), facecolor="#0D0D0D")
+    ax.set_facecolor("#111111")
+
+    if "fixed_label" in model:
+        ax.text(
+            0.5, 0.5,
+            f"Una sola clase: {ascii(model['fixed_label'])}\n"
+            "Salida fija; no aplica proyección LDA",
+            ha="center", va="center", color="white", transform=ax.transAxes
+        )
+        ax.set_title(group, color="white", fontsize=11, fontweight="bold")
+    elif df_group.empty:
+        ax.text(
+            0.5, 0.5, f"Sin muestras disponibles para {group}",
+            ha="center", va="center", color="#FF6B6B",
+            transform=ax.transAxes
+        )
+        ax.set_title(group, color="white", fontsize=11, fontweight="bold")
+    else:
+        label_encoder = model["label_encoder"]
+        class_names = label_encoder.classes_
+        df_group["label"] = _normalize_label_series(df_group["label"])
+        df_group = df_group[
+            df_group["label"].isin(class_names)
+        ].reset_index(drop=True)
+        if df_group.empty:
+            raise ValueError(
+                f"No hay etiquetas válidas para la cascada de {group}."
+            )
+
+        feature_columns = model["feature_columns"]
+        missing_columns = [
+            column for column in feature_columns
+            if column not in df_group.columns
+        ]
+        if missing_columns:
+            raise ValueError(
+                f"Faltan características para la cascada de {group}: "
+                f"{missing_columns}"
+            )
+
+        df_group[feature_columns] = log_transform_power_columns(
+            df_group[feature_columns], feature_columns
+        )
+        y = label_encoder.transform(df_group["label"])
+        X = np.nan_to_num(
+            df_group[feature_columns].to_numpy(),
+            nan=0.0, posinf=0.0, neginf=0.0
+        )
+        X_lda = _lda2d_from_bundle(model, X, y, class_names)
+        if X_lda is None:
+            X_lda = _fit_lda2d_fresh(
+                X, y, n_components=2, k_best=250
+            )
+
+        palette = {
+            "Letters": PALETTE_LETTERS,
+            "Numbers": PALETTE_NUMBERS,
+            "Controls": PALETTE_CONTROLS,
+        }[group]
+        class_palette = [
+            palette[index % len(palette)]
+            for index in range(len(class_names))
+        ]
+        _scatter_lda(
+            ax, X_lda, y, class_names, class_palette,
+            f"{group}  ·  {model['feature_set']}\n"
+            f"Clf: {model['clasificador']}  |  "
+            f"f1={model.get('f1_macro_cv', 0):.3f}",
+            show_ellipses=group != "Letters",
+            show_centroids=True,
+        )
+        handles = _class_count_legend_handles(
+            class_names, y, class_palette
+        )
+        ax.legend(
+            handles=handles, fontsize=8, ncol=2, loc="upper right",
+            framealpha=0.2, labelcolor="white"
+        )
+
+    out_path = os.path.join(
+        out_dir, f"lda_projections_{usuario}.png"
+    )
+    fig.tight_layout()
+    fig.savefig(
+        out_path, dpi=160, bbox_inches="tight", facecolor="#0D0D0D"
+    )
+    plt.close(fig)
+    print(f"   [OK] Specialized LDA projection -> {out_path}")
+    return out_path
+
+
+def plot_specialized_lda_class_counts(
+    df_usuario, model, group, out_dir, usuario
+):
+    """Guarda el conteo de muestras del único grupo de una cascada especializada."""
+    df_group = df_usuario[
+        df_usuario["tpComando"].astype(str) == group
+    ].copy()
+    labels = _normalize_label_series(df_group["label"])
+    counts = labels.value_counts()
+    if "fixed_label" in model:
+        class_names = [str(model["fixed_label"])]
+    else:
+        class_names = [
+            str(value) for value in model["label_encoder"].classes_
+        ]
+
+    counts_df = pd.DataFrame({
+        "usuario": usuario,
+        "grupo": group,
+        "clase": class_names,
+        "n_muestras": [
+            int(counts.get(class_name, 0)) for class_name in class_names
+        ],
+    })
+    csv_path = os.path.join(
+        out_dir, f"lda_class_counts_{usuario}.csv"
+    )
+    counts_df.to_csv(csv_path, index=False)
+
+    palette = {
+        "Letters": PALETTE_LETTERS,
+        "Numbers": PALETTE_NUMBERS,
+        "Controls": PALETTE_CONTROLS,
+    }[group]
+    fig, ax = plt.subplots(figsize=(12, 7), facecolor="#0D0D0D")
+    ax.set_facecolor("#111111")
+    bars = ax.bar(
+        counts_df["clase"],
+        counts_df["n_muestras"],
+        color=[palette[index % len(palette)] for index in range(len(class_names))],
+        alpha=0.85,
+    )
+    for bar, count in zip(bars, counts_df["n_muestras"]):
+        ax.annotate(
+            str(count),
+            (bar.get_x() + bar.get_width() / 2, bar.get_height()),
+            xytext=(0, 3), textcoords="offset points",
+            ha="center", va="bottom", fontsize=8, color="white"
+        )
+    ax.set_title(
+        f"Cantidad de muestras por clase – {group} – {usuario}",
+        color="white", fontsize=12, fontweight="bold"
+    )
+    ax.set_ylabel("Número de muestras", color="#AAAAAA")
+    ax.tick_params(colors="#888888", labelrotation=60)
+    ax.grid(axis="y", alpha=0.10, lw=0.5)
+    for spine in ax.spines.values():
+        spine.set_edgecolor("#333333")
+
+    figure_path = os.path.join(
+        out_dir, f"lda_class_counts_{usuario}.png"
+    )
+    fig.tight_layout()
+    fig.savefig(
+        figure_path, dpi=160, bbox_inches="tight", facecolor="#0D0D0D"
+    )
+    plt.close(fig)
+    print(f"   [OK] LDA class counts -> {figure_path}")
+    print(f"   [OK] LDA class counts CSV -> {csv_path}")
+    return figure_path, csv_path
+
+
 def plot_lda_class_counts(df_usuario, bundle, out_dir, usuario):
     """Guarda el conteo por clase de las muestras incluidas en las proyecciones LDA."""
     class_groups = [
@@ -1175,7 +1346,16 @@ def _generate_bundle_visualizations(
     if "por_color" in bundle:
         plotting_views = []
         for color, hierarchy in bundle["por_color"].items():
-            fine_models = hierarchy["por_grupo"].values()
+            cascade_group = bundle.get("cascade_group")
+            if cascade_group is None:
+                fine_models = hierarchy["por_grupo"].values()
+            else:
+                if cascade_group not in hierarchy["por_grupo"]:
+                    raise ValueError(
+                        f"La cascada especializada no incluye el grupo "
+                        f"{cascade_group!r} para el color {color!r}."
+                    )
+                fine_models = [hierarchy["por_grupo"][cascade_group]]
             commands = {
                 command
                 for model in fine_models
@@ -1186,6 +1366,10 @@ def _generate_bundle_visualizations(
                 )
             }
             color_mask = df_usuario["label"].astype(str).isin(commands)
+            if cascade_group is not None:
+                color_mask &= (
+                    df_usuario["tpComando"].astype(str) == cascade_group
+                )
             if "color" in df_usuario.columns:
                 color_mask &= df_usuario["color"].astype(str) == str(color)
             df_color = df_usuario[color_mask].reset_index(drop=True)
@@ -1193,10 +1377,11 @@ def _generate_bundle_visualizations(
                 (results_df["nivel"] == "color")
                 | (results_df["color"] == color)
             ]
-            color_bundle = {
-                "super_clase": hierarchy["super_clase"],
-                "por_grupo": hierarchy["por_grupo"],
-            }
+            color_bundle = {"por_grupo": hierarchy["por_grupo"]}
+            if cascade_group is None:
+                color_bundle["super_clase"] = hierarchy["super_clase"]
+            else:
+                color_bundle["cascade_group"] = cascade_group
             color_dir = os.path.join(out_dir, color)
             os.makedirs(color_dir, exist_ok=True)
             plotting_views.append(
@@ -1208,6 +1393,19 @@ def _generate_bundle_visualizations(
 
     for df_plot, bundle_plot, results_plot, plot_dir, plot_user in plotting_views:
         print(f"\n4) Generando figuras para {plot_user}: {plot_dir}")
+        if "cascade_group" in bundle_plot:
+            group = bundle_plot["cascade_group"]
+            model = bundle_plot["por_grupo"][group]
+            print(f"   -> Proyección LDA especializada: {group} ...")
+            plot_specialized_lda_projection(
+                df_plot, model, group, plot_dir, plot_user
+            )
+            print(f"   -> Conteo de muestras: {group} ...")
+            plot_specialized_lda_class_counts(
+                df_plot, model, group, plot_dir, plot_user
+            )
+            continue
+
         plots = (
             ("Proyecciones LDA", plot_lda_projections,
              (df_plot, bundle_plot, plot_dir, plot_user)),
@@ -1294,21 +1492,47 @@ def main(usuario_seleccionado=None, usar_top_cascadas=False, output_dir=None):
 
         if usar_top_cascadas:
             cascades_dir = usuario_models_dir / "top_cascadas"
-            bundle_paths = sorted(
-                cascades_dir.glob("hierarchical_bundle_optimizado_top_*.joblib"),
-                key=lambda path: int(path.stem.rsplit("_", 1)[1]),
-            )
-            if not bundle_paths:
-                raise FileNotFoundError(
-                    f"No se encontraron modelos top en: {cascades_dir}"
-                )
-            ranks = {
-                int(path.stem.rsplit("_", 1)[1]) for path in bundle_paths
+            cascade_specs = {
+                "completas": (
+                    cascades_dir,
+                    "hierarchical_bundle_optimizado_top_*.joblib",
+                ),
+                "letras": (
+                    cascades_dir / "letras",
+                    "hierarchical_bundle_letras_top_*.joblib",
+                ),
+                "numeros": (
+                    cascades_dir / "numeros",
+                    "hierarchical_bundle_numeros_top_*.joblib",
+                ),
+                "comandos": (
+                    cascades_dir / "comandos",
+                    "hierarchical_bundle_comandos_top_*.joblib",
+                ),
             }
-            if ranks != set(range(1, 6)):
-                raise FileNotFoundError(
-                    "Se requieren las cinco cascadas top (top_1 a top_5); "
-                    f"se encontraron: {sorted(ranks)} en {cascades_dir}"
+            bundle_paths = []
+            required_ranks = set(range(1, 6))
+            for cascade_category, (category_dir, filename_pattern) in (
+                cascade_specs.items()
+            ):
+                category_paths = sorted(
+                    category_dir.glob(filename_pattern),
+                    key=lambda path: int(path.stem.rsplit("_", 1)[1]),
+                )
+                ranks = {
+                    int(path.stem.rsplit("_", 1)[1])
+                    for path in category_paths
+                }
+                if ranks != required_ranks:
+                    raise FileNotFoundError(
+                        f"Se requieren las cinco cascadas top de "
+                        f"{cascade_category} (top_1 a top_5); se encontraron "
+                        f"{sorted(ranks)} en {category_dir}. "
+                        "Vuelve a entrenar el modelo para generar las "
+                        "cascadas especializadas."
+                    )
+                bundle_paths.extend(
+                    (path, cascade_category) for path in category_paths
                 )
         else:
             bundle_path = (
@@ -1317,9 +1541,9 @@ def main(usuario_seleccionado=None, usar_top_cascadas=False, output_dir=None):
             if not bundle_path.is_file():
                 print(f"   Bundle no encontrado: {bundle_path}  — saltando.")
                 continue
-            bundle_paths = [bundle_path]
+            bundle_paths = [(bundle_path, "completa")]
 
-        for bundle_path in bundle_paths:
+        for bundle_path, cascade_category in bundle_paths:
             print(f"\n2) Cargando bundle: {bundle_path}")
             bundle = joblib.load(bundle_path)
             if usar_top_cascadas:
@@ -1330,7 +1554,9 @@ def main(usuario_seleccionado=None, usar_top_cascadas=False, output_dir=None):
                     output_dir / "figures" / usuario / "top_cascadas"
                     / f"top_{rank}"
                 )
-                plot_user = f"{usuario}_top_{rank}"
+                if cascade_category != "completas":
+                    out_dir /= cascade_category
+                plot_user = f"{usuario}_top_{rank}_{cascade_category}"
             else:
                 out_dir = output_dir / "figures" / usuario
                 plot_user = usuario

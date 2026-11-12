@@ -91,12 +91,19 @@ class EEGFeatureExtractor:
                 else:
                     cname = f'ch{channel_idx}'
 
-                window_features[f'{cname}_mean'] = float(np.mean(channel_data))
-                window_features[f'{cname}_std'] = float(np.std(channel_data))
-                window_features[f'{cname}_var'] = float(np.var(channel_data))
-                window_features[f'{cname}_rms'] = float(np.sqrt(np.mean(channel_data**2)))
-                window_features[f'{cname}_skewness'] = float(stats.skew(channel_data))
-                window_features[f'{cname}_kurtosis'] = float(stats.kurtosis(channel_data))
+                window_features[f'{cname}_Tm_mean'] = float(np.mean(channel_data))
+                window_features[f'{cname}_Tm_std'] = float(np.std(channel_data))
+                window_features[f'{cname}_Tm_var'] = float(np.var(channel_data))
+                window_features[f'{cname}_Tm_rms'] = float(np.sqrt(np.mean(channel_data**2)))
+                window_features[f'{cname}_Tm_skewness'] = float(stats.skew(channel_data))
+                window_features[f'{cname}_Tm_kurtosis'] = float(stats.kurtosis(channel_data))
+                window_features[f'{cname}_Tm_max'] = float(np.max(channel_data))
+                window_features[f'{cname}_Tm_min'] = float(np.min(channel_data))
+                window_features[f'{cname}_Tm_median'] = float(np.median(channel_data))
+                window_features[f'{cname}_Tm_range'] = float(np.ptp(channel_data))
+                window_features[f'{cname}_Tm_iqr'] = float(np.percentile(channel_data, 75) - np.percentile(channel_data, 25))
+                window_features[f'{cname}_Tm_entropy'] = float(stats.entropy(np.abs(channel_data) + 1e-12))
+                window_features[f'{cname}_Tm_zero_crossings'] = float(((channel_data[:-1] * channel_data[1:]) < 0).sum())
 
                 # FFT y potencias de banda
                 fft_vals = np.abs(np.fft.rfft(channel_data))
@@ -142,6 +149,7 @@ class EEGFeatureExtractor:
 
                 window_features[f'{cname}_beta_kurtosis'] = float(stats.kurtosis(betavallfft)) if beta_mask.any() else np.nan
                 window_features[f'{cname}_gamma_kurtosis'] = float(stats.kurtosis(gammavallfft)) if gamma_mask.any() else np.nan
+                window_features[f'{cname}_total_power'] = total_power
 
                 if total_power > 0:
                     window_features[f'{cname}_delta_rel'] = window_features[f'{cname}_delta_Abs'] / total_power
@@ -177,6 +185,17 @@ class EEGFeatureExtractor:
                     window_features[f'{cname}_wA4_skewness'] = float(sk_a) if not np.isnan(sk_a) else 0.0
                     kt_a = stats.kurtosis(wA_approx)
                     window_features[f'{cname}_wA4_kurtosis'] = float(kt_a) if not np.isnan(kt_a) else 0.0
+                    window_features[f'{cname}_wA4_num_coeffs'] = len(wA_approx)
+                    window_features[f'{cname}_wA4_total_energy'] = total_w_energy
+                    window_features[f'{cname}_wA4_energy_ratio'] = energies[0] / total_w_energy
+                    window_features[f'{cname}_wA4_mean_abs'] = float(np.mean(np.abs(wA_approx)))
+                    window_features[f'{cname}_wA4_max'] = float(np.max(wA_approx))
+                    window_features[f'{cname}_wA4_min'] = float(np.min(wA_approx))
+                    window_features[f'{cname}_wA4_median'] = float(np.median(wA_approx))
+                    window_features[f'{cname}_wA4_iqr'] = float(np.percentile(wA_approx, 75) - np.percentile(wA_approx, 25))
+                    window_features[f'{cname}_wA4_entropy'] = float(stats.entropy(np.abs(wA_approx) + 1e-12))
+                    window_features[f'{cname}_wA4_zero_crossings'] = float(((wA_approx[:-1] * wA_approx[1:]) < 0).sum())
+                    window_features[f'{cname}_wA4_total_energy'] = total_w_energy
                     
                     # Rellenamos de forma dinámica los detalles (wD1 a wD5) con todas sus estadísticas
                     for lvl in range(1, 6):
@@ -212,15 +231,25 @@ class EEGFeatureExtractor:
                         window_features[f'{cname}_wD{lvl}_rms'] = rms_d
                         window_features[f'{cname}_wD{lvl}_skewness'] = sk_d
                         window_features[f'{cname}_wD{lvl}_kurtosis'] = kt_d
+                        window_features[f'{cname}_wD{lvl}_num_coeffs'] = len(coef_actual) if lvl <= level else 0
+                        window_features[f'{cname}_wD{lvl}_total_energy'] = total_w_energy
+                        window_features[f'{cname}_wD{lvl}_energy_ratio'] = rel
+                        window_features[f'{cname}_wD{lvl}_mean_abs'] = float(np.mean(np.abs(coef_actual))) if lvl <= level else 0.0
+                        window_features[f'{cname}_wD{lvl}_max'] = float(np.max(coef_actual)) if lvl <= level else 0.0
+                        window_features[f'{cname}_wD{lvl}_min'] = float(np.min(coef_actual)) if lvl <= level else 0.0
+                        window_features[f'{cname}_wD{lvl}_median'] = float(np.median(coef_actual)) if lvl <= level else 0.0
+                        window_features[f'{cname}_wD{lvl}_iqr'] = float(np.percentile(coef_actual, 75) - np.percentile(coef_actual, 25)) if lvl <= level else 0.0
+                        window_features[f'{cname}_wD{lvl}_entropy'] = float(stats.entropy(np.abs(coef_actual) + 1e-12)) if lvl <= level else 0.0
+                        window_features[f'{cname}_wD{lvl}_zero_crossings'] = float(((coef_actual[:-1] * coef_actual[1:]) < 0).sum()) if lvl <= level else 0.0
                         
                 except Exception as e:
                     print(f"[ERROR] Falló extracción Wavelet en canal {cname}: {e}")
                     # Inicialización limpia en caso de error para evitar inconsistencias en el dataframe final
-                    for stat in ('wA4_energy', 'wA4_rel', 'wA4_std', 'wA4_mean', 'wA4_var', 'wA4_rms', 'wA4_skewness', 'wA4_kurtosis'):
+                    for stat in ('wA4_energy', 'wA4_rel', 'wA4_std', 'wA4_mean', 'wA4_var', 'wA4_rms', 'wA4_skewness', 'wA4_kurtosis', 'wA4_num_coeffs', 'wA4_total_energy', 'wA4_energy_ratio', 'wA4_mean_abs', 'wA4_max', 'wA4_min', 'wA4_median', 'wA4_range', 'wA4_iqr', 'wA4_entropy', 'wA4_zero_crossings'):
                         window_features[f'{cname}_{stat}'] = 0.0
                         
                     for lvl in range(1, 6):
-                        for stat in ('energy', 'rel', 'std', 'mean', 'var', 'rms', 'skewness', 'kurtosis'):
+                        for stat in ('energy', 'rel', 'std', 'mean', 'var', 'rms', 'skewness', 'kurtosis', 'rel', 'max', 'min', 'median', 'range', 'iqr', 'entropy', 'zero_crossings'):
                             window_features[f'{cname}_wD{lvl}_{stat}'] = 0.0
        
 
@@ -265,9 +294,13 @@ class EEGFeatureExtractor:
                             window_features[f'{cname}_welch_{band_name}_rms']      = float(np.sqrt(np.mean(psd_band**2)))
                             window_features[f'{cname}_welch_{band_name}_skewness'] = float(stats.skew(psd_band))
                             window_features[f'{cname}_welch_{band_name}_kurtosis'] = float(stats.kurtosis(psd_band))
+                            window_features[f'{cname}_welch_{band_name}_rel']      = float(np.sum(psd_band) / np.sum(welch_psd)) if np.sum(welch_psd) > 0 else 0.0
+                            window_features[f'{cname}_welch_{band_name}_max']      = float(np.max(psd_band))
+                            window_features[f'{cname}_welch_{band_name}_min']      = float(np.min(psd_band))
+                            window_features[f'{cname}_welch_{band_name}_median']   = float(np.median(psd_band))
                         else:
                             # Reemplazamos np.nan por 0.0 de forma segura para no romper el SafeLDA ni el Scaler
-                            for stat in ('power', 'mean', 'std', 'var', 'rms', 'skewness', 'kurtosis'):
+                            for stat in ('power', 'mean', 'std', 'var', 'rms', 'skewness', 'kurtosis', 'rel', 'max', 'min', 'median'):
                                 window_features[f'{cname}_welch_{band_name}_{stat}'] = 0.0
                 except Exception as e:
                     print(f"[ERROR] Falló Welch PSD en canal {cname}: {e}")
@@ -394,68 +427,79 @@ def log_transform_power_columns(X_df, feature_cols):
 
 def get_feature_sets(all_cols):
     """
-    Agrupa las columnas de caracteristicas en subconjuntos tematicos
-    (estadisticas, frecuencia absoluta/relativa, wavelets, etc.)
+    Agrupa las columnas de características en subconjuntos temáticos limpios
+    (estadísticas, frecuencia absoluta/relativa, wavelets, Welch, ERP P300).
     """
-    # --- Configuración de llaves para el entrenamiento jerárquico ---
-    wA_keys = ["wA4_energy", "wA4_rel", "wA4_std", "wA4_mean", "wA4_var", "wA4_rms", "wA4_skewness", "wA4_kurtosis"]
-    
-    # Genera dinámicamente: wD1_energy, wD1_rel, wD1_std... hasta wD5_kurtosis
-    wD_stats = ["energy", "rel", "std", "mean", "var", "rms", "skewness", "kurtosis"]
-    wD_keys = [f"wD{lvl}_{stat}" for lvl in range(1, 6) for stat in wD_stats]
-    
-    # Lista completa combinada
-    wav_keys = wA_keys + wD_keys
+    # Descartar columnas constantes o de conteo fijo detectadas en el dataset
+    valid_cols = [c for c in all_cols if "_wD5_" not in c and "num_coeffs" not in c]
 
+    # --- Configuración de llaves para Wavelets (niveles 1 a 4 + aproximación A4) ---
+    w_stats_full = [
+        "energy", "rel", "std", "mean", "var", "rms", "skewness", "kurtosis",
+        "total_energy", "energy_ratio", "mean_abs", "max", "min", "median",
+        "iqr", "entropy", "zero_crossings"
+    ]
+    w_stats_est = ["std", "mean", "var", "rms", "skewness", "kurtosis"]
 
+    wav_keys = [f"wA4_{s}" for s in w_stats_full] + \
+               [f"wD{lvl}_{s}" for lvl in range(1, 5) for s in w_stats_full]
+
+    wAD_Est = [f"wA4_{s}" for s in w_stats_est] + \
+              [f"wD{lvl}_{s}" for lvl in range(1, 5) for s in w_stats_est]
+
+    bandas_fft = ["_delta_", "_theta_", "_alpha_", "_beta_", "_gamma_"]
 
     sets = {
-        "Estadisticas_Tm": [c for c in all_cols if any(k in c for k in
-                         ["mean", "std", "var", "rms", "skewness", "kurtosis"])
-                         and not any(k in c for k in
-                         ["delta_", "theta_", "alpha_", "beta_", "gamma_", "wA", "wD"])],
+        "Estadisticas_Tm": [c for c in valid_cols if "_Tm_" in c],
 
-        "Frecuencias_Abs": [c for c in all_cols if any(k in c for k in
+        "Frecuencias_Abs": [c for c in valid_cols if any(k in c for k in
                             ["delta_Abs", "theta_Abs", "alpha_Abs", "beta_Abs", "gamma_Abs"])],
 
-        "Frecuencias_Rel": [c for c in all_cols if any(k in c for k in
+        "Frecuencias_Rel": [c for c in valid_cols if any(k in c for k in
                             ["delta_rel", "theta_rel", "alpha_rel", "beta_rel", "gamma_rel"])],
 
-        "Frecuencias_Est": [c for c in all_cols if any(k in c for k in
+        "Frecuencias_Est": [c for c in valid_cols if any(k in c for k in
                             ["delta_mean", "theta_mean", "alpha_mean", "beta_mean", "gamma_mean",
                              "beta_std", "gamma_std", "beta_var", "gamma_var",
                              "beta_rms", "gamma_rms", "beta_skewness", "gamma_skewness",
                              "beta_kurtosis", "gamma_kurtosis"])],
 
-        "Wavelets": [c for c in all_cols if any(k in c for k in wav_keys)],
+        "Wavelets": [c for c in valid_cols if any(k in c for k in wav_keys)],
+        "Wavelets_Est": [c for c in valid_cols if any(k in c for k in wAD_Est)],
 
-        "Frecuencias_Todas": [c for c in all_cols if any(k in c for k in
-                              ["delta_", "theta_", "alpha_", "beta_", "gamma_"])],
+        # Ahora sin mezclarse con las columnas de _welch_
+        "Frecuencias_Todas": [c for c in valid_cols if any(b in c for b in bandas_fft)
+                              and "_welch_" not in c],
 
-        "Welch": [c for c in all_cols if any(k in c for k in["welch_"])],
+        "Welch": [c for c in valid_cols if "_welch_" in c],
 
-        "Estadicas_todas":[c for c in all_cols if any(k in c for k in
-                         ["mean", "std", "var", "rms", "skewness", "kurtosis"])],
+        "Estadicas_todas": [c for c in valid_cols if any(c.endswith(s) for s in
+                            ["_mean", "_std", "_var", "_rms", "_skewness", "_kurtosis"])],
 
-        "Beta_Gamma_All":[c for c in all_cols if any(k in c for k in
-                              ["beta_", "gamma_"])],
-        
-        "Beta_Gamma_Est":[c for c in all_cols if any(k in c for k in
-                              ["beta_", "gamma_"])and not any(k in c for k in
-                         ["_Abs", "_rel"])],
+        "Beta_Gamma_All": [c for c in valid_cols if any(b in c for b in ["_beta_", "_gamma_"])
+                           and "_welch_" not in c],
 
-        # --- NUEVO GRUPO: Métricas morfológicas puras de la onda ERP -
-        "Beta_Gamma_ERP": [c for c in all_cols if any(k in c for k in 
-                               ["beta_", "gamma_", "_p300_"])],
+        "Beta_Gamma_Est": [c for c in valid_cols if any(b in c for b in ["_beta_", "_gamma_"])
+                           and "_welch_" not in c and not c.endswith(("_Abs", "_rel"))],
 
-        # --- NUEVO GRUPO: Combinación de características Espectrales + ERP ---
-        "Espectral_Mas_ERP": [c for c in all_cols if any(k in c for k in 
-                               ["welch_", "delta_rel", "theta_rel", "alpha_rel", "beta_rel", "gamma_rel", "_p300_"])],
+        # --- NUEVOS GRUPOS ESPECIALIZADOS EN P300 Y ERP ---
+        "ERP_P300_Puro": [c for c in valid_cols if "_p300_" in c],
 
+        "Bajas_Frec_ERP": [c for c in valid_cols if any(k in c for k in
+                           ["_delta_", "_theta_", "_alpha_", "_wA4_", "_wD4_", "_p300_"])],
 
-        "TODAS": list(all_cols),
+        "Parieto_Occipital_All": [c for c in valid_cols if c.startswith(("P7_", "P8_", "O1_", "O2_"))],
+
+        "Beta_Gamma_ERP": [c for c in valid_cols if (any(b in c for b in ["_beta_", "_gamma_"])
+                           and "_welch_" not in c) or "_p300_" in c],
+
+        "Espectral_Mas_ERP": [c for c in valid_cols if any(k in c for k in
+                              ["_welch_", "delta_rel", "theta_rel", "alpha_rel", "beta_rel", "gamma_rel", "_p300_"])],
+
+        "TODAS": valid_cols,
     }
     return {k: v for k, v in sets.items() if v}
+
 
 
 def apply_notch_filter(signals, fs, notch_freq=60.0, Q=30.0):

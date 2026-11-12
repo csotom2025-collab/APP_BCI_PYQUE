@@ -115,6 +115,7 @@ class Config:
     # --- estructura -------------------------------------------------------
     fs: float = 128.0                      # Hz nominal (no se modifica nunca)
     n_muestras_min: int = 256              # < esto -> C (registros insuficientes)
+    canales: list[str] = field(default_factory=lambda: list(CANALES))
     # --- medida de amplitud ----------------------------------------------
     ventana_ms: float = 250.0              # ventana del RMS local (~1 ciclo de 4 Hz)
     escala_canal: dict = field(default_factory=lambda: dict(ESCALA_CANAL_REAL))  # REAL
@@ -144,7 +145,7 @@ class Config:
     max_amplificacion: float = 10.0        # PROVISIONAL: ganancia requerida > 10 -> canal no rescatable (no utilizable)
     sigma_min_amplificar_uv: float = 1.0   # PROVISIONAL: sigma robusta < 1 uV (~2 LSB) = casi sólo cuantización; no se amplifica
     # --- canales inválidos (no corregibles por atenuación) ----------------
-    max_canales_no_utilizables: int = 7    # canales no utilizables (voltaje alto o bajo, planos...) > esto -> C
+    max_canales_no_utilizables: int | None = None  # None: adapta el máximo a los canales configurados
     run_plano_min: int = 26                # REAL: 28 canal-archivo con >=26 idénticas (~200 ms)
     niveles_min: int = 16                  # REAL: <=16 niveles distintos en 26 canal-archivo
     sigma_min_uv: float = 0.5              # sigma robusta <= 0.5 uV = señal plana
@@ -157,6 +158,10 @@ class Config:
     # --- informativo ------------------------------------------------------
     sigma_poblacional_uv: float = 9.9      # REAL: mediana de sigma robusta (1.4826*MAD)
     umbral_elevacion_comun: float = 3.0    # aviso (no decide) si el nivel común supera 3x
+
+    def __post_init__(self):
+        if self.max_canales_no_utilizables is None and len(self.canales) >= 3:
+            self.max_canales_no_utilizables = min(7, len(self.canales) - 3)
 
     # ---- derivados ----
     @property
@@ -180,9 +185,12 @@ class Config:
         if self.n_ref_min is not None:
             return int(self.n_ref_min)
         por_se = math.ceil((1.2533 * self.sigma_ventana * self.conf_z / self.delta_ref) ** 2)
-        base = max(por_se, len(CANALES) // 2 + 1)
+        base = max(por_se, len(self.canales) // 2 + 1)
         # (iii) si se aceptan hasta K canales no utilizables, la referencia puede quedar con C-K
-        return max(3, min(base, len(CANALES) - self.max_canales_no_utilizables))
+        max_invalidos = self.max_canales_no_utilizables
+        if max_invalidos is None:
+            max_invalidos = min(7, len(self.canales) - 3)
+        return max(3, min(base, len(self.canales) - max_invalidos))
 
     def n_ref_min_para(self, n_base: int) -> int:
         """Mínimo de canales de referencia sanos para un registro con `n_base` canales no inválidos
@@ -218,7 +226,15 @@ class Config:
         assert self.max_atenuacion > 1 and self.rampa_muestras >= 1
         assert self.limite_pico_uv > 0.01
         assert self.max_amplificacion > 1 and self.sigma_min_amplificar_uv >= 0
-        assert 0 <= self.max_canales_no_utilizables <= len(CANALES) - 3, \
+        assert len(self.canales) >= 3, "se requieren al menos 3 canales"
+        assert len(set(self.canales)) == len(self.canales), "los canales no deben repetirse"
+        sin_calibracion = set(self.canales) - set(ESCALA_CANAL_REAL)
+        sin_referencia = set(self.canales) - set(self.dc_ref_uv)
+        assert not sin_calibracion, f"canales sin calibracion de amplitud: {sorted(sin_calibracion)}"
+        assert not sin_referencia, f"canales sin referencia DC: {sorted(sin_referencia)}"
+        if self.max_canales_no_utilizables is None:
+            self.max_canales_no_utilizables = min(7, len(self.canales) - 3)
+        assert 0 <= self.max_canales_no_utilizables <= len(self.canales) - 3, \
             "max_canales_no_utilizables debe dejar al menos 3 canales de referencia"
 
     @classmethod
@@ -425,7 +441,7 @@ def _cerrar_C_exceso(res: Analisis, nou: dict, sig: np.ndarray, D: np.ndarray, N
     res.canales_no_utilizables = dict(nou)
     res.canales_afectados = list(nou)
     res.pct_por_canal = {c: d.get("pct", 100.0) for c, d in nou.items()}
-    res.amplitudes = {c: f"sigma={sig[CANALES.index(c)]:.2f}uV;pico={np.abs(D[:, CANALES.index(c)]).max():.0f}uV"
+    res.amplitudes = {c: f"sigma={sig[cfg.canales.index(c)]:.2f}uV;pico={np.abs(D[:, cfg.canales.index(c)]).max():.0f}uV"
                       for c in nou}
     res.motivos += [f"{c}:{'+'.join(d['motivos'])}" for c, d in nou.items()]
     res.motivos.append(f"canales_no_utilizables={len(nou)}>max={cfg.max_canales_no_utilizables}"
@@ -435,14 +451,17 @@ def _cerrar_C_exceso(res: Analisis, nou: dict, sig: np.ndarray, D: np.ndarray, N
 
 
 def analizar_registro(X: np.ndarray, cfg: Config) -> Analisis:
-    """Clasifica y (si es B) corrige un registro. X: (N muestras, 14 canales) en µV.
+    """Clasifica y (si es B) corrige X: (N muestras, len(cfg.canales)) en µV.
 
     Se repite el análisis (a lo sumo una vez por canal) cuando se descubre un canal no
     utilizable nuevo (voltaje alto no corregible, bajo no rescatable): ese canal sale de la
     referencia y se vuelve a calcular todo sin él."""
     cfg.validar()
+    if X.ndim != 2 or X.shape[1] != len(cfg.canales):
+        raise ValueError(
+            f"X debe tener forma (muestras, {len(cfg.canales)} canales); recibido {X.shape}"
+        )
     N, C = X.shape
-    assert C == len(CANALES)
     extra: dict = {}
     res = None
     for _ in range(C + 1):
@@ -466,7 +485,7 @@ def _aplicar_limite_pico(X: np.ndarray, res: Analisis, cfg: Config) -> Analisis:
     ganancias: dict[int, float] = {}
     res.metricas["pico_preprocesado_max_uv"] = float(picos_antes.max())
 
-    for j, canal in enumerate(CANALES):
+    for j, canal in enumerate(cfg.canales):
         pico_antes = float(picos_antes[j])
         if pico_antes < cfg.limite_pico_uv:
             continue
@@ -520,7 +539,7 @@ def _aplicar_limite_pico(X: np.ndarray, res: Analisis, cfg: Config) -> Analisis:
 
     existentes = {(r["canal"], r["muestra"]): r for r in res.muestras}
     for j in ganancias:
-        canal = CANALES[j]
+        canal = cfg.canales[j]
         for t in np.flatnonzero(np.abs(Y[:, j] - X[:, j]) > 1e-9):
             registro = existentes.get((canal, int(t)))
             if registro is None:
@@ -545,10 +564,10 @@ def _aplicar_limite_pico(X: np.ndarray, res: Analisis, cfg: Config) -> Analisis:
         pico_final = float(picos_finales[j])
         if pico_final >= cfg.limite_pico_uv:
             raise ArithmeticError(
-                f"No se pudo garantizar el límite de pico en {CANALES[j]}: "
+                f"No se pudo garantizar el límite de pico en {cfg.canales[j]}: "
                 f"preprocesado={pico_final:.6f} >= {cfg.limite_pico_uv:g} uV"
             )
-        segmento = next(s for s in res.segmentos if s.id == f"{CANALES[j]}-limite_pico")
+        segmento = next(s for s in res.segmentos if s.id == f"{cfg.canales[j]}-limite_pico")
         segmento.pico_despues = pico_final
         segmento.rms_despues = float(
             np.sqrt(np.mean(preprocesada_final[:, j] ** 2))
@@ -557,7 +576,7 @@ def _aplicar_limite_pico(X: np.ndarray, res: Analisis, cfg: Config) -> Analisis:
     res.estado = ESTADO_B
     res.motivos.append(
         f"limite_pico_aplicado={cfg.limite_pico_uv:g}uV;"
-        f"canales={','.join(CANALES[j] for j in ganancias)}"
+        f"canales={','.join(cfg.canales[j] for j in ganancias)}"
     )
     res.metricas["limite_pico_uv"] = cfg.limite_pico_uv
     res.metricas["pico_preprocesado_corregido_max_uv"] = float(picos_finales.max())
@@ -594,8 +613,8 @@ def _analizar_pasada(X: np.ndarray, cfg: Config, extra: dict):
     nf = ~np.isfinite(X)
     if nf.any():
         res.codigos_C.append("NO_FINITO")
-        res.canales_afectados = [CANALES[j] for j in np.where(nf.any(axis=0))[0]]
-        res.pct_por_canal = {CANALES[j]: round(100 * nf[:, j].mean(), 2) for j in np.where(nf.any(axis=0))[0]}
+        res.canales_afectados = [cfg.canales[j] for j in np.where(nf.any(axis=0))[0]]
+        res.pct_por_canal = {cfg.canales[j]: round(100 * nf[:, j].mean(), 2) for j in np.where(nf.any(axis=0))[0]}
         res.motivos.append(f"valores_no_finitos:{int(nf.sum())}")
         res.metricas["n_no_finitos"] = int(nf.sum())
         return _cerrar_C(res, N, C), {}
@@ -605,11 +624,11 @@ def _analizar_pasada(X: np.ndarray, cfg: Config, extra: dict):
     res.metricas["max_amp_original_uv"] = float(np.abs(D).max())
     res.metricas["max_salto_uv"] = float(np.abs(np.diff(X, axis=0)).max())
     sig = sigma_robusta(D)
-    m = np.array([cfg.escala_canal[c] for c in CANALES])
+    m = np.array([cfg.escala_canal[c] for c in cfg.canales])
 
     # ---- 2. canales inválidos (planos, saturados, desconectados) ---------------
     inval: dict[str, list] = {}
-    for j, c in enumerate(CANALES):
+    for j, c in enumerate(cfg.canales):
         mot = []
         x = X[:, j]
         r = max_run_identicos(x)
@@ -636,7 +655,7 @@ def _analizar_pasada(X: np.ndarray, cfg: Config, extra: dict):
     # ---- 3. amplitud BAJA a nivel de archivo -> amplificación hacia la referencia ---
     an = sig / m                                           # amplitud normalizada por canal
     thr_bajo = math.exp(-cfg.z_bajo * cfg.sigma_log_archivo)
-    idx_ok = [j for j, c in enumerate(CANALES) if c not in nou]
+    idx_ok = [j for j, c in enumerate(cfg.canales) if c not in nou]
     # Detección iterativa: los canales bajos arrastran la mediana hacia abajo y esconden a otros
     # canales bajos; se recalcula la referencia SIN los ya detectados hasta que no aparezcan más.
     # (Con pocos canales bajos la primera pasada ya es el resultado final.)
@@ -667,7 +686,7 @@ def _analizar_pasada(X: np.ndarray, cfg: Config, extra: dict):
     if bajos_arch and pool.any():
         objetivo_an = float(np.median(an[pool]))           # nivel "medio" de los canales sanos
         for j, qf in bajos_arch.items():
-            c = CANALES[j]
+            c = cfg.canales[j]
             g_req = cfg.q_objetivo * objetivo_an * m[j] / max(float(sig[j]), 1e-9)
             motivo = None
             if not cfg.amplificar_bajas:
@@ -692,11 +711,11 @@ def _analizar_pasada(X: np.ndarray, cfg: Config, extra: dict):
         res.codigos_C.append("REFERENCIA_INSUFICIENTE")
         res.motivos.append(f"canales_de_referencia_sanos={n_pool}<{n_min}"
                            f"(no_utilizables={len(nou)},bajos_amplificados={int((Gf != 1.0).sum())})")
-        res.canales_afectados = [CANALES[j] for j in range(C) if not pool[j]]
+        res.canales_afectados = [cfg.canales[j] for j in range(C) if not pool[j]]
         res.canales_no_utilizables = dict(nou)
         return _cerrar_C(res, N, C), {}
 
-    activos = np.array([c not in nou for c in CANALES])    # canales que se analizan y pueden corregirse
+    activos = np.array([c not in nou for c in cfg.canales])    # canales que se analizan y pueden corregirse
     act_idx = np.flatnonzero(activos)
 
     # ---- 4. amplitud local relativa (con los bajos ya llevados a su nivel) --------
@@ -737,7 +756,7 @@ def _analizar_pasada(X: np.ndarray, cfg: Config, extra: dict):
         keep = np.unique(lab[cb])
         reg = cerrar_huecos(np.isin(lab, keep[keep > 0]), cfg.fusion_hueco)
         core_b[:, j], region_b[:, j] = cb, reg
-        c = CANALES[j]
+        c = cfg.canales[j]
         pct = round(100 * float(reg.mean()), 2)
         if not cfg.amplificar_bajas:
             nuevos[c] = {"codigo": "AMPLITUD_BAJA_RELATIVA", "pct": pct,
@@ -766,7 +785,7 @@ def _analizar_pasada(X: np.ndarray, cfg: Config, extra: dict):
     frac_h = region_h.mean(axis=0)
     G_att = np.ones((N, C))
     for j in np.flatnonzero(region_h.any(axis=0)):
-        c = CANALES[j]
+        c = cfg.canales[j]
         pct = round(100 * float(frac_h[j]), 2)
         if frac_h[j] > cfg.max_frac_canal:
             nuevos[c] = {"codigo": "ANOMALIA_EXTENSA", "pct": pct,
@@ -829,9 +848,9 @@ def _analizar_pasada(X: np.ndarray, cfg: Config, extra: dict):
     region_tot = region | (Gf != 1.0)[None, :]
     frac_canal = region_tot.mean(axis=0)
     afect = sorted(set(flag_cols.tolist()) | set(amp_arch.tolist()))
-    res.canales_afectados = [CANALES[j] for j in afect]
-    res.pct_por_canal = {CANALES[j]: round(100 * float(frac_canal[j]), 2) for j in afect}
-    res.amplitudes = {CANALES[j]: (f"rms_max={Aor[:, j].max():.0f}uV;pico={np.abs(D[:, j]).max():.0f}uV;"
+    res.canales_afectados = [cfg.canales[j] for j in afect]
+    res.pct_por_canal = {cfg.canales[j]: round(100 * float(frac_canal[j]), 2) for j in afect}
+    res.amplitudes = {cfg.canales[j]: (f"rms_max={Aor[:, j].max():.0f}uV;pico={np.abs(D[:, j]).max():.0f}uV;"
                                    f"q_max={qor[:, j].max():.1f};q_min={qor[:, j].min():.3f}") for j in afect}
     union = region.any(axis=1)
     union_alta = region_h.any(axis=1)             # "anomalía extensa" sólo para zonas de voltaje alto
@@ -901,7 +920,7 @@ def _analizar_pasada(X: np.ndarray, cfg: Config, extra: dict):
     lim_inf = cfg.riel_margen_lsb * LSB_UV
     for j in cols_corr:                           # una amplificación no puede llevar al riel del ADC
         if (Y[:, j] >= lim_sup).any() or (Y[:, j] <= lim_inf).any():
-            nuevos[CANALES[j]] = {"codigo": "AMPLITUD_BAJA_RELATIVA", "pct": 100.0,
+            nuevos[cfg.canales[j]] = {"codigo": "AMPLITUD_BAJA_RELATIVA", "pct": 100.0,
                                   "motivos": ["saturacion_al_amplificar:valor_corregido_en_el_riel_del_ADC"]}
     r = _resolver_nuevos()
     if r is not None:
@@ -916,13 +935,13 @@ def _analizar_pasada(X: np.ndarray, cfg: Config, extra: dict):
         return res, {}
     Dy = Y - dc
     for j in cols_corr:
-        res.canales_corregidos.append(CANALES[j])
+        res.canales_corregidos.append(cfg.canales[j])
         n_seg = 0
         for (i0, i1) in rachas(G[:, j] != 1.0):     # un segmento = tramo con ganancia != 1
             n_seg += 1
             sl = slice(i0, i1 + 1)
             amp = float(np.median(G[sl, j])) > 1.0
-            ref_ch = [CANALES[k] for k in range(C) if k != j and pool[k] and not region[sl, k].any()]
+            ref_ch = [cfg.canales[k] for k in range(C) if k != j and pool[k] and not region[sl, k].any()]
             if amp:
                 if core_b[sl, j].any():
                     crit = (f"q_min={qor[sl, j].min():.3f}<1/q_deteccion={1 / Q_det:.3f} y "
@@ -937,7 +956,7 @@ def _analizar_pasada(X: np.ndarray, cfg: Config, extra: dict):
                         if tiene_core else f"extension_por_histeresis(q>{Q_ini:.2f})")
             o, y_ = D[sl, j], Dy[sl, j]
             cf = float(np.corrcoef(o, y_)[0, 1]) if (o.std() > 0 and y_.std() > 0 and len(o) > 2) else float("nan")
-            seg = Segmento(id=f"{CANALES[j]}-{n_seg}", canal=CANALES[j], inicio=i0, fin=i1,
+            seg = Segmento(id=f"{cfg.canales[j]}-{n_seg}", canal=cfg.canales[j], inicio=i0, fin=i1,
                            rms_antes=float(np.sqrt(np.mean(o ** 2))), rms_despues=float(np.sqrt(np.mean(y_ ** 2))),
                            pico_antes=float(np.abs(o).max()), pico_despues=float(np.abs(y_).max()),
                            g_min=float(G[sl, j].min()), g_mediana=float(np.median(G[sl, j])),
@@ -947,11 +966,11 @@ def _analizar_pasada(X: np.ndarray, cfg: Config, extra: dict):
                            tipo="amplificacion" if amp else "atenuacion",
                            g_max=float(G[sl, j].max()), q_min=float(qor[sl, j].min()))
             res.segmentos.append(seg)
-            if amp and CANALES[j] not in res.canales_amplificados:
-                res.canales_amplificados.append(CANALES[j])
+            if amp and cfg.canales[j] not in res.canales_amplificados:
+                res.canales_amplificados.append(cfg.canales[j])
             for t in range(i0, i1 + 1):
                 if mod[t, j]:
-                    res.muestras.append({"canal": CANALES[j], "muestra": t, "valor_original": float(X[t, j]),
+                    res.muestras.append({"canal": cfg.canales[j], "muestra": t, "valor_original": float(X[t, j]),
                                          "valor_corregido": float(Y[t, j]), "ganancia": float(G[t, j]),
                                          "q": float(qor[t, j]), "amplitud_local_uv": float(Aor[t, j]),
                                          "referencia_uv": float(esperado[t, j]), "id_segmento": seg.id,

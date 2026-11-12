@@ -64,3 +64,17 @@ def test_all_tools_use_the_same_user_report_folder(tmp_path) -> None:
     assert (user_reports / "quality_report.csv").is_file()
     assert (user_reports / "reporte_balance_dataset.csv").is_file()
     assert (user_reports / "archivos_C_no_encontrados.csv").is_file()
+
+
+def test_quality_filter_supports_model_channel_subset() -> None:
+    channels = checker.CANALES[:8]
+    rng = np.random.default_rng(42)
+    values = np.array([checker.DC_REF_REAL_UV[channel] for channel in channels])
+    values = values + rng.normal(0, 8, size=(256, len(channels)))
+    config = checker.Config(canales=channels, n_muestras_min=256)
+
+    analysis = checker.analizar_registro(values, config)
+
+    assert config.max_canales_no_utilizables == len(channels) - 3
+    assert analysis.Y is not None
+    assert analysis.Y.shape == values.shape

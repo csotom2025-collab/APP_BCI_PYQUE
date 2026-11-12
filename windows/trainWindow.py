@@ -795,7 +795,8 @@ class TrainWindow(QMainWindow):
         self.button_visualize_lda.setEnabled(False)
         self.user_combobox.setEnabled(False)
         self.training_status_label.setText(
-            f"Generando visualizaciones LDA con las top cascadas de {user}..."
+            f"Generando visualizaciones LDA de cascadas completas, "
+            f"letras, números y comandos de {user}..."
         )
         self.lda_visualization_thread = LDAVisualizationThread(
             user, project_root, self
@@ -813,13 +814,15 @@ class TrainWindow(QMainWindow):
 
     def _on_lda_visualization_completed(self, figures_dir):
         self.training_status_label.setText(
-            "Visualizaciones LDA de top cascadas completadas."
+            "Visualizaciones LDA de las cascadas top completadas."
         )
         QMessageBox.information(
             self,
             "Visualizaciones completadas",
             f"Se generaron las visualizaciones LDA para {self.get_user()} "
-            f"con los cinco modelos top.\n\nDirectorio:\n{figures_dir}",
+            "con los cinco modelos top de las cascadas completas, "
+            "letras, números y comandos.\n\n"
+            f"Directorio:\n{figures_dir}",
         )
 
     def _on_lda_visualization_failed(self, error_message):

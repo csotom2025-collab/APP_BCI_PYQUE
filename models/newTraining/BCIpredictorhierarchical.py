@@ -102,6 +102,30 @@ class HierarchicalBCIPredictor:
             )
         self.color_bundle = self.bundle["color"]
         self.color_hierarchies = self.bundle["por_color"]
+        self.cascade_type = self.bundle.get("cascade_type", "completa")
+        self.cascade_group = self.bundle.get("cascade_group")
+        if self.cascade_type not in {
+            "completa", "letras", "numeros", "comandos"
+        }:
+            raise ValueError(
+                f"Tipo de cascada no reconocido: {self.cascade_type!r}."
+            )
+        if self.cascade_type != "completa" and self.cascade_group not in {
+            "Letters", "Numbers", "Controls"
+        }:
+            raise ValueError(
+                "La cascada especializada no especifica un grupo válido."
+            )
+        expected_group = {
+            "letras": "Letters",
+            "numeros": "Numbers",
+            "comandos": "Controls",
+        }.get(self.cascade_type)
+        if expected_group is not None and self.cascade_group != expected_group:
+            raise ValueError(
+                f"La cascada '{self.cascade_type}' debe usar el grupo "
+                f"'{expected_group}'."
+            )
 
         # feature_columns por nivel: cada modelo usa SOLO sus mejores features
         # Guardadas en el bundle durante entrenamiento como "feature_columns"
@@ -109,6 +133,7 @@ class HierarchicalBCIPredictor:
         self.super_feature_cols = {
             color: list(hierarchy["super_clase"]["feature_columns"])
             for color, hierarchy in self.color_hierarchies.items()
+            if "super_clase" in hierarchy
         }
         self.group_feature_cols = {
             color: {
@@ -124,6 +149,7 @@ class HierarchicalBCIPredictor:
             for c in cols:
                 if c not in all_cols:
                     all_cols.append(c)
+        for color, hierarchy in self.color_hierarchies.items():
             for group_cols in self.group_feature_cols[color].values():
                 for c in group_cols:
                     if c not in all_cols:
@@ -141,9 +167,10 @@ class HierarchicalBCIPredictor:
               f"| feature_set='{self.color_bundle.get('feature_set', 'N/A')}' "
               f"({len(self.color_feature_cols)} features)")
         for color, hierarchy in self.color_hierarchies.items():
-            super_bundle = hierarchy["super_clase"]
-            print(f"  Super-clase {color}: f1_cv={super_bundle.get('f1_macro_cv', 0.0):.3f} "
-                  f"| feature_set='{super_bundle.get('feature_set', 'N/A')}'")
+            super_bundle = hierarchy.get("super_clase")
+            if super_bundle is not None:
+                print(f"  Super-clase {color}: f1_cv={super_bundle.get('f1_macro_cv', 0.0):.3f} "
+                      f"| feature_set='{super_bundle.get('feature_set', 'N/A')}'")
             for grupo, bundle in hierarchy["por_grupo"].items():
                 if "fixed_label" in bundle:
                     print(f"    {grupo:10s}: salida fija {ascii(bundle['fixed_label'])}")
@@ -172,18 +199,10 @@ class HierarchicalBCIPredictor:
                 f"{len(self.channel_names)} canales, muestras), recibido {signals.shape}."
             )
 
-        expected_channels = quality_filter.CANALES
-        if (
-            len(self.channel_names) != len(expected_channels)
-            or set(self.channel_names) != set(expected_channels)
-        ):
-            raise ValueError(
-                "El filtro de calidad requiere los 14 canales EEG del proyecto: "
-                f"{expected_channels}."
-            )
-
         quality_config = quality_filter.Config(
-            fs=float(self.fs), n_muestras_min=256
+            fs=float(self.fs),
+            n_muestras_min=256,
+            canales=list(self.channel_names),
         )
         if signals.shape[1] < quality_config.n_muestras_min:
             raise ValueError(
@@ -192,10 +211,7 @@ class HierarchicalBCIPredictor:
                 f"{quality_config.n_muestras_min}."
             )
 
-        predictor_indices = [
-            self.channel_names.index(channel) for channel in expected_channels
-        ]
-        quality_ordered = signals[predictor_indices, :].T
+        quality_ordered = signals.T
         analysis = quality_filter.analizar_registro(quality_ordered, quality_config)
         if analysis.estado == quality_filter.ESTADO_C or analysis.Y is None:
             codes = ", ".join(analysis.codigos_C) or "sin código"
@@ -212,10 +228,7 @@ class HierarchicalBCIPredictor:
                 "n_muestras_modificadas", 0
             ),
         }
-        corrected = analysis.Y.T
-        return corrected[
-            [expected_channels.index(channel) for channel in self.channel_names]
-        ]
+        return analysis.Y.T
 
     def preprocess_signals(self, signals):
         """
@@ -416,14 +429,10 @@ class HierarchicalBCIPredictor:
 
     def predict_from_repetitions(self, lista_signals):
         """
-        Cascada jerárquica con feature sets independientes por nivel:
-          - Etapa 1 (super-clase): usa SOLO las features del mejor feature_set del super-modelo.
-          - Etapa 2 (sub-grupo): usa SOLO las features del mejor feature_set del modelo especializado.
-        Esto evita ruido de features irrelevantes en cada nivel.
-        Cascada jerárquica con feature sets independientes por nivel:
-          - Etapa 1 (super-clase): usa SOLO las features del mejor feature_set del super-modelo.
-          - Etapa 2 (sub-grupo): usa SOLO las features del mejor feature_set del modelo especializado.
-        Esto evita ruido de features irrelevantes en cada nivel.
+        Cascada jerárquica con enrutamiento probabilístico conjunto (Soft Routing):
+          - En cascada completa: evalúa todas las ramas y calcula la probabilidad conjunta
+            P(color) * P(grupo | color) * P(comando | color, grupo) para los 40 comandos.
+          - En cascada especializada: evalúa solo el grupo configurado.
         """
         feat_dfs = []
         artefactos = []
@@ -436,38 +445,125 @@ class HierarchicalBCIPredictor:
             picos.append(pico)
             quality_filter_results.append(self.last_quality_filter_info)
 
-        # DataFrame con TODAS las features extraídas (unión de todos los feature sets)
+        # DataFrame con TODAS las features extraídas
         all_feats = pd.concat(feat_dfs, ignore_index=True)
 
-
-        # Etapa 1: color
+        # Etapa 1: Probabilidades de Color (Green / Blue)
         color_feats = all_feats.reindex(columns=self.color_feature_cols)
         color_pred, color_probas, color_ventanas = self._predict_with_bundle(
             self.color_bundle, color_feats
         )
 
-        hierarchy = self.color_hierarchies.get(str(color_pred))
-        if hierarchy is None:
-            raise ValueError(
-                f"El color predicho '{color_pred}' no tiene modelos asociados."
-            )
-        super_bundle = hierarchy["super_clase"]
-        group_bundles = hierarchy["por_grupo"]
-        super_feature_cols = self.super_feature_cols[color_pred]
-        group_feature_cols = self.group_feature_cols[color_pred]
+        # =====================================================================
+        # MODO A: CASCADA COMPLETA CON SOFT ROUTING CONJUNTO (40 COMANDOS)
+        # =====================================================================
+        if self.cascade_group is None:
+            probabilidades_conjuntas = {}
+            mejor_ruta = None
+            mejor_prob_conjunta = -1.0
+            super_ventanas_por_color = {}
 
-        # Etapa 2: el super-grupo se predice solo con los datos de este color.
-        super_feats = all_feats.reindex(columns=super_feature_cols)
-        grupo_pred, grupo_probas, grupo_ventanas = self._predict_with_bundle(
-            super_bundle, super_feats
-        )
+            for color_cand, p_color in color_probas.items():
+                hier_cand = self.color_hierarchies.get(str(color_cand))
+                if hier_cand is None:
+                    continue
+
+                # Evaluar super-clase (Letters / Numbers / Controls) para este color
+                s_bundle = hier_cand["super_clase"]
+                s_feats = all_feats.reindex(columns=self.super_feature_cols[color_cand])
+                _, g_probas, g_ventanas = self._predict_with_bundle(s_bundle, s_feats)
+                super_ventanas_por_color[color_cand] = (s_bundle, g_probas, g_ventanas)
+
+                for grupo_cand, p_grupo in g_probas.items():
+                    g_bundle = hier_cand["por_grupo"].get(grupo_cand)
+                    if g_bundle is None:
+                        continue
+
+                    f_cols = self.group_feature_cols[color_cand][grupo_cand]
+                    f_feats = all_feats.reindex(columns=f_cols)
+                    _, c_probas, c_ventanas = self._predict_with_bundle(g_bundle, f_feats)
+
+                    for cmd, p_cmd in c_probas.items():
+                        # Evitar que una salida fija (1 sola clase, p=1.0) domine injustamente
+                        peso_fino = 0.65 if "fixed_label" in g_bundle else float(p_cmd)
+                        p_total = float(p_color) * float(p_grupo) * peso_fino
+                        probabilidades_conjuntas[cmd] = p_total
+
+                        if p_total > mejor_prob_conjunta:
+                            mejor_prob_conjunta = p_total
+                            mejor_ruta = (
+                                color_cand,
+                                grupo_cand,
+                                cmd,
+                                s_bundle,
+                                g_probas,
+                                g_ventanas,
+                                g_bundle,
+                                c_ventanas,
+                            )
+
+            if mejor_ruta is None:
+                raise ValueError("No se pudo evaluar ninguna ruta válida en la cascada.")
+
+            (
+                color_pred,
+                grupo_pred,
+                comando_final,
+                super_bundle,
+                grupo_probas,
+                grupo_ventanas,
+                group_bundle,
+                comando_ventanas,
+            ) = mejor_ruta
+
+            # Normalizar las 40 probabilidades conjuntas para que sumen 1.0
+            suma_total = sum(probabilidades_conjuntas.values()) + 1e-12
+            comando_probas = dict(
+                sorted(
+                    ((k, v / suma_total) for k, v in probabilidades_conjuntas.items()),
+                    key=lambda kv: -kv[1],
+                )
+            )
+
+        # =====================================================================
+        # MODO B: CASCADA ESPECIALIZADA (GRUPO YA FIJADO POR MODO DE INTERFAZ)
+        # =====================================================================
+        else:
+            hierarchy = self.color_hierarchies.get(str(color_pred))
+            if hierarchy is None:
+                raise ValueError(
+                    f"El color predicho '{color_pred}' no tiene modelos asociados."
+                )
+            group_bundles = hierarchy["por_grupo"]
+            group_feature_cols = self.group_feature_cols[color_pred]
+
+            super_bundle = {}
+            grupo_pred = self.cascade_group
+            grupo_probas = {grupo_pred: 1.0}
+            grupo_ventanas = [
+                {
+                    "ventana": i + 1,
+                    "prediccion": grupo_pred,
+                    "probabilidades": grupo_probas,
+                }
+                for i in range(len(all_feats))
+            ]
+
+            if grupo_pred not in group_bundles:
+                raise ValueError(
+                    f"El grupo '{grupo_pred}' no tiene un modelo para el color '{color_pred}'."
+                )
+            group_bundle = group_bundles[grupo_pred]
+            group_feats = all_feats.reindex(columns=group_feature_cols[grupo_pred])
+            comando_final, comando_probas, comando_ventanas = self._predict_with_bundle(
+                group_bundle, group_feats
+            )
 
         # Verificar confianza mínima del grupo (umbral configurable)
         confianza_grupo_final = float(grupo_probas.get(grupo_pred, 0.0))
         rechazado = confianza_grupo_final < self.min_group_confidence
 
         if rechazado:
-            # Confianza insuficiente: no inferir comando
             detalle = {
                 "color_predicho": color_pred,
                 "color_probabilidades": color_probas,
@@ -499,19 +595,9 @@ class HierarchicalBCIPredictor:
                 "pico_maximo_uV": max(picos) if picos else 0.0,
                 "super_feature_set": super_bundle.get("feature_set", "N/A"),
                 "grupo_feature_set": "N/A",
+                "cascade_type": self.cascade_type,
             }
-            return "RECHAZO", detalle        
-
-        # Etapa 3: comando fino restringido al color y grupo elegidos.
-        if grupo_pred not in group_bundles:
-            raise ValueError(
-                f"El grupo '{grupo_pred}' no tiene un modelo para el color '{color_pred}'."
-            )
-        group_bundle = group_bundles[grupo_pred]
-        group_feats = all_feats.reindex(columns=group_feature_cols[grupo_pred])
-        comando_final, comando_probas, comando_ventanas = self._predict_with_bundle(
-            group_bundle, group_feats
-        )
+            return "RECHAZO", detalle
 
         detalle = {
             "color_predicho": color_pred,
@@ -526,9 +612,7 @@ class HierarchicalBCIPredictor:
                 {
                     "ventana": i + 1,
                     "color": color_ventanas[i]["prediccion"],
-                    # voto individual de esta ventana en super-clase (puede diferir del grupo_final)
                     "grupo_voto": grupo_ventanas[i]["prediccion"],
-                    # grupo ganador por soft voting de TODAS las ventanas (el usado para predecir el comando)
                     "grupo_final": grupo_pred,
                     "comando": comando_ventanas[i]["prediccion"],
                     "confianza_grupo": float(grupo_ventanas[i]["probabilidades"].get(grupo_ventanas[i]["prediccion"], 1.0)),
@@ -544,11 +628,12 @@ class HierarchicalBCIPredictor:
             "filtro_calidad": quality_filter_results,
             "es_artefacto": any(artefactos) if artefactos else False,
             "pico_maximo_uV": max(picos) if picos else 0.0,
-            # Feature sets usados en cada etapa (para trazabilidad)
             "super_feature_set": super_bundle.get("feature_set", "N/A"),
             "grupo_feature_set": group_bundle.get("feature_set", "N/A"),
+            "cascade_type": self.cascade_type,
         }
         return comando_final, detalle
+
 
     def predict_from_csv_list(self, paths):
         """Version de predict_from_repetitions() que recibe una lista de rutas CSV

@@ -1,2 +1,2 @@
 usuario,n_trials,mejor_nivel,mejor_grupo,mejor_feature_set,mejor_clasificador,accuracy_mean,f1_macro_mean
-UserAlexJ,4800,comando_fino_por_color_grupo,Controls,Espectral_Mas_ERP,SVM_Lineal,0.9083333333333332,0.9080460140705245
+UserJairR,4800,comando_fino_por_color_grupo,Controls,Frecuencias_Todas,Ensamble_SVMLin_LogReg,0.9375,0.937429364345183

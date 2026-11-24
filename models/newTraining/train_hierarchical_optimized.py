@@ -18,6 +18,7 @@ Protocolo asumido:
 """
 
 from datetime import datetime
+from collections import Counter
 from typing import Callable, Optional
 from sklearn.ensemble import RandomForestClassifier
 import os
@@ -31,16 +32,21 @@ import warnings
 warnings.filterwarnings("ignore")
 
 from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.base import clone
+from sklearn.base import BaseEstimator, TransformerMixin, clone
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.pipeline import Pipeline
-from sklearn.feature_selection import SelectKBest, f_classif
-from sklearn.model_selection import StratifiedGroupKFold, cross_val_predict
+from sklearn.feature_selection import mutual_info_classif
+from sklearn.model_selection import StratifiedGroupKFold, cross_validate,LeaveOneGroupOut
 from sklearn.neural_network import MLPClassifier
 from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import VotingClassifier
-from sklearn.metrics import confusion_matrix, accuracy_score, f1_score
+from sklearn.metrics import (
+    accuracy_score,
+    cohen_kappa_score,
+    confusion_matrix,
+    f1_score,
+)
 # pyrefly: ignore [missing-import]
 from xgboost import XGBClassifier 
 from models.newTraining.lda_utils import SafeLDA
@@ -51,7 +57,142 @@ from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis, LinearD
 from sklearn.neighbors import KNeighborsClassifier
 
 
-CV_N_JOBS = max(1, (os.cpu_count() or 4) - 1)
+CV_N_JOBS = max(1, len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else (os.cpu_count() or 4))
+
+# ---------------------------------------------------------------------------
+# Soporte opcional de GPU (detección automática, con fallback a CPU)
+#   USE_GPU=0            -> fuerza CPU
+#   MRMR_GPU_MIN_FEATURES -> mínimo de variables para usar GPU en mRMR (def. 400);
+#                           con pocas variables la CPU es más rápida.
+# ---------------------------------------------------------------------------
+_GPU_DISABLED = os.environ.get("USE_GPU", "1").strip().lower() in ("0", "false", "no")
+MRMR_GPU_MIN_FEATURES = int(os.environ.get("MRMR_GPU_MIN_FEATURES", "400"))
+_GPU_STATE = {}
+
+
+def _torch_cuda_available():
+    """True si PyTorch está instalado y hay una GPU CUDA disponible."""
+    if _GPU_DISABLED:
+        return False
+    if "torch" not in _GPU_STATE:
+        try:
+            import torch
+            _GPU_STATE["torch"] = bool(torch.cuda.is_available())
+        except Exception:
+            _GPU_STATE["torch"] = False
+    return _GPU_STATE["torch"]
+
+
+def _xgb_gpu_ok():
+    """True si XGBoost puede entrenar en GPU (se prueba con un modelo mínimo)."""
+    if _GPU_DISABLED:
+        return False
+    if "xgb" not in _GPU_STATE:
+        try:
+            rng = np.random.default_rng(0)
+            probe = XGBClassifier(
+                n_estimators=1, device="cuda", tree_method="hist"
+            ).fit(rng.random((20, 3)), np.arange(20) % 2)
+            # Sin GPU, XGBoost no falla: cambia a CPU en silencio. Se comprueba
+            # el dispositivo realmente usado por el booster.
+            device = json.loads(probe.get_booster().save_config())[
+                "learner"]["generic_param"].get("device", "cpu")
+            _GPU_STATE["xgb"] = str(device).startswith("cuda")
+        except Exception:
+            _GPU_STATE["xgb"] = False
+    return _GPU_STATE["xgb"]
+
+
+def _torch_gpu_enabled(n_features):
+    return n_features >= MRMR_GPU_MIN_FEATURES and _torch_cuda_available()
+
+
+def gpu_status_message():
+    parts = []
+    parts.append("mRMR en GPU (PyTorch)" if _torch_cuda_available() else "mRMR en CPU")
+    parts.append("XGBoost en GPU" if _xgb_gpu_ok() else "XGBoost en CPU")
+    return "Aceleración: " + ", ".join(parts)
+
+
+class _GPUXGBClassifier(XGBClassifier):
+    """XGBoost entrenado en GPU pero guardado listo para inferir en CPU.
+
+    Tras ajustar, el booster se pasa a CPU para que el modelo guardado en el
+    bundle funcione en equipos de tiempo real sin GPU.
+    """
+
+    def fit(self, X, y, **kwargs):
+        super().fit(X, y, **kwargs)
+        if str(self.get_params().get("device") or "").startswith("cuda"):
+            self.get_booster().set_param({"device": "cpu"})
+            self.set_params(device="cpu")
+        return self
+
+
+def _xgb_class_and_params():
+    if _xgb_gpu_ok():
+        return _GPUXGBClassifier, {"device": "cuda", "tree_method": "hist"}
+    return XGBClassifier, {}
+
+
+def _is_gpu_xgb(clf):
+    return isinstance(clf, XGBClassifier) and str(
+        clf.get_params().get("device") or ""
+    ).startswith("cuda")
+
+
+def _mrmr_greedy_torch(X, relevance, n_selected, device="cuda"):
+    """Correlación + selección greedy mRMR en GPU (float64, mismo cálculo).
+
+    Devuelve (indices, scores) o None si falla (p. ej. memoria), y entonces se
+    usa la ruta CPU.
+    """
+    try:
+        import torch
+
+        dev = torch.device(device)
+        n_features = X.shape[1]
+        Xt = torch.as_tensor(np.ascontiguousarray(X), dtype=torch.float64, device=dev)
+        corr = torch.corrcoef(Xt.T)
+        del Xt
+        corr = torch.nan_to_num(corr, nan=0.0, posinf=0.0, neginf=0.0)
+        corr = corr.clamp(-1.0 + 1e-12, 1.0 - 1e-12)
+        redundancy = -0.5 * torch.log1p(-(corr ** 2))
+        del corr
+        redundancy.fill_diagonal_(0.0)
+
+        rel = torch.as_tensor(relevance, dtype=torch.float64, device=dev)
+        available = torch.ones(n_features, dtype=torch.bool, device=dev)
+        red_sum = torch.zeros(n_features, dtype=torch.float64, device=dev)
+        out_idx = torch.empty(n_selected, dtype=torch.long, device=dev)
+        out_scores = torch.empty(n_selected, dtype=torch.float64, device=dev)
+        neg_inf = float("-inf")
+        for i in range(n_selected):
+            scores = rel.clone()
+            if i:
+                scores -= red_sum / i
+            scores[~available] = neg_inf
+            sel = torch.argmax(scores)
+            out_idx[i] = sel
+            out_scores[i] = scores[sel]
+            available[sel] = False
+            red_sum += redundancy[:, sel]
+        result = (
+            [int(v) for v in out_idx.cpu().tolist()],
+            [float(v) for v in out_scores.cpu().tolist()],
+        )
+        del redundancy
+        if dev.type == "cuda":
+            torch.cuda.empty_cache()
+        return result
+    except Exception:
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
+        return None
 
 
 def report_progress(progress_callback, message):
@@ -123,7 +264,9 @@ def build_classifiers(n_classes, seed=42):
     svm_rbf = SVC(kernel="rbf", C=1.5, gamma="scale", probability=True, random_state=randomState)
     logreg = LogisticRegression(C=1.0, max_iter=2000, random_state=randomState)
     rff = RandomForestClassifier(n_estimators=100, max_depth=6, random_state=randomState)
-    xgc = XGBClassifier(n_estimators=100, max_depth=4, learning_rate=0.05, **xgb_params)
+    xgb_cls, xgb_gpu_params = _xgb_class_and_params()
+    xgc = xgb_cls(n_estimators=100, max_depth=4, learning_rate=0.05,
+                  **xgb_params, **xgb_gpu_params)
 
     # --- NUEVOS CLASIFICADORES IDEALES POST-LDA ---
     gnb = GaussianNB()
@@ -190,69 +333,131 @@ def classifiers_for_group(classifiers, n_classes):
 # ===========================================================================================
 # PASO 2: PIPELINE CON LDA OPTIMIZADO PARA ARQUITECTURA JERÁRQUICA
 # ===========================================================================================
-def build_pipeline_hierarchical(clf, n_components, n_features_in, k_best=None,
-                                 use_double_lda=True):
+class MRMRSelector(BaseEstimator, TransformerMixin):
+    """Selecciona variables con mRMR usando MI clase-variable y redundancia gaussiana."""
+
+    def __init__(self, k, feature_names=None):
+        self.k = k
+        self.feature_names = feature_names
+
+    def fit(self, X, y):
+        X = np.asarray(X, dtype=float)
+        if X.ndim != 2 or X.shape[1] < 1:
+            raise ValueError("mRMR requiere una matriz con al menos una variable.")
+
+        n_features = X.shape[1]
+        if self.feature_names is not None and len(self.feature_names) != n_features:
+            raise ValueError(
+                "La cantidad de nombres de variables no coincide con las columnas de X."
+            )
+
+        relevance = mutual_info_classif(X, y, random_state=42)
+        n_selected = min(max(1, int(self.k)), n_features)
+        gpu_result = None
+        if _torch_gpu_enabled(n_features):
+            gpu_result = _mrmr_greedy_torch(X, relevance, n_selected)
+        if gpu_result is not None:
+            selected_indices, selection_scores = gpu_result
+        else:
+            correlation = np.asarray(np.corrcoef(X, rowvar=False))
+            if correlation.ndim == 0:
+                correlation = correlation.reshape(1, 1)
+            correlation = np.nan_to_num(correlation, nan=0.0, posinf=0.0, neginf=0.0)
+            correlation = np.clip(correlation, -1.0 + 1e-12, 1.0 - 1e-12)
+            redundancy = -0.5 * np.log1p(-(correlation ** 2))
+            np.fill_diagonal(redundancy, 0.0)
+
+            available = np.ones(n_features, dtype=bool)
+            selected_indices = []
+            selection_scores = []
+            # Suma acumulada de redundancia: equivale a la media sobre las columnas
+            # ya seleccionadas, pero sin recalcularla desde cero en cada iteración.
+            redundancy = np.asfortranarray(redundancy)
+            redundancy_sum = np.zeros(n_features)
+            for _ in range(n_selected):
+                scores = relevance.copy()
+                if selected_indices:
+                    scores -= redundancy_sum / len(selected_indices)
+                scores[~available] = -np.inf
+                selected = int(np.argmax(scores))
+                selected_indices.append(selected)
+                selection_scores.append(float(scores[selected]))
+                available[selected] = False
+                redundancy_sum += redundancy[:, selected]
+
+        if self.feature_names is None:
+            names = [str(index) for index in range(n_features)]
+        else:
+            names = list(self.feature_names)
+
+        self.n_features_in_ = n_features
+        self.relevance_scores_ = relevance
+        self.selected_indices_ = np.asarray(selected_indices, dtype=int)
+        self.selected_feature_names_ = [
+            names[index] for index in self.selected_indices_
+        ]
+        self.selection_scores_ = np.asarray(selection_scores)
+        return self
+
+    def transform(self, X):
+        if not hasattr(self, "selected_indices_"):
+            raise ValueError("El selector mRMR debe ajustarse antes de transformar.")
+        X = np.asarray(X)
+        if X.ndim != 2 or X.shape[1] != self.n_features_in_:
+            raise ValueError("La matriz de inferencia no coincide con las variables de mRMR.")
+        return X[:, self.selected_indices_]
+
+
+def build_pipeline_hierarchical(
+    clf, n_components, n_features_in, k_best=None, feature_names=None
+):
     """
-    Pipeline para arquitectura jerárquica con LDA en cascada doble:
+    Pipeline para cada nodo de la arquitectura jerárquica (Color → Grupo → Fino).
     
-    Flujo: StandardScaler → [SelectKBest] → LDA_1 (amplio) → LDA_2 (fino) → Clasificador
-    
-    - LDA_1 (grueso): reduce a min(n_components*3, n_features-1) componentes
-      para capturar la mayor varianza discriminante disponible.
-    - LDA_2 (fino): refina a n_components componentes en el espacio ya reducido,
-      maximizando la separación para el clasificador final.
-    - Clasificador: opera sobre las n_components features más discriminantes.
-    
-    El doble LDA mejora la separabilidad en espacios de alta dimensión (EEG)
-    donde un solo LDA puede no capturar toda la estructura de clase.
-    
-    use_double_lda: Si False, usa solo 1 LDA (modo legado).
+    Flujo: StandardScaler → mRMR → SafeLDA → Clasificador
     """
     steps = [("scaler", StandardScaler())]
 
     # 1. Selección de las mejores características iniciales
-    if k_best is not None and k_best < n_features_in:
-        steps.append(("select", SelectKBest(f_classif, k=k_best)))
-        effective_features = k_best
+    if k_best is not None:
+        k_final = min(max(1, k_best), n_features_in)
     else:
-        # Protección dinámica: si k_best es None, usamos el 80% de lo que entra
-        k_dinamico = max(1, int(n_features_in * 0.8))
-        steps.append(("select", SelectKBest(f_classif, k=k_dinamico)))
-        effective_features = k_dinamico
+        k_final = max(1, int(n_features_in * 0.8))
 
+    steps.append((
+        "mrmr",
+        MRMRSelector(k=k_final, feature_names=feature_names),
+    ))
 
-    # Asegurar componentes seguros
-    n_comp_safe = min(n_components, effective_features - 1, 200)
-    n_comp_safe = max(1, n_comp_safe)
+    # 2. Asegurar número válido de componentes LDA (máximo C - 1 y < k_final)
+    n_comp_safe = max(1, min(n_components, k_final - 1, 200))
 
-    # 2. LÓGICA DINÁMICA DE LDA:
-    # Si es clasificación binaria (n_comp_safe == 1), forzamos un solo LDA directo
-    if n_comp_safe == 1:
-        steps.append(("lda_directo", SafeLDA(
-            solver="eigen", shrinkage="auto", n_components=1)))
-    
-    # Si es multiclase (n_comp_safe >= 2) y está activo el doble LDA, usamos la cascada
-    elif use_double_lda and n_comp_safe >= 2:
-        # LDA 1 (amplio)
-        n_comp_lda1 = min(n_comp_safe * 3, effective_features - 1, 200)
-        n_comp_lda1 = max(n_comp_safe + 1, n_comp_lda1)
-        steps.append(("lda1", SafeLDA(
-            solver="eigen", shrinkage="auto", n_components=n_comp_lda1)))
+    # 3. Proyección discriminante única para este nivel de la cascada
+    steps.append((
+        "lda",
+        SafeLDA(solver="eigen", shrinkage="auto", n_components=n_comp_safe)
+    ))
 
-        # Re-escalar para estabilidad numérica en la cascada
-        steps.append(("scaler2", StandardScaler()))
-
-        # LDA 2 (fino)
-        steps.append(("lda2", SafeLDA(
-            solver="eigen", shrinkage="auto", n_components=n_comp_safe)))
-    else:
-        # Modo simple de respaldo
-        steps.append(("lda_simple", SafeLDA(
-            solver="eigen", shrinkage="auto", n_components=n_comp_safe)))
-
+    # 4. Clasificador final del nodo
     steps.append(("clf", clone(clf)))
 
     return Pipeline(steps)
+
+
+def get_k_best_candidates(n_features_in):
+    """Genera cantidades de variables candidatas según el tamaño de entrada."""
+    if n_features_in < 1:
+        raise ValueError("Se requiere al menos una característica para evaluar k_best.")
+
+    ratios = (
+        (0.02, 0.05, 0.10, 0.25, 0.50, 0.75)
+        if n_features_in > 300
+        else (0.10, 0.25, 0.50, 0.75, 1.0)
+    )
+    return sorted({
+        max(1, int(np.ceil(n_features_in * ratio)))
+        for ratio in ratios
+    })
 
 
 # ===========================================================================================
@@ -278,63 +483,238 @@ def plot_confusion_matrix(y_true, y_pred, labels, title, out_path):
 
 
 
-def evaluate_combination(df_subset, feature_cols, group_name, clf_name, clf,
-                        n_components, k_best=None, cv_splits=5, verbose=True):
-    """Evalúa una combinación con una sola CV y reutiliza sus predicciones OOF.
+# Clasificadores baratos: se ajustan en el proceso principal (evita el costo
+# de comunicación entre procesos, mayor que el propio ajuste).
+_CHEAP_CLASSIFIERS = (
+    GaussianNB,
+    QuadraticDiscriminantAnalysis,
+    LinearDiscriminantAnalysis,
+    LogisticRegression,
+    KNeighborsClassifier,
+)
 
-    Retorna accuracy_mean, accuracy_std, f1_macro_mean, f1_macro_std,
-    y_pred_oof, label_encoder y y_true.
+
+def _fast_eval_clone(clf):
+    """Clon del clasificador usado solo para la validación cruzada.
+
+    - SVC suelto: ``probability=False`` no cambia ``predict`` (usa la función de
+      decisión), y evita la validación cruzada interna del calibrador de Platt.
+    - XGBoost: ``n_jobs=1`` evita sobresuscripción al correr dentro de procesos
+      paralelos.
+    Los ensambles soft se dejan intactos porque requieren probabilidades.
+    El clasificador guardado como ganador sigue siendo el original.
     """
-    
-    le = LabelEncoder()
-    y = le.fit_transform(df_subset["label"].astype(str))
-    n_classes = len(le.classes_)
-    
-    X = df_subset[feature_cols].to_numpy()
-    X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
-    
-    if X.shape[0] < 2 or n_classes < 2:
-        return None, None, None, None, None, None, None
-    
-        # 1. Agrupar en bloques de 4 trials consecutivos por usuario y etiqueta
-    groups = df_subset.groupby(["usuario", "label"]).cumcount() // 4
-    
-    # Verificar cuántos grupos únicos tiene la clase con menos datos para evitar error en CV
-    min_groups = (
-        pd.DataFrame({"y": y, "g": groups})
-        .groupby("y")["g"]
-        .nunique()
-        .min()
-    )
-    n_splits = max(2, min(cv_splits, int(min_groups)))
-    
-    sgkf = StratifiedGroupKFold(n_splits=n_splits)
-    pipe = build_pipeline_hierarchical(clf, n_components, X.shape[1], k_best)
-    
-    try:
-        # Nota: pasamos groups=groups aquí y en el split() de abajo
-        y_pred_oof = cross_val_predict(
-            pipe, X, y, groups=groups, cv=sgkf, n_jobs=CV_N_JOBS
+    fast = clone(clf)
+    if isinstance(fast, SVC):
+        fast.set_params(probability=False)
+    elif isinstance(fast, XGBClassifier):
+        fast.set_params(n_jobs=1)
+    return fast
+
+
+def _fold_preprocessing(X, y, train_idx, test_idx, k_list, n_components,
+                        feature_names):
+    """Scaler → mRMR → LDA de un fold para todos los k candidatos.
+
+    Estas etapas no dependen del clasificador, y la selección mRMR (greedy)
+    para un k menor es un prefijo de la de un k mayor, así que se ajusta una
+    sola vez con el k máximo y se recorta. Devuelve, por k, las proyecciones
+    (train para ajustar, train para predecir, test).
+    """
+    n_features = X.shape[1]
+    k_finals = {k: min(max(1, int(k)), n_features) for k in k_list}
+    y_train = y[train_idx]
+
+    scaler = StandardScaler()
+    Xs_train = scaler.fit_transform(X[train_idx])
+    Xs_test = scaler.transform(X[test_idx])
+
+    selector = MRMRSelector(
+        k=max(k_finals.values()), feature_names=feature_names
+    ).fit(Xs_train, y_train)
+    order = selector.selected_indices_
+
+    out = {}
+    for k, k_final in k_finals.items():
+        idx = order[:k_final]
+        Xk_train = Xs_train[:, idx]
+        lda = SafeLDA(
+            solver="eigen",
+            shrinkage="auto",
+            n_components=max(1, min(n_components, k_final - 1, 200)),
         )
+        z_fit = lda.fit_transform(Xk_train, y_train)
+        out[k] = (z_fit, lda.transform(Xk_train), lda.transform(Xs_test[:, idx]))
+    return out
 
-        fold_acc = []
-        fold_f1 = []
-        for _, test_idx in sgkf.split(X, y, groups=groups):
-            fold_acc.append(accuracy_score(y[test_idx], y_pred_oof[test_idx]))
-            fold_f1.append(f1_score(y[test_idx], y_pred_oof[test_idx], average="macro"))
 
-        acc = np.asarray(fold_acc)
-        f1 = np.asarray(fold_f1)
-        
+def _fit_predict_fold(clf, y_train, z_fit, z_train_pred, z_test):
+    """Ajusta el clasificador final de un fold y devuelve (pred test, pred train)."""
+    model = clone(clf)
+    model.fit(z_fit, y_train)
+    return model.predict(z_test), model.predict(z_train_pred)
+
+
+def evaluate_combination(df_subset, feature_cols, group_name, clf_name, clf,
+                        n_components, k_best=None, cv_splits=5, verbose=True,
+                        cv_cache=None):
+    """Evalúa una combinación y selecciona k_best por F1 macro de CV agrupada.
+
+    Retorna métricas CV, predicciones OOF de test, encoder, etiquetas reales
+    y predicciones agregadas de train, además del k_best seleccionado.
+
+    ``cv_cache`` (dict opcional) permite reutilizar X, los folds y el
+    preprocesamiento (scaler/mRMR/LDA) entre clasificadores evaluados sobre el
+    mismo ``df_subset`` y ``feature_cols``. Si no se pasa, se usa uno nuevo.
+    """
+    if cv_cache is None:
+        cv_cache = {}
+    if cv_cache.get("df") is not df_subset or cv_cache.get("cols") is not feature_cols:
+        cv_cache.clear()
+        cv_cache["df"] = df_subset
+        cv_cache["cols"] = feature_cols
+
+    base = cv_cache.get("base")
+    if base is None:
+        le = LabelEncoder()
+        y = le.fit_transform(df_subset["label"].astype(str))
+        n_classes = len(le.classes_)
+
+        X = df_subset[feature_cols].to_numpy()
+        X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+
+        if X.shape[0] < 2 or n_classes < 2:
+            return None, None, None, None, None, None, None, None, None, None
+
+        # Agrupar en bloques de 4 trials consecutivos por usuario y etiqueta
+        groups = df_subset.groupby(["usuario", "label"]).cumcount() // 4
+
+        # Verificar cuántos grupos únicos tiene la clase con menos datos para evitar error en CV
+        min_groups = (
+            pd.DataFrame({"y": y, "g": groups})
+            .groupby("y")["g"]
+            .nunique()
+            .min()
+        )
+        n_splits = max(2, min(cv_splits, int(min_groups)))
+        base = {
+            "X": X, "y": y, "le": le, "n_classes": n_classes,
+            "groups": groups, "n_splits": n_splits,
+        }
+        cv_cache["base"] = base
+
+    X, y, le = base["X"], base["y"], base["le"]
+    n_classes = base["n_classes"]
+
+    try:
+        if "fold_splits" not in base:
+            #sgkf = StratifiedGroupKFold(n_splits=base["n_splits"])
+            #base["fold_splits"] = list(sgkf.split(X, y, groups=base["groups"]))
+            # Prueba con LeaveOneGroupOut para evitar problemas de pocos grupos por clase 1*30
+            base["fold_splits"] = list(LeaveOneGroupOut().split(X, y, groups=base["groups"]))
+        fold_splits = base["fold_splits"]
+        k_candidates = (
+            [k_best]
+            if k_best is not None
+            else get_k_best_candidates(X.shape[1])
+        )
+        fold_sample_counts = [
+            f"F{i}={len(train_idx)}/{len(test_idx)}"
+            for i, (train_idx, test_idx) in enumerate(fold_splits, 1)
+        ]
+
+        # Preprocesamiento independiente del clasificador: se calcula una vez
+        # por (fold, k) y se reutiliza para todos los clasificadores.
+        pre_key = (n_components, tuple(k_candidates))
+        pre_store = cv_cache.setdefault("pre", {})
+        pre = pre_store.get(pre_key)
+        if pre is None:
+            # Con mRMR en GPU se procesa en el proceso principal (una sola
+            # GPU; evita inicializar CUDA en cada worker).
+            pre_jobs = (
+                1 if _torch_gpu_enabled(X.shape[1])
+                else min(CV_N_JOBS, len(fold_splits))
+            )
+            pre = joblib.Parallel(n_jobs=pre_jobs)(
+                joblib.delayed(_fold_preprocessing)(
+                    X, y, train_idx, test_idx, k_candidates, n_components,
+                    feature_cols,
+                )
+                for train_idx, test_idx in fold_splits
+            )
+            pre_store[pre_key] = pre
+
+        # Ajuste del clasificador para todos los (k, fold) en una sola tanda.
+        fast_clf = _fast_eval_clone(clf)
+        task_keys = [
+            (candidate_k, fold)
+            for candidate_k in k_candidates
+            for fold in range(len(fold_splits))
+        ]
+        args = [
+            (fast_clf, y[fold_splits[fold][0]], *pre[fold][candidate_k])
+            for candidate_k, fold in task_keys
+        ]
+        if isinstance(clf, _CHEAP_CLASSIFIERS) or _is_gpu_xgb(clf):
+            task_results = [_fit_predict_fold(*a) for a in args]
+        else:
+            task_results = joblib.Parallel(
+                n_jobs=min(CV_N_JOBS, len(args))
+            )(joblib.delayed(_fit_predict_fold)(*a) for a in args)
+        preds = dict(zip(task_keys, task_results))
+
+        best_result = None
+        for candidate_k in k_candidates:
+            y_pred_oof = np.empty_like(y)
+            train_prediction_votes = np.zeros(
+                (len(y), n_classes), dtype=np.int32
+            )
+            fold_acc = []
+            fold_f1 = []
+            for fold, (train_idx, test_idx) in enumerate(fold_splits):
+                y_pred_test, y_pred_train = preds[(candidate_k, fold)]
+                y_pred_oof[test_idx] = y_pred_test
+                np.add.at(
+                    train_prediction_votes,
+                    (train_idx, y_pred_train),
+                    1,
+                )
+                fold_acc.append(accuracy_score(y[test_idx], y_pred_test))
+                fold_f1.append(f1_score(y[test_idx], y_pred_test, average="macro"))
+
+            acc = np.asarray(fold_acc)
+            f1 = np.asarray(fold_f1)
+            y_pred_train = train_prediction_votes.argmax(axis=1)
+            kappa = cohen_kappa_score(y, y_pred_oof)
+            candidate_result = (
+                float(acc.mean()),
+                float(acc.std()),
+                float(f1.mean()),
+                float(f1.std()),
+                y_pred_oof,
+                le,
+                y,
+                y_pred_train,
+                candidate_k,
+                float(kappa),
+            )
+            if best_result is None or candidate_result[2] > best_result[2]:
+                best_result = candidate_result
+
         if verbose:
             print(f"  {group_name:12s} × {clf_name:22s} | "
-                  f"acc={acc.mean():.3f}±{acc.std():.3f} | f1={f1.mean():.3f}±{f1.std():.3f}")
-        
-        return float(acc.mean()), float(acc.std()), float(f1.mean()), float(f1.std()), y_pred_oof, le, y
+                  f"muestras train/test por fold (train/test): "
+                  f"{', '.join(fold_sample_counts)} | "
+                  f"k_best={best_result[8]} | "
+                  f"acc={best_result[0]:.3f}±{best_result[1]:.3f} | "
+                  f"f1={best_result[2]:.3f}±{best_result[3]:.3f} | "
+                  f"kappa={best_result[9]:.3f}")
+
+        return best_result
     except Exception as e:
         # Siempre imprime el error real para facilitar diagnóstico
         print(f"  [ERROR] {group_name} × {clf_name}: {type(e).__name__}: {e}")
-        return None, None, None, None, None, None, None
+        return None, None, None, None, None, None, None, None, None, None
 
 
 # ===========================================================================================
@@ -351,6 +731,8 @@ def evaluate_all_hierarchical(
     Retorna: DataFrame con resultados, dict con mejores modelos por grupo
     """
     
+    if verbose:
+        print(gpu_status_message())
     classifiers = build_classifiers(40,seed=seed)  # 40 clases totales (27 letras + 10 números + 3 controles)
     results = []
     best_per_group = {}
@@ -376,14 +758,19 @@ def evaluate_all_hierarchical(
     for set_name, cols in feature_sets.items():
         if verbose:
             print(f"\n{set_name} ({len(cols)} features):")
+        cv_cache = {}
         for clf_name, clf in color_classifiers.items():
             report_progress(
                 progress_callback,
                 f"Evaluando color: {set_name} / {clf_name}...",
             )
-            acc_m, acc_s, f1_m, f1_s, y_pred, le, y_true = evaluate_combination(
+            (
+                acc_m, acc_s, f1_m, f1_s, y_pred, le, y_true,
+                y_train_pred, selected_k_best, selected_kappa,
+            ) = evaluate_combination(
                 df_for_color, cols, "color", clf_name, clf,
-                n_components=1, k_best=250, cv_splits=5, verbose=verbose
+                n_components=1, cv_splits=5, verbose=verbose,
+                cv_cache=cv_cache,
             )
             if acc_m is not None:
                 results.append({
@@ -392,6 +779,9 @@ def evaluate_all_hierarchical(
                     "n_clases": 2,
                     "feature_set": set_name,
                     "n_features": len(cols),
+                    "k_best": selected_k_best,
+                    "mrmr_ratio": selected_k_best / len(cols),
+                    "cohen_kappa": selected_kappa,
                     "clasificador": clf_name,
                     "accuracy_mean": acc_m,
                     "accuracy_std": acc_s,
@@ -406,12 +796,15 @@ def evaluate_all_hierarchical(
                         "clasificador": clf_name,
                         "clf": clf,
                         "n_components": 1,
+                        "k_best": selected_k_best,
+                        "cohen_kappa": selected_kappa,
                         "f1_macro": f1_m,
                         "accuracy_mean": acc_m,
                         "accuracy_std": acc_s,
                         "label_encoder": le,
                         "y_true": y_true,
                         "y_pred": y_pred,
+                        "y_train_pred": y_train_pred,
                     }
 
     if "color" not in best_per_group:
@@ -426,21 +819,25 @@ def evaluate_all_hierarchical(
             df_group_color[feature_cols_all], feature_cols_all
         )
         for set_name, cols in feature_sets.items():
+            cv_cache = {}
             for clf_name, clf in color_classifiers.items():
                 report_progress(
                     progress_callback,
                     f"Evaluando color en {group}: {set_name} / {clf_name}...",
                 )
-                acc_m, acc_s, f1_m, f1_s, _, _, _ = evaluate_combination(
+                (
+                    acc_m, acc_s, f1_m, f1_s, _, _, _, _,
+                    selected_k_best, selected_kappa,
+                ) = evaluate_combination(
                     df_group_color,
                     cols,
                     f"color-{group}",
                     clf_name,
                     clf,
                     n_components=1,
-                    k_best=250,
                     cv_splits=5,
                     verbose=verbose,
+                    cv_cache=cv_cache,
                 )
                 if acc_m is None:
                     continue
@@ -450,6 +847,9 @@ def evaluate_all_hierarchical(
                     "n_clases": 2,
                     "feature_set": set_name,
                     "n_features": len(cols),
+                    "k_best": selected_k_best,
+                    "mrmr_ratio": selected_k_best / len(cols),
+                    "cohen_kappa": selected_kappa,
                     "clasificador": clf_name,
                     "accuracy_mean": acc_m,
                     "accuracy_std": acc_s,
@@ -481,14 +881,19 @@ def evaluate_all_hierarchical(
         best_f1 = -1
 
         for set_name, cols in feature_sets.items():
+            cv_cache = {}
             for clf_name, clf in super_classifiers.items():
                 report_progress(
                     progress_callback,
                     f"Evaluando supergrupo {color}: {set_name} / {clf_name}...",
                 )
-                acc_m, acc_s, f1_m, f1_s, y_pred, le, y_true = evaluate_combination(
+                (
+                    acc_m, acc_s, f1_m, f1_s, y_pred, le, y_true,
+                    y_train_pred, selected_k_best, selected_kappa,
+                ) = evaluate_combination(
                     df_super, cols, f"super-{color}", clf_name, clf,
-                    n_components=2, k_best=250, cv_splits=5, verbose=verbose
+                    n_components=2, cv_splits=5, verbose=verbose,
+                    cv_cache=cv_cache,
                 )
                 if acc_m is None:
                     continue
@@ -499,6 +904,9 @@ def evaluate_all_hierarchical(
                     "n_clases": len(le.classes_),
                     "feature_set": set_name,
                     "n_features": len(cols),
+                    "k_best": selected_k_best,
+                    "mrmr_ratio": selected_k_best / len(cols),
+                    "cohen_kappa": selected_kappa,
                     "clasificador": clf_name,
                     "accuracy_mean": acc_m,
                     "accuracy_std": acc_s,
@@ -513,12 +921,15 @@ def evaluate_all_hierarchical(
                         "clasificador": clf_name,
                         "clf": clf,
                         "n_components": 2,
+                        "k_best": selected_k_best,
+                        "cohen_kappa": selected_kappa,
                         "f1_macro": f1_m,
                         "accuracy_mean": acc_m,
                         "accuracy_std": acc_s,
                         "label_encoder": le,
                         "y_true": y_true,
                         "y_pred": y_pred,
+                        "y_train_pred": y_train_pred,
                     }
 
         # ============ COMANDO FINO DENTRO DE COLOR + SUPER-GRUPO ============
@@ -562,15 +973,20 @@ def evaluate_all_hierarchical(
             best_f1 = -1
 
             for set_name, cols in feature_sets.items():
+                cv_cache = {}
                 for clf_name, clf in fine_classifiers.items():
                     report_progress(
                         progress_callback,
                         f"Evaluando {color}/{grupo}: {set_name} / {clf_name}...",
                     )
-                    acc_m, acc_s, f1_m, f1_s, y_pred, le, y_true = evaluate_combination(
+                    (
+                        acc_m, acc_s, f1_m, f1_s, y_pred, le, y_true,
+                        y_train_pred, selected_k_best, selected_kappa,
+                    ) = evaluate_combination(
                         df_fine, cols, f"{color}-{grupo}", clf_name, clf,
-                        n_components=n_components, k_best=250,
-                        cv_splits=5, verbose=verbose
+                        n_components=n_components,
+                        cv_splits=5, verbose=verbose,
+                        cv_cache=cv_cache,
                     )
                     if acc_m is None:
                         continue
@@ -581,6 +997,9 @@ def evaluate_all_hierarchical(
                         "n_clases": len(le.classes_),
                         "feature_set": set_name,
                         "n_features": len(cols),
+                        "k_best": selected_k_best,
+                        "mrmr_ratio": selected_k_best / len(cols),
+                        "cohen_kappa": selected_kappa,
                         "clasificador": clf_name,
                         "accuracy_mean": acc_m,
                         "accuracy_std": acc_s,
@@ -595,12 +1014,15 @@ def evaluate_all_hierarchical(
                             "clasificador": clf_name,
                             "clf": clf,
                             "n_components": n_components,
+                            "k_best": selected_k_best,
+                            "cohen_kappa": selected_kappa,
                             "f1_macro": f1_m,
                             "accuracy_mean": acc_m,
                             "accuracy_std": acc_s,
                             "label_encoder": le,
                             "y_true": y_true,
                             "y_pred": y_pred,
+                            "y_train_pred": y_train_pred,
                         }
 
             if fine_key not in best_per_group:
@@ -646,15 +1068,27 @@ def train_final_models(df, best_per_group, progress_callback=None):
         X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
         report_progress(progress_callback, f"Ajustando modelo final: {model_name}...")
         pipeline = build_pipeline_hierarchical(
-            model_info["clf"], model_info["n_components"], X.shape[1], k_best=250
+            model_info["clf"],
+            model_info["n_components"],
+            X.shape[1],
+            k_best=model_info["k_best"],
+            feature_names=model_info["cols"],
         )
         pipeline.fit(X, y)
+        selected_features = list(
+            pipeline.named_steps["mrmr"].selected_feature_names_
+        )
         return {
             "pipeline": pipeline,
             "label_encoder": le,
             "feature_columns": model_info["cols"],
+            "selected_feature_columns": selected_features,
             "feature_set": model_info["feature_set"],
             "clasificador": model_info["clasificador"],
+            "k_best": model_info["k_best"],
+            "mrmr_ratio": len(selected_features) / len(model_info["cols"]),
+            "cohen_kappa": model_info["cohen_kappa"],
+            "accuracy_mean": float(model_info["accuracy_mean"]),
             "f1_macro_cv": (
                 float(model_info["f1_macro"])
                 if model_info.get("f1_macro") is not None else None
@@ -704,6 +1138,97 @@ def train_final_models(df, best_per_group, progress_callback=None):
         final_bundles["por_color"][color] = hierarchy
 
     return final_bundles
+
+
+def write_mrmr_report(usuario, final_bundles, report_path):
+    """Escribe las variables elegidas por nodo y un resumen de canales."""
+    model_records = [("Color", final_bundles["color"])]
+    for color, hierarchy in final_bundles["por_color"].items():
+        model_records.append((
+            f"Supergrupo {color}",
+            hierarchy["super_clase"],
+        ))
+        model_records.extend(
+            (f"{color}/{group}", model)
+            for group, model in hierarchy["por_grupo"].items()
+        )
+
+    channel_counts = Counter()
+    channel_models = {}
+    channel_relevance = {}
+    lines = [
+        f"Reporte mRMR - Usuario: {usuario}",
+        "=" * 72,
+        "Los nombres listados son las variables de entrada que el pipeline",
+        "selecciona antes de LDA. La inferencia reordena las columnas con",
+        "'feature_columns' y aplica el selector mRMR guardado en cada pipeline.",
+        "",
+        "Modelos finales por nodo",
+        "-" * 72,
+    ]
+
+    for model_name, model in model_records:
+        lines.append(f"\n{model_name}")
+        if "fixed_label" in model:
+            lines.append(f"  Salida fija: {model['fixed_label']}")
+            continue
+
+        selector = model["pipeline"].named_steps["mrmr"]
+        selected_features = model.get(
+            "selected_feature_columns",
+            selector.selected_feature_names_,
+        )
+        input_features = model["feature_columns"]
+        ratio = len(selected_features) / len(input_features)
+        lines.extend([
+            f"  Clasificador: {model['clasificador']}",
+            f"  Conjunto de entrada: {model['feature_set']} "
+            f"({len(input_features)} variables)",
+            f"  Variables mRMR: {len(selected_features)} "
+            f"({ratio:.1%} de entrada)",
+            f"  Métricas CV: F1 macro={model['f1_macro_cv']:.4f}, "
+            f"accuracy={model['accuracy_mean']:.4f}, "
+            f"kappa={model['cohen_kappa']:.4f}",
+            "  Variables seleccionadas (orden mRMR):",
+        ])
+        relevance_by_feature = dict(zip(
+            input_features, selector.relevance_scores_
+        ))
+        for feature in selected_features:
+            channel = str(feature).split("_", 1)[0]
+            relevance = float(relevance_by_feature[feature])
+            lines.append(
+                f"    - {feature} (relevancia MI={relevance:.5f})"
+            )
+            channel_counts[channel] += 1
+            channel_models.setdefault(channel, set()).add(model_name)
+            channel_relevance.setdefault(channel, []).append(relevance)
+
+    lines.extend([
+        "",
+        "Canales con mayor presencia en la selección mRMR",
+        "-" * 72,
+        "El canal se identifica por el prefijo de cada variable hasta '_'.",
+        "La frecuencia cuenta variables seleccionadas en todos los nodos;",
+        "la relevancia MI es el promedio de esas variables seleccionadas.",
+    ])
+    for channel, count in sorted(
+        channel_counts.items(),
+        key=lambda item: (
+            -item[1],
+            -float(np.mean(channel_relevance[item[0]])),
+            item[0],
+        ),
+    ):
+        mean_relevance = float(np.mean(channel_relevance[channel]))
+        lines.append(
+            f"  {channel}: {count} variables seleccionadas, "
+            f"{len(channel_models[channel])} nodos, "
+            f"relevancia MI media={mean_relevance:.5f}"
+        )
+
+    with open(report_path, "w", encoding="utf-8") as report_file:
+        report_file.write("\n".join(lines) + "\n")
 
 
 def train_top_models_by_category(
@@ -871,9 +1396,13 @@ def train_top_models_by_category(
                     group_classifiers[row["clasificador"]],
                     model_n_components,
                     X.shape[1],
-                    k_best=250,
+                    k_best=int(row["k_best"]),
+                    feature_names=cols,
                 )
                 pipeline.fit(X, y)
+                selected_features = list(
+                    pipeline.named_steps["mrmr"].selected_feature_names_
+                )
                 trained_models[model_key] = {
                     "nivel": nivel,
                     "color": color,
@@ -881,8 +1410,12 @@ def train_top_models_by_category(
                     "pipeline": pipeline,
                     "label_encoder": label_encoder,
                     "feature_columns": cols,
+                    "selected_feature_columns": selected_features,
                     "feature_set": row["feature_set"],
                     "clasificador": row["clasificador"],
+                    "k_best": int(row["k_best"]),
+                    "mrmr_ratio": len(selected_features) / len(cols),
+                    "cohen_kappa": float(row["cohen_kappa"]),
                     "f1_macro_cv": float(row["f1_macro_mean"]),
                     "accuracy_mean": float(row["accuracy_mean"]),
                 }
@@ -913,7 +1446,7 @@ def train_top_models_by_category(
                     row["clasificador"],
                     group_classifiers[row["clasificador"]],
                     model_n_components,
-                    k_best=250,
+                    k_best=int(row["k_best"]),
                     cv_splits=5,
                     verbose=False,
                 )
@@ -926,6 +1459,9 @@ def train_top_models_by_category(
                     "y_pred": cv_result[4],
                     "label_encoder_cv": cv_result[5],
                     "y_true": cv_result[6],
+                    "y_train_pred": cv_result[7],
+                    "k_best": cv_result[8],
+                    "cohen_kappa": cv_result[9],
                 }
 
             top_models[category].append({
@@ -1020,8 +1556,14 @@ def _to_inference_bundle(model):
         "pipeline": model["pipeline"],
         "label_encoder": model["label_encoder"],
         "feature_columns": model["feature_columns"],
+        "selected_feature_columns": model.get(
+            "selected_feature_columns", []
+        ),
         "feature_set": model["feature_set"],
         "clasificador": model["clasificador"],
+        "k_best": model["k_best"],
+        "mrmr_ratio": model.get("mrmr_ratio"),
+        "cohen_kappa": model["cohen_kappa"],
         "f1_macro_cv": model["f1_macro_cv"],
     }
 
@@ -1075,7 +1617,12 @@ def save_top_model_artifacts(
                 )
 
             joblib.dump(artifact, model_path)
-            confusion_path = os.path.join(category_dir, f"{filename}_matriz.png")
+            test_confusion_path = os.path.join(
+                category_dir, f"{filename}_matriz_test.png"
+            )
+            train_confusion_path = os.path.join(
+                category_dir, f"{filename}_matriz_train.png"
+            )
             labels = [
                 str(label) for label in model["label_encoder_cv"].classes_
             ]
@@ -1084,15 +1631,27 @@ def save_top_model_artifacts(
                 model["y_pred"],
                 labels,
                 (
-                    f"{category} top {model['rank']} | {color} | {model['grupo']}\n"
-                    f"F1 macro CV={model['f1_macro_cv']:.3f}"
+                    f"{category} top {model['rank']} | {color} | "
+                    f"{model['grupo']} | TEST OOF | "
+                    f"kappa={model['cohen_kappa']:.3f}"
                 ),
-                confusion_path,
+                test_confusion_path,
+            )
+            plot_confusion_matrix(
+                model["y_true"],
+                model["y_train_pred"],
+                labels,
+                (
+                    f"{category} top {model['rank']} | {color} | "
+                    f"{model['grupo']} | TRAIN CV | "
+                    f"kappa={cohen_kappa_score(model['y_true'], model['y_train_pred']):.3f}"
+                ),
+                train_confusion_path,
             )
             print(
                 f"   OK {category} #{model['rank']}: {model_path} "
-                f"({len(artifact['archivo_capas'])} capas, matriz: "
-                f"{confusion_path})"
+                f"({len(artifact['archivo_capas'])} capas, matrices: "
+                f"train={train_confusion_path}, test={test_confusion_path})"
             )
 
     return artifacts_dir
@@ -1108,14 +1667,36 @@ def save_confusion_matrices_per_user(usuario, best_per_group, figures_dir):
         if info.get("y_true") is None or info.get("y_pred") is None:
             continue
         labels = [str(lbl) for lbl in info["label_encoder"].classes_]
-        out_path = os.path.join(figures_dir, f"cm_{nivel}.png")
-        title = (
-            f"{usuario} | {nivel}\n"
-            f"acc={info.get('accuracy_mean', 0.0):.3f}, "
-            f"f1_macro={info.get('f1_macro', 0.0):.3f}"
+        test_path = os.path.join(figures_dir, f"cm_{nivel}_test.png")
+        train_path = os.path.join(figures_dir, f"cm_{nivel}_train.png")
+        test_metrics = (
+            f"acc={accuracy_score(info['y_true'], info['y_pred']):.3f}, "
+            f"f1_macro={f1_score(info['y_true'], info['y_pred'], average='macro'):.3f}, "
+            f"kappa={cohen_kappa_score(info['y_true'], info['y_pred']):.3f}"
         )
-        plot_confusion_matrix(info["y_true"], info["y_pred"], labels, title, out_path)
-        print(f"   ✓ Matriz guardada en: {out_path}")
+        train_metrics = (
+            f"acc={accuracy_score(info['y_true'], info['y_train_pred']):.3f}, "
+            "f1_macro="
+            f"{f1_score(info['y_true'], info['y_train_pred'], average='macro'):.3f}, "
+            f"kappa={cohen_kappa_score(info['y_true'], info['y_train_pred']):.3f}"
+        )
+        plot_confusion_matrix(
+            info["y_true"],
+            info["y_pred"],
+            labels,
+            f"{usuario} | {nivel} | TEST OOF\n{test_metrics}",
+            test_path,
+        )
+        plot_confusion_matrix(
+            info["y_true"],
+            info["y_train_pred"],
+            labels,
+            f"{usuario} | {nivel} | TRAIN CV\n{train_metrics}",
+            train_path,
+        )
+        print(
+            f"   ✓ Matrices guardadas: train={train_path}, test={test_path}"
+        )
 
 
 def train_optimized_hierarchical(
@@ -1128,7 +1709,7 @@ def train_optimized_hierarchical(
     window_size=None,
     window_overlap=None,
     max_recordings_per_class=None,
-    verbose=True,
+    verbose=False,
     semilla=None,
     progress_callback: Optional[Callable[[str], None]] = None,
 ):
@@ -1198,7 +1779,7 @@ def train_optimized_hierarchical(
         print("Incio de evaluacion exhaustiva",ini)
         results_df, best_per_group = evaluate_all_hierarchical(
             df_usuario,
-            verbose=False,
+            verbose=verbose,
             seed=semilla,
             progress_callback=progress_callback,
         )
@@ -1223,13 +1804,24 @@ def train_optimized_hierarchical(
         
         # Resumen ganadores por grupo
         print(f"\n   GANADOR POR CADA GRUPO ({usuario}):")
-        print("   " + "-" * 96)
+        print("   " + "-" * 140)
+        print(
+            f"   {'grupo':20s} | {'feature_set':24s} | {'clf':22s} | "
+            f"{'n_features':10s} | {'k_best':7s} | {'Acc':7s} | "
+            f"{'f1_cv':7s} | {'Kappa':7s}"
+        )
+        print("   " + "-" * 140)
         for grupo, info in best_per_group.items():
             if info.get("fixed_label") is not None:
                 print(f"   {grupo:20s} | salida fija={ascii(info['fixed_label'])}")
                 continue
-            print(f"   {grupo:20s} | feature_set={info['feature_set']:18s} | "
-                  f"clf={info['clasificador']:22s} | f1_cv={info['f1_macro']:.3f}")
+            print(
+                f"   {grupo:20s} | {info['feature_set']:24s} | "
+                f"{info['clasificador']:22s} | {len(info['cols']):10d} | "
+                f"{info['k_best']:7d} | "
+                f"{info['accuracy_mean']:.3f} | {info['f1_macro']:.3f} | "
+                f"{info['cohen_kappa']:.3f}"
+            )
         
         # Paso 5: Entrenar modelos finales para este usuario
         print(f"\n3) Entrenando modelos finales por color para {usuario}...")
@@ -1240,6 +1832,10 @@ def train_optimized_hierarchical(
         final_bundles = train_final_models(
             df_usuario, best_per_group, progress_callback=progress_callback
         )
+        mrmr_report_path = os.path.join(usuario_dir, "reporte_mrmr.txt")
+        write_mrmr_report(usuario, final_bundles, mrmr_report_path)
+        print(f"   ✓ Reporte de variables mRMR guardado en: {mrmr_report_path}")
+
         top_models_by_category = train_top_models_by_category(
             df_usuario,
             results_df,
@@ -1328,6 +1924,7 @@ def train_optimized_hierarchical(
             "mejor_clasificador": best_row["clasificador"],
             "accuracy_mean": float(best_row["accuracy_mean"]),
             "f1_macro_mean": float(best_row["f1_macro_mean"]),
+            "cohen_kappa": float(best_row["cohen_kappa"]),
         })
     
     # Resumen final global

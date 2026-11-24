@@ -428,8 +428,31 @@ def log_transform_power_columns(X_df, feature_cols):
 def get_feature_sets(all_cols):
     """
     Agrupa las columnas de características en subconjuntos temáticos limpios
-    (estadísticas, frecuencia absoluta/relativa, wavelets, Welch, ERP P300).
+    y ordena TODAS las columnas de los 14 canales Emotiv siguiendo el Orden de Ginebra.
     """
+    # Orden original de tu hardware (Emotiv EPOC):
+    # ["F3", "FC5", "AF3", "F7", "T7", "P7", "O1", "O2", "P8", "T8", "F8", "AF4", "FC6", "F4"]
+
+    # Orden de Ginebra adaptado a tus 14 canales (Frontal -> Occipital: Izquierda luego Derecha)
+    GENEVA_ORDER_14 = [
+        # Hemisferio Izquierdo (índices 0 al 6)
+        "AF3", "F3", "F7", "FC5", "T7", "P7", "O1",
+        # Hemisferio Derecho (índices 7 al 13)
+        "AF4", "F4", "F8", "FC6", "T8", "P8", "O2"
+    ]
+    
+    geneva_rank = {ch: idx for idx, ch in enumerate(GENEVA_ORDER_14)}
+
+    def sort_by_geneva(cols):
+        """Ordena las columnas según el canal al inicio del nombre (ej. 'AF3_beta_mean')."""
+        def get_channel_priority(col_name):
+            # Extraer el prefijo del canal antes del primer '_'
+            prefix = col_name.split("_", 1)[0]
+            # Ordena primero por posición en Geneva Order y luego alfabéticamente por característica
+            return (geneva_rank.get(prefix, 999), col_name)
+
+        return sorted(cols, key=get_channel_priority)
+
     # Descartar columnas constantes o de conteo fijo detectadas en el dataset
     valid_cols = [c for c in all_cols if "_wD5_" not in c and "num_coeffs" not in c]
 
@@ -467,7 +490,6 @@ def get_feature_sets(all_cols):
         "Wavelets": [c for c in valid_cols if any(k in c for k in wav_keys)],
         "Wavelets_Est": [c for c in valid_cols if any(k in c for k in wAD_Est)],
 
-        # Ahora sin mezclarse con las columnas de _welch_
         "Frecuencias_Todas": [c for c in valid_cols if any(b in c for b in bandas_fft)
                               and "_welch_" not in c],
 
@@ -482,7 +504,7 @@ def get_feature_sets(all_cols):
         "Beta_Gamma_Est": [c for c in valid_cols if any(b in c for b in ["_beta_", "_gamma_"])
                            and "_welch_" not in c and not c.endswith(("_Abs", "_rel"))],
 
-        # --- NUEVOS GRUPOS ESPECIALIZADOS EN P300 Y ERP ---
+        # --- GRUPOS ESPECIALIZADOS EN P300 Y ERP ---
         "ERP_P300_Puro": [c for c in valid_cols if "_p300_" in c],
 
         "Bajas_Frec_ERP": [c for c in valid_cols if any(k in c for k in
@@ -496,9 +518,18 @@ def get_feature_sets(all_cols):
         "Espectral_Mas_ERP": [c for c in valid_cols if any(k in c for k in
                               ["_welch_", "delta_rel", "theta_rel", "alpha_rel", "beta_rel", "gamma_rel", "_p300_"])],
 
+        "Relativas_Mas_ERP": [c for c in valid_cols if any(k in c for k in
+            ["delta_rel", "theta_rel", "alpha_rel", "beta_rel", "gamma_rel", "_p300_"])],
+
+        "Habla_Imaginada_Lenguaje": [c for c in valid_cols if c.startswith(("F7_", "F3_", "FC5_", "T7_", "F8_", "F4_", "FC6_", "T8_"))
+            and "_p300_" not in c],
+        
         "TODAS": valid_cols,
     }
-    return {k: v for k, v in sets.items() if v}
+
+    # Aplicar el orden de Ginebra a cada subconjunto antes de retornarlo
+    return {k: sort_by_geneva(v) for k, v in sets.items() if v}
+
 
 
 

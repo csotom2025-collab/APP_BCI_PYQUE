@@ -3,14 +3,19 @@ import io
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 import joblib
+import numpy as np
 import pandas as pd
 
 from models.newTraining.BCIpredictorhierarchical import HierarchicalBCIPredictor
 from models.newTraining.train_hierarchical_optimized import (
+    MRMRSelector,
     build_top_hierarchical_bundles,
+    get_k_best_candidates,
     _prepare_color_training_data,
+    write_mrmr_report,
 )
 
 
@@ -48,6 +53,68 @@ def _top_models():
 
 
 class HierarchicalCascadeTests(unittest.TestCase):
+    def test_mrmr_candidate_counts_follow_feature_count_ratios(self):
+        self.assertEqual(
+            get_k_best_candidates(500), [10, 25, 50, 125, 250, 375]
+        )
+        self.assertEqual(
+            get_k_best_candidates(300), [30, 75, 150, 225, 300]
+        )
+        self.assertEqual(get_k_best_candidates(1), [1])
+
+    def test_mrmr_selector_persists_names_and_reduces_redundancy(self):
+        rng = np.random.default_rng(42)
+        y = np.tile([0, 1], 200)
+        informative = y + rng.normal(0, 0.15, size=len(y))
+        X = np.column_stack((
+            informative,
+            informative,
+            rng.normal(size=len(y)),
+        ))
+        selector = MRMRSelector(
+            k=2,
+            feature_names=("Cz_informative", "Cz_duplicate", "Pz_noise"),
+        )
+
+        transformed = selector.fit_transform(X, y)
+
+        self.assertEqual(
+            selector.selected_feature_names_,
+            ["Cz_informative", "Pz_noise"],
+        )
+        self.assertEqual(transformed.shape, (len(y), 2))
+        np.testing.assert_array_equal(
+            transformed, X[:, selector.selected_indices_]
+        )
+
+    def test_mrmr_report_lists_selected_variables_and_channel_summary(self):
+        selector = SimpleNamespace(
+            selected_feature_names_=["Cz_signal"],
+            relevance_scores_=np.array([0.75, 0.1]),
+        )
+        model = {
+            "pipeline": SimpleNamespace(named_steps={"mrmr": selector}),
+            "feature_columns": ["Cz_signal", "Pz_noise"],
+            "selected_feature_columns": ["Cz_signal"],
+            "feature_set": "Estadisticas",
+            "clasificador": "LogReg",
+            "f1_macro_cv": 0.9,
+            "accuracy_mean": 0.92,
+            "cohen_kappa": 0.8,
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report_path = Path(temp_dir) / "reporte_mrmr.txt"
+            write_mrmr_report(
+                "usuario_prueba",
+                {"color": model, "por_color": {}},
+                str(report_path),
+            )
+            report = report_path.read_text(encoding="utf-8")
+
+        self.assertIn("Cz_signal", report)
+        self.assertIn("Cz: 1 variables seleccionadas", report)
+
     def test_color_training_data_is_limited_to_requested_group(self):
         samples = pd.DataFrame({
             "tpComando": ["Letters", "Letters", "Numbers", "Numbers"],

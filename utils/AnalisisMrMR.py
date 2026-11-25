@@ -68,11 +68,6 @@ def analizar_reporte_mrmr_ponderado(ruta_archivo):
             "Beta_Gamma_All": [c for c in valid_cols if any(b in c for b in ["_beta_", "_gamma_"]) and "_welch_" not in c],
             "Beta_Gamma_Est": [c for c in valid_cols if any(b in c for b in ["_beta_", "_gamma_"]) and "_welch_" not in c and not c.endswith(("_Abs", "_rel"))],
             "ERP_P300_Puro": [c for c in valid_cols if "_p300_" in c],
-            "Bajas_Frec_ERP": [c for c in valid_cols if any(k in c for k in ["_delta_", "_theta_", "_alpha_", "_wA4_", "_wD4_", "_p300_"])],
-            "Parieto_Occipital_All": [c for c in valid_cols if c.startswith(("P7_", "P8_", "O1_", "O2_"))],
-            "Beta_Gamma_ERP": [c for c in valid_cols if (any(b in c for b in ["_beta_", "_gamma_"]) and "_welch_" not in c) or "_p300_" in c],
-            "Espectral_Mas_ERP": [c for c in valid_cols if any(k in c for k in ["_welch_", "delta_rel", "theta_rel", "alpha_rel", "beta_rel", "gamma_rel", "_p300_"])],
-            "Relativas_Mas_ERP": [c for c in valid_cols if any(k in c for k in ["delta_rel", "theta_rel", "alpha_rel", "beta_rel", "gamma_rel", "_p300_"])],
         }
 
     # Acumuladores para el resumen general global
@@ -204,4 +199,4 @@ def analizar_reporte_mrmr_ponderado(ruta_archivo):
         print(f"  - {nombre_set:<22}: MI Suma = {datos['mi']:>8.4f} ({pct:>5.1f}%) | Apariciones = {datos['count']:>4} | Nodos = {len(datos['nodos'])}/{nodos_activos} | MI Media = {media:.4f}")
     print("\n")
 if __name__ == "__main__":
-    analizar_reporte_mrmr_ponderado(r"C:/Users/usuario/Desktop/APP_BCI_PYQUE/trainingOutputs/UserCMSM/reporte_mrmr_40_rep.txt")
+    analizar_reporte_mrmr_ponderado(r"C:/Users/usuario/Desktop/APP_BCI_PYQUE/trainingOutputs/UserCMSM/reporte_mrmr.txt")

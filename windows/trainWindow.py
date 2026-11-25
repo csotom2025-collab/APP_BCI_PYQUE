@@ -437,7 +437,7 @@ class TrainWindow(QMainWindow):
         self.dataset_preparation_thread = None
         self.lda_visualization_thread = None
         self.setup_ui()
-        self.models= ['lstm', 'lda', 'svm', 'random_forest', 'xgboost']
+        self.models= ['Cascada LDA','Cascada','Cascada PCA']
         self.show_models()
         self.show_users()
         

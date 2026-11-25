@@ -510,8 +510,7 @@ def get_feature_sets(all_cols):
         "Bajas_Frec_ERP": [c for c in valid_cols if any(k in c for k in
                            ["_delta_", "_theta_", "_alpha_", "_wA4_", "_wD4_", "_p300_"])],
 
-        "Parieto_Occipital_All": [c for c in valid_cols if c.startswith(("P7_", "P8_", "O1_", "O2_"))],
-
+        
         "Beta_Gamma_ERP": [c for c in valid_cols if (any(b in c for b in ["_beta_", "_gamma_"])
                            and "_welch_" not in c) or "_p300_" in c],
 
@@ -521,8 +520,6 @@ def get_feature_sets(all_cols):
         "Relativas_Mas_ERP": [c for c in valid_cols if any(k in c for k in
             ["delta_rel", "theta_rel", "alpha_rel", "beta_rel", "gamma_rel", "_p300_"])],
 
-        "Habla_Imaginada_Lenguaje": [c for c in valid_cols if c.startswith(("F7_", "F3_", "FC5_", "T7_", "F8_", "F4_", "FC6_", "T8_"))
-            and "_p300_" not in c],
         
         "TODAS": valid_cols,
     }

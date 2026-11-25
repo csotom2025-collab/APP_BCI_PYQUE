@@ -36,7 +36,7 @@ from sklearn.base import BaseEstimator, TransformerMixin, clone
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.pipeline import Pipeline
 from sklearn.feature_selection import mutual_info_classif
-from sklearn.model_selection import StratifiedGroupKFold, cross_validate,LeaveOneGroupOut
+from sklearn.model_selection import StratifiedGroupKFold, LeaveOneGroupOut
 from sklearn.neural_network import MLPClassifier
 from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
@@ -57,142 +57,7 @@ from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis, LinearD
 from sklearn.neighbors import KNeighborsClassifier
 
 
-CV_N_JOBS = max(1, len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else (os.cpu_count() or 4))
-
-# ---------------------------------------------------------------------------
-# Soporte opcional de GPU (detección automática, con fallback a CPU)
-#   USE_GPU=0            -> fuerza CPU
-#   MRMR_GPU_MIN_FEATURES -> mínimo de variables para usar GPU en mRMR (def. 400);
-#                           con pocas variables la CPU es más rápida.
-# ---------------------------------------------------------------------------
-_GPU_DISABLED = os.environ.get("USE_GPU", "1").strip().lower() in ("0", "false", "no")
-MRMR_GPU_MIN_FEATURES = int(os.environ.get("MRMR_GPU_MIN_FEATURES", "400"))
-_GPU_STATE = {}
-
-
-def _torch_cuda_available():
-    """True si PyTorch está instalado y hay una GPU CUDA disponible."""
-    if _GPU_DISABLED:
-        return False
-    if "torch" not in _GPU_STATE:
-        try:
-            import torch
-            _GPU_STATE["torch"] = bool(torch.cuda.is_available())
-        except Exception:
-            _GPU_STATE["torch"] = False
-    return _GPU_STATE["torch"]
-
-
-def _xgb_gpu_ok():
-    """True si XGBoost puede entrenar en GPU (se prueba con un modelo mínimo)."""
-    if _GPU_DISABLED:
-        return False
-    if "xgb" not in _GPU_STATE:
-        try:
-            rng = np.random.default_rng(0)
-            probe = XGBClassifier(
-                n_estimators=1, device="cuda", tree_method="hist"
-            ).fit(rng.random((20, 3)), np.arange(20) % 2)
-            # Sin GPU, XGBoost no falla: cambia a CPU en silencio. Se comprueba
-            # el dispositivo realmente usado por el booster.
-            device = json.loads(probe.get_booster().save_config())[
-                "learner"]["generic_param"].get("device", "cpu")
-            _GPU_STATE["xgb"] = str(device).startswith("cuda")
-        except Exception:
-            _GPU_STATE["xgb"] = False
-    return _GPU_STATE["xgb"]
-
-
-def _torch_gpu_enabled(n_features):
-    return n_features >= MRMR_GPU_MIN_FEATURES and _torch_cuda_available()
-
-
-def gpu_status_message():
-    parts = []
-    parts.append("mRMR en GPU (PyTorch)" if _torch_cuda_available() else "mRMR en CPU")
-    parts.append("XGBoost en GPU" if _xgb_gpu_ok() else "XGBoost en CPU")
-    return "Aceleración: " + ", ".join(parts)
-
-
-class _GPUXGBClassifier(XGBClassifier):
-    """XGBoost entrenado en GPU pero guardado listo para inferir en CPU.
-
-    Tras ajustar, el booster se pasa a CPU para que el modelo guardado en el
-    bundle funcione en equipos de tiempo real sin GPU.
-    """
-
-    def fit(self, X, y, **kwargs):
-        super().fit(X, y, **kwargs)
-        if str(self.get_params().get("device") or "").startswith("cuda"):
-            self.get_booster().set_param({"device": "cpu"})
-            self.set_params(device="cpu")
-        return self
-
-
-def _xgb_class_and_params():
-    if _xgb_gpu_ok():
-        return _GPUXGBClassifier, {"device": "cuda", "tree_method": "hist"}
-    return XGBClassifier, {}
-
-
-def _is_gpu_xgb(clf):
-    return isinstance(clf, XGBClassifier) and str(
-        clf.get_params().get("device") or ""
-    ).startswith("cuda")
-
-
-def _mrmr_greedy_torch(X, relevance, n_selected, device="cuda"):
-    """Correlación + selección greedy mRMR en GPU (float64, mismo cálculo).
-
-    Devuelve (indices, scores) o None si falla (p. ej. memoria), y entonces se
-    usa la ruta CPU.
-    """
-    try:
-        import torch
-
-        dev = torch.device(device)
-        n_features = X.shape[1]
-        Xt = torch.as_tensor(np.ascontiguousarray(X), dtype=torch.float64, device=dev)
-        corr = torch.corrcoef(Xt.T)
-        del Xt
-        corr = torch.nan_to_num(corr, nan=0.0, posinf=0.0, neginf=0.0)
-        corr = corr.clamp(-1.0 + 1e-12, 1.0 - 1e-12)
-        redundancy = -0.5 * torch.log1p(-(corr ** 2))
-        del corr
-        redundancy.fill_diagonal_(0.0)
-
-        rel = torch.as_tensor(relevance, dtype=torch.float64, device=dev)
-        available = torch.ones(n_features, dtype=torch.bool, device=dev)
-        red_sum = torch.zeros(n_features, dtype=torch.float64, device=dev)
-        out_idx = torch.empty(n_selected, dtype=torch.long, device=dev)
-        out_scores = torch.empty(n_selected, dtype=torch.float64, device=dev)
-        neg_inf = float("-inf")
-        for i in range(n_selected):
-            scores = rel.clone()
-            if i:
-                scores -= red_sum / i
-            scores[~available] = neg_inf
-            sel = torch.argmax(scores)
-            out_idx[i] = sel
-            out_scores[i] = scores[sel]
-            available[sel] = False
-            red_sum += redundancy[:, sel]
-        result = (
-            [int(v) for v in out_idx.cpu().tolist()],
-            [float(v) for v in out_scores.cpu().tolist()],
-        )
-        del redundancy
-        if dev.type == "cuda":
-            torch.cuda.empty_cache()
-        return result
-    except Exception:
-        try:
-            import torch
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-        except Exception:
-            pass
-        return None
+CV_N_JOBS = max(1, (os.cpu_count() or 4) - 1)
 
 
 def report_progress(progress_callback, message):
@@ -264,9 +129,7 @@ def build_classifiers(n_classes, seed=42):
     svm_rbf = SVC(kernel="rbf", C=1.5, gamma="scale", probability=True, random_state=randomState)
     logreg = LogisticRegression(C=1.0, max_iter=2000, random_state=randomState)
     rff = RandomForestClassifier(n_estimators=100, max_depth=6, random_state=randomState)
-    xgb_cls, xgb_gpu_params = _xgb_class_and_params()
-    xgc = xgb_cls(n_estimators=100, max_depth=4, learning_rate=0.05,
-                  **xgb_params, **xgb_gpu_params)
+    xgc = XGBClassifier(n_estimators=100, max_depth=4, learning_rate=0.05, **xgb_params)
 
     # --- NUEVOS CLASIFICADORES IDEALES POST-LDA ---
     gnb = GaussianNB()
@@ -352,38 +215,32 @@ class MRMRSelector(BaseEstimator, TransformerMixin):
             )
 
         relevance = mutual_info_classif(X, y, random_state=42)
-        n_selected = min(max(1, int(self.k)), n_features)
-        gpu_result = None
-        if _torch_gpu_enabled(n_features):
-            gpu_result = _mrmr_greedy_torch(X, relevance, n_selected)
-        if gpu_result is not None:
-            selected_indices, selection_scores = gpu_result
-        else:
-            correlation = np.asarray(np.corrcoef(X, rowvar=False))
-            if correlation.ndim == 0:
-                correlation = correlation.reshape(1, 1)
-            correlation = np.nan_to_num(correlation, nan=0.0, posinf=0.0, neginf=0.0)
-            correlation = np.clip(correlation, -1.0 + 1e-12, 1.0 - 1e-12)
-            redundancy = -0.5 * np.log1p(-(correlation ** 2))
-            np.fill_diagonal(redundancy, 0.0)
+        correlation = np.asarray(np.corrcoef(X, rowvar=False))
+        if correlation.ndim == 0:
+            correlation = correlation.reshape(1, 1)
+        correlation = np.nan_to_num(correlation, nan=0.0, posinf=0.0, neginf=0.0)
+        correlation = np.clip(correlation, -1.0 + 1e-12, 1.0 - 1e-12)
+        redundancy = -0.5 * np.log1p(-(correlation ** 2))
+        np.fill_diagonal(redundancy, 0.0)
 
-            available = np.ones(n_features, dtype=bool)
-            selected_indices = []
-            selection_scores = []
-            # Suma acumulada de redundancia: equivale a la media sobre las columnas
-            # ya seleccionadas, pero sin recalcularla desde cero en cada iteración.
-            redundancy = np.asfortranarray(redundancy)
-            redundancy_sum = np.zeros(n_features)
-            for _ in range(n_selected):
-                scores = relevance.copy()
-                if selected_indices:
-                    scores -= redundancy_sum / len(selected_indices)
-                scores[~available] = -np.inf
-                selected = int(np.argmax(scores))
-                selected_indices.append(selected)
-                selection_scores.append(float(scores[selected]))
-                available[selected] = False
-                redundancy_sum += redundancy[:, selected]
+        n_selected = min(max(1, int(self.k)), n_features)
+        available = np.ones(n_features, dtype=bool)
+        selected_indices = []
+        selection_scores = []
+        # Suma acumulada de redundancia: equivale a la media sobre las columnas
+        # ya seleccionadas, pero sin recalcularla desde cero en cada iteración.
+        redundancy = np.asfortranarray(redundancy)
+        redundancy_sum = np.zeros(n_features)
+        for _ in range(n_selected):
+            scores = relevance.copy()
+            if selected_indices:
+                scores -= redundancy_sum / len(selected_indices)
+            scores[~available] = -np.inf
+            selected = int(np.argmax(scores))
+            selected_indices.append(selected)
+            selection_scores.append(float(scores[selected]))
+            available[selected] = False
+            redundancy_sum += redundancy[:, selected]
 
         if self.feature_names is None:
             names = [str(index) for index in range(n_features)]
@@ -452,7 +309,7 @@ def get_k_best_candidates(n_features_in):
     ratios = (
         (0.02, 0.05, 0.10, 0.25, 0.50, 0.75)
         if n_features_in > 300
-        else (0.10, 0.25, 0.50, 0.75, 1.0)
+        else (0.10, 0.25, 0.50, 0.75)
     )
     return sorted({
         max(1, int(np.ceil(n_features_in * ratio)))
@@ -608,10 +465,13 @@ def evaluate_combination(df_subset, feature_cols, group_name, clf_name, clf,
 
     try:
         if "fold_splits" not in base:
-            #sgkf = StratifiedGroupKFold(n_splits=base["n_splits"])
-            #base["fold_splits"] = list(sgkf.split(X, y, groups=base["groups"]))
+            sgkf = StratifiedGroupKFold(n_splits=base["n_splits"])
+            base["fold_splits"] = list(sgkf.split(X, y, groups=base["groups"]))
             # Prueba con LeaveOneGroupOut para evitar problemas de pocos grupos por clase 1*30
-            base["fold_splits"] = list(LeaveOneGroupOut().split(X, y, groups=base["groups"]))
+            #base["fold_splits"] = list(
+            #    LeaveOneGroupOut().split(X, y, groups=base["groups"])
+            #)
+
         fold_splits = base["fold_splits"]
         k_candidates = (
             [k_best]
@@ -629,13 +489,7 @@ def evaluate_combination(df_subset, feature_cols, group_name, clf_name, clf,
         pre_store = cv_cache.setdefault("pre", {})
         pre = pre_store.get(pre_key)
         if pre is None:
-            # Con mRMR en GPU se procesa en el proceso principal (una sola
-            # GPU; evita inicializar CUDA en cada worker).
-            pre_jobs = (
-                1 if _torch_gpu_enabled(X.shape[1])
-                else min(CV_N_JOBS, len(fold_splits))
-            )
-            pre = joblib.Parallel(n_jobs=pre_jobs)(
+            pre = joblib.Parallel(n_jobs=min(CV_N_JOBS, len(fold_splits)))(
                 joblib.delayed(_fold_preprocessing)(
                     X, y, train_idx, test_idx, k_candidates, n_components,
                     feature_cols,
@@ -655,7 +509,7 @@ def evaluate_combination(df_subset, feature_cols, group_name, clf_name, clf,
             (fast_clf, y[fold_splits[fold][0]], *pre[fold][candidate_k])
             for candidate_k, fold in task_keys
         ]
-        if isinstance(clf, _CHEAP_CLASSIFIERS) or _is_gpu_xgb(clf):
+        if isinstance(clf, _CHEAP_CLASSIFIERS):
             task_results = [_fit_predict_fold(*a) for a in args]
         else:
             task_results = joblib.Parallel(
@@ -731,8 +585,6 @@ def evaluate_all_hierarchical(
     Retorna: DataFrame con resultados, dict con mejores modelos por grupo
     """
     
-    if verbose:
-        print(gpu_status_message())
     classifiers = build_classifiers(40,seed=seed)  # 40 clases totales (27 letras + 10 números + 3 controles)
     results = []
     best_per_group = {}

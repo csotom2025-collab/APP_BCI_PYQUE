@@ -58,7 +58,7 @@ class HierarchicalCascadeTests(unittest.TestCase):
             get_k_best_candidates(500), [10, 25, 50, 125, 250, 375]
         )
         self.assertEqual(
-            get_k_best_candidates(300), [30, 75, 150, 225, 300]
+            get_k_best_candidates(300), [30, 75, 150, 225]
         )
         self.assertEqual(get_k_best_candidates(1), [1])
 

@@ -42,7 +42,7 @@ class controllerTraining():
             self.pipeline_lda.entrenar_todos_los_modelos(usuario=user, save_plots=True, show_plots=True,save_models=True,model_format = 'joblib')
             
             print("LDA")
-        if modelType == "lda":
+        if modelType == "Cascada LDA":
             if progress_callback:
                 progress_callback("Preparando las características EEG...")
             print("empezando a entrenar el eñ modelo con lo nuevo")

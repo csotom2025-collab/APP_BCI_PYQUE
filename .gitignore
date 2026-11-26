@@ -1,18 +1,27 @@
-**/__pycache__/**
-datosLectura.csv
-*.pyc
-*.pyo
+# Entornos virtuales y caché de Python
 .venv/
 venv/
-__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Documentación e imágenes
 *.md
-/results
-/onlineCaptures
-#/models
-/utils/mvp
 *.png
-*.edf
-resultsALL/utils/chequeo_calidad/pruebas/resultados_calidad/correlaciones_pearson_pares.csv
+
+# Datos, logs y resultados pesados
+datosLectura.csv
 features_dataset.csv
-.joblib
+*.edf
+*.csv
 RealTimeLOG.log
+/results/
+/onlineCaptures/
+/utils/mvp/
+resultsALL/
+
+# Modelos pesados (descomentado y con asterisco)
+/models/
+*.joblib
+*.pkl
+*.h5

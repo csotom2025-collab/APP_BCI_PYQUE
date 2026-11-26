@@ -1,3 +1,0 @@
-﻿archivo,usuario,clase,trial,canal,muestra,tm,tiempo_ms,valor_original,valor_corregido,delta,ganancia,razon_q,amplitud_local_uv,referencia_uv,id_segmento,criterio
-UserArcane/Letters/UserArcane_A_20.csv,UserArcane,A,20,T7,220,1825170.533657074,1718.75,3866.8281,3866.8282,0.0001,0.999997,5.932,53.972,9.099,T7-1,q_max=6.67>q_deteccion=6.08 y A=62uV>piso=25uV
-UserArcane/Letters/UserArcane_A_20.csv,UserArcane,A,20,T7,221,1825183.611869812,1726.56,3851.2432,3851.2433,0.0001,0.999998,3.17,61.812,19.497,T7-1,q_max=6.67>q_deteccion=6.08 y A=62uV>piso=25uV

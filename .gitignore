@@ -19,6 +19,7 @@ RealTimeLOG.log
 /onlineCaptures/
 /utils/mvp/
 resultsALL/
+trainingOutputs/
 
 # Modelos pesados (descomentado y con asterisco)
 /models/

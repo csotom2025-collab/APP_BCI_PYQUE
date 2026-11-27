@@ -12,6 +12,11 @@ if str(PROJECT_ROOT) not in sys.path:
 from models.oldTraining.pipeline_completo_lda import PipelineCompletoLDA
 from models.newTraining.data_loader import build_dataset
 from models.newTraining.train_hierarchical_optimized import  train_optimized_hierarchical
+from models.newTraining.train_Opt_PCA import train_optimized_hierarchical_PCA
+from models.newTraining.train_Cascada import train_hierarchical
+from models.newTraining.train_snColor import train_optimized_hierarchical_TP
+from models.newTraining.train_fino import train_optimized_direct
+from models.newTraining.train_hierarchical_by_channel import train_hierarchical_by_channel
 class controllerTraining():
     def __init__(self):
         pass
@@ -42,7 +47,7 @@ class controllerTraining():
             self.pipeline_lda.entrenar_todos_los_modelos(usuario=user, save_plots=True, show_plots=True,save_models=True,model_format = 'joblib')
             
             print("LDA")
-        if modelType == "lda":
+        if modelType == "Cascada LDA":
             if progress_callback:
                 progress_callback("Preparando las características EEG...")
             print("empezando a entrenar el eñ modelo con lo nuevo")
@@ -78,8 +83,186 @@ class controllerTraining():
                                          max_recordings_per_class=max_recordings_per_class,
                                          verbose=True,semilla=seed,
                                          progress_callback=progress_callback)
-
-
+        if modelType == "Cascada PCA":
+            if progress_callback:
+                progress_callback("Preparando las características EEG...")
+            print("empezando a entrenar el eñ modelo con lo nuevo")
+            print(f"canaless {channels} fs {fs} use_p300window {use_p300window} apply_baseline_correction {apply_baseline_correction}, output_dir {output_dir},user {user}, dataPath {dataPath}, commandTypes {commandTypes}")
+            print("tiposde comando",commandTypes)
+            dataset = build_dataset(
+                base_dir=dataPath,
+                usuarios=[user],
+                tp_comandos=commandTypes,
+                verbose=True,
+                FS=fs,
+                channel_names=channels,
+                apply_baseline=apply_baseline_correction,
+                use_p300_window_only=use_p300window,
+                use_win_size=use_win_size,
+                window_size=window_size,
+                window_overlap=window_overlap,
+                max_recordings_per_class=max_recordings_per_class,
+            )
+            path_features_csv = os.path.join(output_dir, "features_dataset.csv")
+            dataset.to_csv(path_features_csv, index=False)
+            print(f"\nDataset guardado en: {path_features_csv}")
+            print(f"Shape: {dataset.shape}")
+            print(f"Clases (labels) encontradas: {sorted(dataset['label'].unique())}")
+            if progress_callback:
+                progress_callback("Dataset listo. Iniciando evaluación de modelos...")
+            train_optimized_hierarchical_PCA(output_dir=output_dir,channels = channels,fs=fs,
+                                         use_p300window=use_p300window,
+                                         apply_baseline_correction=apply_baseline_correction,
+                                         use_win_size=use_win_size,
+                                         window_size=window_size,
+                                         window_overlap=window_overlap,
+                                         max_recordings_per_class=max_recordings_per_class,
+                                         verbose=True,semilla=seed,
+                                         progress_callback=progress_callback)
+        if modelType == "Cascada":
+                    if progress_callback:
+                        progress_callback("Preparando las características EEG...")
+                    print("empezando a entrenar el eñ modelo con lo nuevo")
+                    print(f"canaless {channels} fs {fs} use_p300window {use_p300window} apply_baseline_correction {apply_baseline_correction}, output_dir {output_dir},user {user}, dataPath {dataPath}, commandTypes {commandTypes}")
+                    print("tiposde comando",commandTypes)
+                    dataset = build_dataset(
+                        base_dir=dataPath,
+                        usuarios=[user],
+                        tp_comandos=commandTypes,
+                        verbose=True,
+                        FS=fs,
+                        channel_names=channels,
+                        apply_baseline=apply_baseline_correction,
+                        use_p300_window_only=use_p300window,
+                        use_win_size=use_win_size,
+                        window_size=window_size,
+                        window_overlap=window_overlap,
+                        max_recordings_per_class=max_recordings_per_class,
+                    )
+                    path_features_csv = os.path.join(output_dir, "features_dataset.csv")
+                    dataset.to_csv(path_features_csv, index=False)
+                    print(f"\nDataset guardado en: {path_features_csv}")
+                    print(f"Shape: {dataset.shape}")
+                    print(f"Clases (labels) encontradas: {sorted(dataset['label'].unique())}")
+                    if progress_callback:
+                        progress_callback("Dataset listo. Iniciando evaluación de modelos...")
+                    train_hierarchical(output_dir=output_dir,channels = channels,fs=fs,
+                                                 use_p300window=use_p300window,
+                                                 apply_baseline_correction=apply_baseline_correction,
+                                                 use_win_size=use_win_size,
+                                                 window_size=window_size,
+                                                 window_overlap=window_overlap,
+                                                 max_recordings_per_class=max_recordings_per_class,
+                                                 verbose=True,semilla=seed,
+                                                 progress_callback=progress_callback)
+        if modelType == "Cascada Sin Color":
+                    if progress_callback:
+                        progress_callback("Preparando las características EEG...")
+                    print("empezando a entrenar el eñ modelo con lo nuevo")
+                    print(f"canaless {channels} fs {fs} use_p300window {use_p300window} apply_baseline_correction {apply_baseline_correction}, output_dir {output_dir},user {user}, dataPath {dataPath}, commandTypes {commandTypes}")
+                    print("tiposde comando",commandTypes)
+                    dataset = build_dataset(
+                        base_dir=dataPath,
+                        usuarios=[user],
+                        tp_comandos=commandTypes,
+                        verbose=True,
+                        FS=fs,
+                        channel_names=channels,
+                        apply_baseline=apply_baseline_correction,
+                        use_p300_window_only=use_p300window,
+                        use_win_size=use_win_size,
+                        window_size=window_size,
+                        window_overlap=window_overlap,
+                        max_recordings_per_class=max_recordings_per_class,
+                    )
+                    path_features_csv = os.path.join(output_dir, "features_dataset.csv")
+                    dataset.to_csv(path_features_csv, index=False)
+                    print(f"\nDataset guardado en: {path_features_csv}")
+                    print(f"Shape: {dataset.shape}")
+                    print(f"Clases (labels) encontradas: {sorted(dataset['label'].unique())}")
+                    if progress_callback:
+                        progress_callback("Dataset listo. Iniciando evaluación de modelos...")
+                    train_optimized_hierarchical_TP(output_dir=output_dir,channels = channels,fs=fs,
+                                                 use_p300window=use_p300window,
+                                                 apply_baseline_correction=apply_baseline_correction,
+                                                 use_win_size=use_win_size,
+                                                 window_size=window_size,
+                                                 window_overlap=window_overlap,
+                                                 max_recordings_per_class=max_recordings_per_class,
+                                                 verbose=True,semilla=seed,
+                                                 progress_callback=progress_callback)
+        if modelType == "Fino 40 comands":
+                    if progress_callback:
+                        progress_callback("Preparando las características EEG...")
+                    print("empezando a entrenar el eñ modelo con lo nuevo")
+                    print(f"canaless {channels} fs {fs} use_p300window {use_p300window} apply_baseline_correction {apply_baseline_correction}, output_dir {output_dir},user {user}, dataPath {dataPath}, commandTypes {commandTypes}")
+                    print("tiposde comando",commandTypes)
+                    dataset = build_dataset(
+                        base_dir=dataPath,
+                        usuarios=[user],
+                        tp_comandos=commandTypes,
+                        verbose=True,
+                        FS=fs,
+                        channel_names=channels,
+                        apply_baseline=apply_baseline_correction,
+                        use_p300_window_only=use_p300window,
+                        use_win_size=use_win_size,
+                        window_size=window_size,
+                        window_overlap=window_overlap,
+                        max_recordings_per_class=max_recordings_per_class,
+                    )
+                    path_features_csv = os.path.join(output_dir, "features_dataset.csv")
+                    dataset.to_csv(path_features_csv, index=False)
+                    print(f"\nDataset guardado en: {path_features_csv}")
+                    print(f"Shape: {dataset.shape}")
+                    print(f"Clases (labels) encontradas: {sorted(dataset['label'].unique())}")
+                    if progress_callback:
+                        progress_callback("Dataset listo. Iniciando evaluación de modelos...")
+                    train_optimized_direct(output_dir=output_dir,channels = channels,fs=fs,
+                                                 use_p300window=use_p300window,
+                                                 apply_baseline_correction=apply_baseline_correction,
+                                                 use_win_size=use_win_size,
+                                                 window_size=window_size,
+                                                 window_overlap=window_overlap,
+                                                 max_recordings_per_class=max_recordings_per_class,
+                                                 verbose=True,semilla=seed,
+                                                 progress_callback=progress_callback)
+        if modelType == "Por nodos":
+                    if progress_callback:
+                        progress_callback("Preparando las características EEG...")
+                    print("empezando a entrenar el eñ modelo con lo nuevo")
+                    print(f"canaless {channels} fs {fs} use_p300window {use_p300window} apply_baseline_correction {apply_baseline_correction}, output_dir {output_dir},user {user}, dataPath {dataPath}, commandTypes {commandTypes}")
+                    print("tiposde comando",commandTypes)
+                    dataset = build_dataset(
+                        base_dir=dataPath,
+                        usuarios=[user],
+                        tp_comandos=commandTypes,
+                        verbose=True,
+                        FS=fs,
+                        channel_names=channels,
+                        apply_baseline=apply_baseline_correction,
+                        use_p300_window_only=use_p300window,
+                        use_win_size=use_win_size,
+                        window_size=window_size,
+                        window_overlap=window_overlap,
+                        max_recordings_per_class=max_recordings_per_class,
+                    )
+                    path_features_csv = os.path.join(output_dir, "features_dataset.csv")
+                    dataset.to_csv(path_features_csv, index=False)
+                    print(f"\nDataset guardado en: {path_features_csv}")
+                    print(f"Shape: {dataset.shape}")
+                    print(f"Clases (labels) encontradas: {sorted(dataset['label'].unique())}")
+                    if progress_callback:
+                        progress_callback("Dataset listo. Iniciando evaluación de modelos...")
+                    train_hierarchical_by_channel(output_dir=output_dir,channels = channels,fs=fs,
+                                                 use_p300window=use_p300window,
+                                                 apply_baseline_correction=apply_baseline_correction,
+                                                 use_win_size=use_win_size,
+                                                 window_size=window_size,
+                                                 window_overlap=window_overlap,
+                                                 max_recordings_per_class=max_recordings_per_class,
+                                                 verbose=True,semilla=seed,
+                                                 progress_callback=progress_callback)
         #df = self.create_df(dataPath)
 
 

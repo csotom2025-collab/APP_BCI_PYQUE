@@ -1,0 +1,1369 @@
+"""
+ENTRENAMIENTO JERÁRQUICO CON COLOR Y MODELOS LDA POR COLOR
+
+Flujo:
+1. Evalúa combinaciones de clasificadores y features con validación cruzada
+2. Guarda tabla completa de resultados (evaluacion_jerarquica_completa.csv)
+3. Identifica modelos ganadores globales y de color por categoría
+4. Entrena la cascada: color → super-grupo del color → comando fino del color/grupo
+5. Guarda bundle final listo para tiempo real (hierarchical_bundle_optimizado.joblib)
+6. Guarda top 5 cascadas completas y especializadas; el color de cada cascada
+   especializada se entrena solo con su categoría
+7. Guarda modelos top por ranking y sus pasos entrenados en archivos separados
+
+Protocolo asumido:
+- 2 flashes por grupo en 2 segundos de grabación
+- 14 canales EEG (F3, FC5, AF3, F7, T7, P7, O1, O2, P8, T8, F8, AF4, FC6, F4)
+- fs=128 Hz
+"""
+
+from datetime import datetime
+from typing import Callable, Optional
+from sklearn.ensemble import RandomForestClassifier
+import os
+import json
+import joblib
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import warnings
+warnings.filterwarnings("ignore")
+
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.base import clone
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.pipeline import Pipeline
+from sklearn.feature_selection import SelectKBest, f_classif
+from sklearn.model_selection import StratifiedGroupKFold, cross_val_predict
+from sklearn.neural_network import MLPClassifier
+from sklearn.svm import SVC
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import VotingClassifier
+from sklearn.metrics import confusion_matrix, accuracy_score, f1_score
+# pyrefly: ignore [missing-import]
+from xgboost import XGBClassifier 
+from models.newTraining.lda_utils import SafeLDA
+import models.newTraining.config as config
+from models.newTraining.eeg_features import get_feature_sets, log_transform_power_columns
+from sklearn.naive_bayes import GaussianNB
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis, LinearDiscriminantAnalysis
+from sklearn.neighbors import KNeighborsClassifier
+
+
+CV_N_JOBS = max(1, (os.cpu_count() or 4) - 1)
+
+
+def report_progress(progress_callback, message):
+    if progress_callback is not None:
+        progress_callback(message)
+
+
+def normalize_string_columns(df, columns):
+    """Convierte columnas de metadatos a texto para evitar mezclas int/str en LabelEncoder."""
+    for col in columns:
+        if col in df.columns:
+            df[col] = df[col].map(lambda x: "" if pd.isna(x) else str(x))
+    return df
+
+
+def validate_color_labels(df):
+    """Verifica que el dataset ya incluya colores asignados por data_loader."""
+    if "color" not in df.columns:
+        raise ValueError(
+            "El dataset no tiene la columna 'color'. Regeneralo con data_loader.py."
+        )
+    invalid_colors = sorted(set(df["color"].dropna().astype(str)) - {"Green", "Blue"})
+    if invalid_colors:
+        raise ValueError(
+            "El dataset contiene colores no validos: "
+            f"{invalid_colors}. Regeneralo con data_loader.py."
+        )
+
+
+def _prepare_color_training_data(df, group=None):
+    """Prepara Green/Blue con todas las muestras o solo las de un grupo."""
+    selected = df if group is None else df[df["tpComando"] == group]
+    if selected.empty:
+        raise ValueError(
+            f"No hay muestras para entrenar la separabilidad de color"
+            f"{f' en {group}' if group else ''}."
+        )
+    if set(selected["color"].astype(str).unique()) != {"Green", "Blue"}:
+        raise ValueError(
+            "La separabilidad de color requiere muestras Green y Blue"
+            f"{f' dentro de {group}' if group else ''}."
+        )
+    prepared = selected.copy()
+    prepared["label"] = prepared["color"].astype(str)
+    return prepared
+
+
+# ===========================================================================================
+# PASO 1: DEFINIR CLASIFICADORES (9 total)
+# ===========================================================================================
+def build_classifiers(n_classes, seed=42):
+    """Clasificadores candidatos adaptados al espacio reducido por LDA."""
+    randomState = seed
+
+    if n_classes == 2:
+        xgb_params = {"objective": "binary:logistic", "random_state": randomState}
+    else:
+        xgb_params = {
+            "objective": "multi:softprob",
+            "num_class": n_classes,
+            "random_state": randomState,
+            "eval_metric": "mlogloss"
+        }
+
+    # Tus modelos actuales (ajustando ligeramente regularización para pocos trials)
+    mlp = MLPClassifier(hidden_layer_sizes=(64, 32), activation="relu",
+                        alpha=1e-2, max_iter=2000, random_state=randomState)
+    svm_lin = SVC(kernel="linear", C=1.0, probability=True, random_state=randomState)
+    svm_rbf = SVC(kernel="rbf", C=1.5, gamma="scale", probability=True, random_state=randomState)
+    logreg = LogisticRegression(C=1.0, max_iter=2000, random_state=randomState)
+    rff = RandomForestClassifier(n_estimators=100, max_depth=6, random_state=randomState)
+    xgc = XGBClassifier(n_estimators=100, max_depth=4, learning_rate=0.05, **xgb_params)
+
+    # --- NUEVOS CLASIFICADORES IDEALES POST-LDA ---
+    gnb = GaussianNB()
+    qda = QuadraticDiscriminantAnalysis(reg_param=0.1) # reg_param evita singularidad si hay pocos trials
+    knn = KNeighborsClassifier(n_neighbors=7, weights="distance")
+    lda_clf = LinearDiscriminantAnalysis(solver="eigen", shrinkage="auto")
+
+    # Ensambles
+    ensemble_mlp_svmrbf = VotingClassifier(
+        estimators=[("mlp", mlp), ("svm_rbf", svm_rbf)],
+        voting="soft"
+    )
+    ensemble_svmlin_logreg = VotingClassifier(
+        estimators=[("svm_lin", svm_lin), ("logreg", logreg)],
+        voting="soft"
+    )
+    # Nuevo ensamble ligero ideal para P300 post-LDA
+    ensemble_lda_gnb_logreg = VotingClassifier(
+        estimators=[("lda", lda_clf), ("gnb", gnb), ("logreg", logreg)],
+        voting="soft"
+    )
+
+    return {
+        "MLP": mlp,
+        "SVM_Lineal": svm_lin,
+        "SVM_RBF": svm_rbf,
+        "LogReg": logreg,
+        "RF": rff,
+        "XGBC": xgc,
+        # Nuevos:
+        "GaussianNB": gnb,
+        "QDA": qda,
+        "KNN_7": knn,
+        "LDA_Clf": lda_clf,
+        # Ensambles:
+        "Ensamble_MLP_SVMRBF": ensemble_mlp_svmrbf,
+        "Ensamble_SVMLin_LogReg": ensemble_svmlin_logreg,
+        "Ensamble_LDA_GNB_LogReg": ensemble_lda_gnb_logreg,
+    }
+
+
+def classifiers_for_group(classifiers, n_classes):
+    """Adapta hiperparámetros según el nivel jerárquico (optimizado para ~120 trials/clase)."""
+    adapted = {k: clone(v) for k, v in classifiers.items()}
+    
+    if "KNN" in adapted:
+        if n_classes <= 3:
+            # En Color y Super-grupo hay miles de muestras: k=15 suaviza mucho el ruido
+            k_optimo = 15
+        else:
+            # En Letras/Números usamos n_classes asegurado a impar (ej. 5 -> 5, 14 -> 15)
+            k_optimo = n_classes if n_classes % 2 != 0 else n_classes + 1
+            k_optimo = max(7, k_optimo)
+            
+        adapted["KNN"].set_params(n_neighbors=k_optimo, weights="distance")
+    # 2. Quitar modelos lentos de árboles en espacios de 1D (Color) y 2D (Super-grupo/Controls)
+    if n_classes <= 3:
+        adapted.pop("XGBC", None)
+        adapted.pop("RF", None)
+        
+    return adapted
+
+
+# ===========================================================================================
+# PASO 2: PIPELINE CON LDA OPTIMIZADO PARA ARQUITECTURA JERÁRQUICA
+# ===========================================================================================
+def build_pipeline_hierarchical(clf, n_components, n_features_in, k_best=None,
+                                 use_double_lda=True):
+    """
+    Pipeline para arquitectura jerárquica con LDA en cascada doble:
+    
+    Flujo: StandardScaler → [SelectKBest] → LDA_1 (amplio) → LDA_2 (fino) → Clasificador
+    
+    - LDA_1 (grueso): reduce a min(n_components*3, n_features-1) componentes
+      para capturar la mayor varianza discriminante disponible.
+    - LDA_2 (fino): refina a n_components componentes en el espacio ya reducido,
+      maximizando la separación para el clasificador final.
+    - Clasificador: opera sobre las n_components features más discriminantes.
+    
+    El doble LDA mejora la separabilidad en espacios de alta dimensión (EEG)
+    donde un solo LDA puede no capturar toda la estructura de clase.
+    
+    use_double_lda: Si False, usa solo 1 LDA (modo legado).
+    """
+    steps = [("scaler", StandardScaler())]
+
+    # 1. Selección de las mejores características iniciales
+    if k_best is not None and k_best < n_features_in:
+        steps.append(("select", SelectKBest(f_classif, k=k_best)))
+        effective_features = k_best
+    else:
+        # Protección dinámica: si k_best es None, usamos el 80% de lo que entra
+        k_dinamico = max(1, int(n_features_in * 0.8))
+        steps.append(("select", SelectKBest(f_classif, k=k_dinamico)))
+        effective_features = k_dinamico
+
+
+    # Asegurar componentes seguros
+    n_comp_safe = min(n_components, effective_features - 1, 200)
+    n_comp_safe = max(1, n_comp_safe)
+
+    # 2. LÓGICA DINÁMICA DE LDA:
+    # Si es clasificación binaria (n_comp_safe == 1), forzamos un solo LDA directo
+    if n_comp_safe == 1:
+        steps.append(("lda_directo", SafeLDA(
+            solver="eigen", shrinkage="auto", n_components=1)))
+    
+    # Si es multiclase (n_comp_safe >= 2) y está activo el doble LDA, usamos la cascada
+    elif use_double_lda and n_comp_safe >= 2:
+        # LDA 1 (amplio)
+        n_comp_lda1 = min(n_comp_safe * 3, effective_features - 1, 200)
+        n_comp_lda1 = max(n_comp_safe + 1, n_comp_lda1)
+        steps.append(("lda1", SafeLDA(
+            solver="eigen", shrinkage="auto", n_components=n_comp_lda1)))
+
+        # Re-escalar para estabilidad numérica en la cascada
+        steps.append(("scaler2", StandardScaler()))
+
+        # LDA 2 (fino)
+        steps.append(("lda2", SafeLDA(
+            solver="eigen", shrinkage="auto", n_components=n_comp_safe)))
+    else:
+        # Modo simple de respaldo
+        steps.append(("lda_simple", SafeLDA(
+            solver="eigen", shrinkage="auto", n_components=n_comp_safe)))
+
+    steps.append(("clf", clone(clf)))
+
+    return Pipeline(steps)
+
+
+# ===========================================================================================
+# PASO 3: EVALUACIÓN DE 1 COMBINACIÓN (clf × feature_set × grupo)
+# ===========================================================================================
+def plot_confusion_matrix(y_true, y_pred, labels, title, out_path):
+    """Guarda una matriz de confusión normalizada en una imagen."""
+    cm = confusion_matrix(y_true, y_pred, labels=list(range(len(labels))))
+    cm_norm = cm.astype(float) / (cm.sum(axis=1, keepdims=True) + 1e-9)
+    fig_size = max(6, len(labels) * 0.5)
+
+    plt.figure(figsize=(fig_size, fig_size))
+    sns.heatmap(cm_norm, xticklabels=labels, yticklabels=labels,
+                cmap="GnBu", vmin=0, vmax=1, cbar=True, square=True)
+    plt.xlabel("Predicción")
+    plt.ylabel("Real")
+    plt.title(title)
+    plt.xticks(rotation=90)
+    plt.yticks(rotation=0)
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=150)
+    plt.close()
+
+
+
+def evaluate_combination(df_subset, feature_cols, group_name, clf_name, clf,
+                        n_components, k_best=None, cv_splits=5, verbose=True):
+    """Evalúa una combinación con una sola CV y reutiliza sus predicciones OOF.
+
+    Retorna accuracy_mean, accuracy_std, f1_macro_mean, f1_macro_std,
+    y_pred_oof, label_encoder y y_true.
+    """
+    
+    le = LabelEncoder()
+    y = le.fit_transform(df_subset["label"].astype(str))
+    n_classes = len(le.classes_)
+    
+    X = df_subset[feature_cols].to_numpy()
+    X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+    
+    if X.shape[0] < 2 or n_classes < 2:
+        return None, None, None, None, None, None, None
+    
+        # 1. Agrupar en bloques de 4 trials consecutivos por usuario y etiqueta
+    groups = df_subset.groupby(["usuario", "label"]).cumcount() // 4
+    
+    # Verificar cuántos grupos únicos tiene la clase con menos datos para evitar error en CV
+    min_groups = (
+        pd.DataFrame({"y": y, "g": groups})
+        .groupby("y")["g"]
+        .nunique()
+        .min()
+    )
+    n_splits = max(2, min(cv_splits, int(min_groups)))
+    
+    sgkf = StratifiedGroupKFold(n_splits=n_splits)
+    pipe = build_pipeline_hierarchical(clf, n_components, X.shape[1], k_best)
+    
+    try:
+        # Nota: pasamos groups=groups aquí y en el split() de abajo
+        y_pred_oof = cross_val_predict(
+            pipe, X, y, groups=groups, cv=sgkf, n_jobs=CV_N_JOBS
+        )
+
+        fold_acc = []
+        fold_f1 = []
+        for _, test_idx in sgkf.split(X, y, groups=groups):
+            fold_acc.append(accuracy_score(y[test_idx], y_pred_oof[test_idx]))
+            fold_f1.append(f1_score(y[test_idx], y_pred_oof[test_idx], average="macro"))
+
+        acc = np.asarray(fold_acc)
+        f1 = np.asarray(fold_f1)
+        
+        if verbose:
+            print(f"  {group_name:12s} × {clf_name:22s} | "
+                  f"acc={acc.mean():.3f}±{acc.std():.3f} | f1={f1.mean():.3f}±{f1.std():.3f}")
+        
+        return float(acc.mean()), float(acc.std()), float(f1.mean()), float(f1.std()), y_pred_oof, le, y
+    except Exception as e:
+        # Siempre imprime el error real para facilitar diagnóstico
+        print(f"  [ERROR] {group_name} × {clf_name}: {type(e).__name__}: {e}")
+        return None, None, None, None, None, None, None
+
+
+# ===========================================================================================
+# PASO 4: EVALUACIÓN EXHAUSTIVA (todos los classificadores × feature_sets × grupos)
+# ===========================================================================================
+def evaluate_all_hierarchical(
+    df, verbose=True, seed=42, progress_callback=None):
+    """
+    Evalúa TODAS las combinaciones:
+    - 8 clasificadores (MLP, SVM_Lineal, SVM_RBF, LogReg, Ensamble_MLP_SVMRBF, Ensamble_SVMLin_LogReg, RF, XGBC)
+    - 7 feature_sets (Estadísticas, Frecuencias_Abs/Rel/Est, Wavelets, Todas)
+    - color global y por categoría; etapas super/fina por color
+    
+    Retorna: DataFrame con resultados, dict con mejores modelos por grupo
+    """
+    
+    classifiers = build_classifiers(40,seed=seed)  # 40 clases totales (27 letras + 10 números + 3 controles)
+    results = []
+    best_per_group = {}
+
+    # ============ COLOR (Green/Blue - 2 clases) ============
+    if verbose:
+        print("\n" + "="*100)
+        print("EVALUANDO: COLOR (Green/Blue - 2 clases)")
+        print("="*100)
+
+    validate_color_labels(df)
+    df_color = df
+    feature_cols_all = [c for c in df.columns if c not in
+                        ["usuario", "tpComando", "letra", "trial", "label", "color"]]
+    df_for_color = _prepare_color_training_data(df_color)
+    color_classifiers = classifiers_for_group(classifiers, 2)
+    df_for_color[feature_cols_all] = log_transform_power_columns(
+        df_for_color[feature_cols_all], feature_cols_all
+    )
+    feature_sets = get_feature_sets(feature_cols_all)
+
+    best_f1_color = -1
+    for set_name, cols in feature_sets.items():
+        if verbose:
+            print(f"\n{set_name} ({len(cols)} features):")
+        for clf_name, clf in color_classifiers.items():
+            report_progress(
+                progress_callback,
+                f"Evaluando color: {set_name} / {clf_name}...",
+            )
+            acc_m, acc_s, f1_m, f1_s, y_pred, le, y_true = evaluate_combination(
+                df_for_color, cols, "color", clf_name, clf,
+                n_components=1, k_best=250, cv_splits=5, verbose=verbose
+            )
+            if acc_m is not None:
+                results.append({
+                    "nivel": "color",
+                    "grupo": "Green/Blue",
+                    "n_clases": 2,
+                    "feature_set": set_name,
+                    "n_features": len(cols),
+                    "clasificador": clf_name,
+                    "accuracy_mean": acc_m,
+                    "accuracy_std": acc_s,
+                    "f1_macro_mean": f1_m,
+                    "f1_macro_std": f1_s,
+                })
+                if f1_m > best_f1_color:
+                    best_f1_color = f1_m
+                    best_per_group["color"] = {
+                        "feature_set": set_name,
+                        "cols": cols,
+                        "clasificador": clf_name,
+                        "clf": clf,
+                        "n_components": 1,
+                        "f1_macro": f1_m,
+                        "accuracy_mean": acc_m,
+                        "accuracy_std": acc_s,
+                        "label_encoder": le,
+                        "y_true": y_true,
+                        "y_pred": y_pred,
+                    }
+
+    if "color" not in best_per_group:
+        raise RuntimeError(
+            "No se pudo evaluar el nivel de color; verifica que existan muestras "
+            "suficientes para Green y Blue."
+        )
+
+    for group in ("Letters", "Numbers", "Controls"):
+        df_group_color = _prepare_color_training_data(df_color, group=group)
+        df_group_color[feature_cols_all] = log_transform_power_columns(
+            df_group_color[feature_cols_all], feature_cols_all
+        )
+        for set_name, cols in feature_sets.items():
+            for clf_name, clf in color_classifiers.items():
+                report_progress(
+                    progress_callback,
+                    f"Evaluando color en {group}: {set_name} / {clf_name}...",
+                )
+                acc_m, acc_s, f1_m, f1_s, _, _, _ = evaluate_combination(
+                    df_group_color,
+                    cols,
+                    f"color-{group}",
+                    clf_name,
+                    clf,
+                    n_components=1,
+                    k_best=250,
+                    cv_splits=5,
+                    verbose=verbose,
+                )
+                if acc_m is None:
+                    continue
+                results.append({
+                    "nivel": "color_por_grupo",
+                    "grupo": group,
+                    "n_clases": 2,
+                    "feature_set": set_name,
+                    "n_features": len(cols),
+                    "clasificador": clf_name,
+                    "accuracy_mean": acc_m,
+                    "accuracy_std": acc_s,
+                    "f1_macro_mean": f1_m,
+                    "f1_macro_std": f1_s,
+                })
+
+    # Cada color tiene un clasificador de super-grupo y modelos finos propios.
+    for color in ("Green", "Blue"):
+        df_color_group = df_color[df_color["color"] == color].reset_index(drop=True)
+        if df_color_group.empty:
+            raise ValueError(f"No hay muestras disponibles para el color {color}.")
+
+        if verbose:
+            print("\n" + "="*100)
+            print(f"EVALUANDO SUPER-GRUPO SOLO PARA {color}")
+            print("="*100)
+
+        df_super = df_color_group.copy()
+        df_super["label"] = df_super["tpComando"]
+        super_classifiers = classifiers_for_group(
+            classifiers, df_super["label"].nunique()
+        )
+        df_super[feature_cols_all] = log_transform_power_columns(
+            df_super[feature_cols_all], feature_cols_all
+        )
+        feature_sets = get_feature_sets(feature_cols_all)
+        best_key = f"super_clase_{color}"
+        best_f1 = -1
+
+        for set_name, cols in feature_sets.items():
+            for clf_name, clf in super_classifiers.items():
+                report_progress(
+                    progress_callback,
+                    f"Evaluando supergrupo {color}: {set_name} / {clf_name}...",
+                )
+                acc_m, acc_s, f1_m, f1_s, y_pred, le, y_true = evaluate_combination(
+                    df_super, cols, f"super-{color}", clf_name, clf,
+                    n_components=2, k_best=250, cv_splits=5, verbose=verbose
+                )
+                if acc_m is None:
+                    continue
+                results.append({
+                    "nivel": "super_clase_por_color",
+                    "color": color,
+                    "grupo": "Letters/Numbers/Controls",
+                    "n_clases": len(le.classes_),
+                    "feature_set": set_name,
+                    "n_features": len(cols),
+                    "clasificador": clf_name,
+                    "accuracy_mean": acc_m,
+                    "accuracy_std": acc_s,
+                    "f1_macro_mean": f1_m,
+                    "f1_macro_std": f1_s,
+                })
+                if f1_m > best_f1:
+                    best_f1 = f1_m
+                    best_per_group[best_key] = {
+                        "feature_set": set_name,
+                        "cols": cols,
+                        "clasificador": clf_name,
+                        "clf": clf,
+                        "n_components": 2,
+                        "f1_macro": f1_m,
+                        "accuracy_mean": acc_m,
+                        "accuracy_std": acc_s,
+                        "label_encoder": le,
+                        "y_true": y_true,
+                        "y_pred": y_pred,
+                    }
+
+        # ============ COMANDO FINO DENTRO DE COLOR + SUPER-GRUPO ============
+        for grupo in ("Letters", "Numbers", "Controls"):
+            df_fine = df_color_group[
+                df_color_group["tpComando"] == grupo
+            ].reset_index(drop=True)
+            if df_fine.empty:
+                raise ValueError(f"No hay muestras para la combinación {color}/{grupo}.")
+
+            fine_key = f"{color}_{grupo}"
+            fine_classes = sorted(df_fine["label"].astype(str).unique())
+            if len(fine_classes) == 1:
+                fixed_label = fine_classes[0]
+                print(
+                    f"  {color}/{grupo}: solo existe la clase {ascii(fixed_label)}; "
+                    "se usará una salida fija, sin evaluación multiclase."
+                )
+                best_per_group[fine_key] = {
+                    "fixed_label": fixed_label,
+                    "feature_set": "N/A",
+                    "cols": [],
+                    "clasificador": "Salida fija",
+                    "f1_macro": None,
+                    "y_true": None,
+                    "y_pred": None,
+                }
+                continue
+
+            if verbose:
+                print("\n" + "="*100)
+                print(f"EVALUANDO COMANDOS FINOS: {color}/{grupo}")
+                print("="*100)
+
+            df_fine[feature_cols_all] = log_transform_power_columns(
+                df_fine[feature_cols_all], feature_cols_all
+            )
+            feature_sets = get_feature_sets(feature_cols_all)
+            n_components = max(1, min(len(fine_classes) - 1, 50))
+            fine_classifiers = classifiers_for_group(classifiers, len(fine_classes))
+            best_f1 = -1
+
+            for set_name, cols in feature_sets.items():
+                for clf_name, clf in fine_classifiers.items():
+                    report_progress(
+                        progress_callback,
+                        f"Evaluando {color}/{grupo}: {set_name} / {clf_name}...",
+                    )
+                    acc_m, acc_s, f1_m, f1_s, y_pred, le, y_true = evaluate_combination(
+                        df_fine, cols, f"{color}-{grupo}", clf_name, clf,
+                        n_components=n_components, k_best=250,
+                        cv_splits=5, verbose=verbose
+                    )
+                    if acc_m is None:
+                        continue
+                    results.append({
+                        "nivel": "comando_fino_por_color_grupo",
+                        "color": color,
+                        "grupo": grupo,
+                        "n_clases": len(le.classes_),
+                        "feature_set": set_name,
+                        "n_features": len(cols),
+                        "clasificador": clf_name,
+                        "accuracy_mean": acc_m,
+                        "accuracy_std": acc_s,
+                        "f1_macro_mean": f1_m,
+                        "f1_macro_std": f1_s,
+                    })
+                    if f1_m > best_f1:
+                        best_f1 = f1_m
+                        best_per_group[fine_key] = {
+                            "feature_set": set_name,
+                            "cols": cols,
+                            "clasificador": clf_name,
+                            "clf": clf,
+                            "n_components": n_components,
+                            "f1_macro": f1_m,
+                            "accuracy_mean": acc_m,
+                            "accuracy_std": acc_s,
+                            "label_encoder": le,
+                            "y_true": y_true,
+                            "y_pred": y_pred,
+                        }
+
+            if fine_key not in best_per_group:
+                raise RuntimeError(
+                    f"No se pudo evaluar el modelo fino para {color}/{grupo}; "
+                    "verifica que cada comando tenga suficientes muestras."
+                )
+
+    
+    if not results:
+        raise RuntimeError(
+            "Ninguna combinación produjo resultados válidos. "
+            "Revisa los errores impresos arriba para ver qué falló en cada combinación."
+        )
+    results_df = pd.DataFrame(results).sort_values("f1_macro_mean", ascending=False)
+    return results_df, best_per_group
+
+
+# ===========================================================================================
+# PASO 5: ENTRENAR MODELOS GANADORES Y TOP 5 POR GRUPO
+# ===========================================================================================
+def train_final_models(df, best_per_group, progress_callback=None):
+    """Entrena los modelos de color y los modelos super/fino separados por color."""
+
+    validate_color_labels(df)
+    df_color = df
+    df_color_stage = df_color.copy()
+    df_color_stage["label"] = df_color_stage["color"]
+
+    def fit_bundle(df_subset, model_info, model_name):
+        if "fixed_label" in model_info:
+            return {
+                "fixed_label": model_info["fixed_label"],
+                "feature_columns": [],
+                "feature_set": "N/A",
+                "clasificador": "Salida fija",
+                "f1_macro_cv": None,
+            }
+
+        le = LabelEncoder()
+        y = le.fit_transform(df_subset["label"].astype(str))
+        X = df_subset[model_info["cols"]].to_numpy()
+        X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+        report_progress(progress_callback, f"Ajustando modelo final: {model_name}...")
+        pipeline = build_pipeline_hierarchical(
+            model_info["clf"], model_info["n_components"], X.shape[1], k_best=250
+        )
+        pipeline.fit(X, y)
+        return {
+            "pipeline": pipeline,
+            "label_encoder": le,
+            "feature_columns": model_info["cols"],
+            "feature_set": model_info["feature_set"],
+            "clasificador": model_info["clasificador"],
+            "f1_macro_cv": (
+                float(model_info["f1_macro"])
+                if model_info.get("f1_macro") is not None else None
+            ),
+        }
+
+    print("\n" + "="*100)
+    print("ENTRENANDO MODELO FINAL: COLOR")
+    print("="*100)
+    final_bundles = {
+        "color": fit_bundle(
+            df_color_stage, best_per_group["color"], "color"
+        ),
+        "por_color": {},
+    }
+
+    for color in ("Green", "Blue"):
+        print(f"\nENTRENANDO MODELOS SOLO PARA COLOR: {color}")
+        df_color_subset = df_color[df_color["color"] == color].reset_index(drop=True)
+
+        df_super = df_color_subset.copy()
+        df_super["label"] = df_super["tpComando"]
+        hierarchy = {
+            "super_clase": fit_bundle(
+                df_super, best_per_group[f"super_clase_{color}"],
+                f"supergrupo {color}",
+            ),
+            "por_grupo": {},
+        }
+
+        for grupo in ("Letters", "Numbers", "Controls"):
+            df_fine = df_color_subset[
+                df_color_subset["tpComando"] == grupo
+            ].reset_index(drop=True)
+            fine_bundle = fit_bundle(
+                df_fine, best_per_group[f"{color}_{grupo}"],
+                f"{color}/{grupo}",
+            )
+            hierarchy["por_grupo"][grupo] = fine_bundle
+            if "fixed_label" in fine_bundle:
+                print(f"  OK {grupo}: salida fija {ascii(fine_bundle['fixed_label'])}")
+            else:
+                print(
+                    f"  OK {grupo}: {len(fine_bundle['label_encoder'].classes_)} "
+                    f"comandos, f1_cv={fine_bundle['f1_macro_cv']:.3f}"
+                )
+        final_bundles["por_color"][color] = hierarchy
+
+    return final_bundles
+
+
+def train_top_models_by_category(
+    df, results_df, seed=42, progress_callback=None
+):
+    """Entrena los candidatos solicitados para cada ranking y categoría."""
+    meta_cols = ["usuario", "tpComando", "letra", "trial", "label", "color"]
+    feature_cols = [col for col in df.columns if col not in meta_cols]
+    classifiers = build_classifiers(40, seed=seed)
+    prepared_groups = {}
+    trained_models = {}
+    evaluated_models = {}
+
+    ranked_results = results_df.sort_values(
+        "f1_macro_mean", ascending=False, kind="stable"
+    )
+    category_specs = {
+        "general": (ranked_results, 5),
+        "color": (ranked_results[ranked_results["nivel"] == "color"], 5),
+        "super": (
+            ranked_results[ranked_results["nivel"] == "super_clase_por_color"],
+            10,
+        ),
+        "letras": (
+            ranked_results[
+                (ranked_results["nivel"] == "comando_fino_por_color_grupo")
+                & (ranked_results["grupo"] == "Letters")
+            ],
+            10,
+        ),
+        "numeros": (
+            ranked_results[
+                (ranked_results["nivel"] == "comando_fino_por_color_grupo")
+                & (ranked_results["grupo"] == "Numbers")
+            ],
+            10,
+        ),
+        "controles": (
+            ranked_results[
+                (ranked_results["nivel"] == "comando_fino_por_color_grupo")
+                & (ranked_results["grupo"] == "Controls")
+            ],
+            5,
+        ),
+    }
+    cascade_specs = {
+        "_cascada_color": ranked_results[
+            ranked_results["nivel"] == "color"
+        ],
+    }
+    for group in ("Letters", "Numbers", "Controls"):
+        cascade_specs[f"_cascada_color_{group}"] = ranked_results[
+            (ranked_results["nivel"] == "color_por_grupo")
+            & (ranked_results["grupo"] == group)
+        ]
+    for color in ("Green", "Blue"):
+        cascade_specs[f"_cascada_super_{color}"] = ranked_results[
+            (ranked_results["nivel"] == "super_clase_por_color")
+            & (ranked_results["color"] == color)
+        ]
+        for group in ("Letters", "Numbers", "Controls"):
+            cascade_specs[f"_cascada_fino_{color}_{group}"] = ranked_results[
+                (ranked_results["nivel"] == "comando_fino_por_color_grupo")
+                & (ranked_results["color"] == color)
+                & (ranked_results["grupo"] == group)
+            ]
+    category_specs.update(
+        {key: (value, 5) for key, value in cascade_specs.items()}
+    )
+    top_models = {}
+
+    for category, (category_results, top_n) in category_specs.items():
+        if category.startswith("_cascada_fino_"):
+            _, _, _, color, group = category.split("_")
+            labels = df.loc[
+                (df["color"] == color) & (df["tpComando"] == group), "label"
+            ].astype(str).unique()
+            if len(labels) == 1:
+                top_models[category] = [
+                    {
+                        "rank": rank,
+                        "categoria": category,
+                        "nivel": "comando_fino_por_color_grupo",
+                        "color": color,
+                        "grupo": group,
+                        "fixed_label": labels[0],
+                        "feature_set": "N/A",
+                        "clasificador": "Salida fija",
+                        "f1_macro_cv": None,
+                    }
+                    for rank in range(1, top_n + 1)
+                ]
+                continue
+        if len(category_results) < top_n:
+            raise RuntimeError(
+                f"No hay suficientes modelos evaluados para '{category}': "
+                f"se requieren {top_n} y solo hay {len(category_results)}."
+            )
+
+        top_models[category] = []
+        for rank, (_, row) in enumerate(category_results.head(top_n).iterrows(), 1):
+            report_progress(
+                progress_callback,
+                f"Entrenando candidatos top: {category}, modelo {rank}/{top_n}...",
+            )
+            nivel = row["nivel"]
+            color = row.get("color")
+            if pd.isna(color):
+                color = None
+            grupo = row["grupo"]
+
+            if nivel == "color":
+                group_key = "color"
+                group_df = _prepare_color_training_data(df)
+                label_column = "label"
+                n_components = 1
+            elif nivel == "color_por_grupo":
+                group_key = f"color_{grupo}"
+                group_df = _prepare_color_training_data(df, group=grupo)
+                label_column = "label"
+                n_components = 1
+            elif nivel == "super_clase_por_color":
+                group_key = f"super_clase_{color}"
+                group_df = df[df["color"] == color]
+                label_column = "tpComando"
+                n_components = 2
+            else:
+                group_key = f"{color}_{grupo}"
+                group_df = df[
+                    (df["color"] == color) & (df["tpComando"] == grupo)
+                ]
+                label_column = "label"
+                n_components = None
+
+            model_key = (
+                group_key,
+                row["feature_set"],
+                row["clasificador"],
+            )
+            if model_key not in trained_models:
+                if group_key not in prepared_groups:
+                    label_encoder = LabelEncoder()
+                    y = label_encoder.fit_transform(
+                        group_df[label_column].astype(str)
+                    )
+                    feature_sets = get_feature_sets(feature_cols)
+                    prepared_groups[group_key] = (
+                        group_df, label_encoder, y, feature_sets
+                    )
+
+                group_df, label_encoder, y, feature_sets = prepared_groups[group_key]
+                model_n_components = n_components
+                if model_n_components is None:
+                    model_n_components = max(
+                        1, min(len(label_encoder.classes_) - 1, 50)
+                    )
+                cols = feature_sets[row["feature_set"]]
+                X = group_df[cols].to_numpy()
+                X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+
+                group_classifiers = classifiers_for_group(
+                    classifiers, len(label_encoder.classes_)
+                )
+                pipeline = build_pipeline_hierarchical(
+                    group_classifiers[row["clasificador"]],
+                    model_n_components,
+                    X.shape[1],
+                    k_best=250,
+                )
+                pipeline.fit(X, y)
+                trained_models[model_key] = {
+                    "nivel": nivel,
+                    "color": color,
+                    "grupo": grupo,
+                    "pipeline": pipeline,
+                    "label_encoder": label_encoder,
+                    "feature_columns": cols,
+                    "feature_set": row["feature_set"],
+                    "clasificador": row["clasificador"],
+                    "f1_macro_cv": float(row["f1_macro_mean"]),
+                    "accuracy_mean": float(row["accuracy_mean"]),
+                }
+
+            if model_key not in evaluated_models:
+                eval_df = group_df.copy()
+                eval_df["label"] = eval_df[
+                    "label" if nivel in ("color", "color_por_grupo")
+                    else "tpComando" if nivel == "super_clase_por_color"
+                    else "label"
+                ]
+                eval_df[feature_cols] = log_transform_power_columns(
+                    eval_df[feature_cols], feature_cols
+                )
+                model_n_components = n_components
+                if model_n_components is None:
+                    model_n_components = max(
+                        1, min(len(label_encoder.classes_) - 1, 50)
+                    )
+                report_progress(
+                    progress_callback,
+                    f"Validando candidato top: {category}, modelo {rank}/{top_n}...",
+                )
+                cv_result = evaluate_combination(
+                    eval_df,
+                    cols,
+                    f"{nivel}-{color or 'todos'}-{grupo}",
+                    row["clasificador"],
+                    group_classifiers[row["clasificador"]],
+                    model_n_components,
+                    k_best=250,
+                    cv_splits=5,
+                    verbose=False,
+                )
+                if cv_result[4] is None:
+                    raise RuntimeError(
+                        "No se pudo generar la matriz de confusión para "
+                        f"{category} #{rank} ({nivel}/{color}/{grupo})."
+                    )
+                evaluated_models[model_key] = {
+                    "y_pred": cv_result[4],
+                    "label_encoder_cv": cv_result[5],
+                    "y_true": cv_result[6],
+                }
+
+            top_models[category].append({
+                **trained_models[model_key],
+                **evaluated_models[model_key],
+                "rank": rank,
+                "categoria": category,
+            })
+
+    return top_models
+
+
+def build_top_hierarchical_bundles(top_models, bundle_metadata):
+    """Construye top 5 completas y especializadas por comando."""
+    bundles = {
+        "completas": [],
+        "letras": [],
+        "numeros": [],
+        "comandos": [],
+    }
+    category_groups = {
+        "letras": "Letters",
+        "numeros": "Numbers",
+        "comandos": "Controls",
+    }
+
+    for rank in range(1, 6):
+        color_model = top_models["_cascada_color"][rank - 1]
+        hierarchy = {}
+        for color in ("Green", "Blue"):
+            super_model = top_models[f"_cascada_super_{color}"][rank - 1]
+            per_group = {}
+            for group in ("Letters", "Numbers", "Controls"):
+                per_group[group] = top_models[
+                    f"_cascada_fino_{color}_{group}"
+                ][rank - 1]
+
+            hierarchy[color] = {
+                "super_clase": _to_inference_bundle(super_model),
+                "por_grupo": {
+                    group: _to_inference_bundle(model)
+                    for group, model in per_group.items()
+                },
+            }
+
+        bundle = {
+            **bundle_metadata,
+            "cascade_type": "completa",
+            "modelo_top_rank": rank,
+            "color": _to_inference_bundle(color_model),
+            "por_color": hierarchy,
+        }
+        bundles["completas"].append(bundle)
+
+        for category, group in category_groups.items():
+            specialized_color_model = top_models[
+                f"_cascada_color_{group}"
+            ][rank - 1]
+            specialized_hierarchy = {
+                color: {
+                    "por_grupo": {
+                        group: _to_inference_bundle(
+                            top_models[f"_cascada_fino_{color}_{group}"][rank - 1]
+                        )
+                    }
+                }
+                for color in ("Green", "Blue")
+            }
+            bundles[category].append({
+                **bundle_metadata,
+                "cascade_type": category,
+                "cascade_group": group,
+                "modelo_top_rank": rank,
+                "color": _to_inference_bundle(specialized_color_model),
+                "por_color": specialized_hierarchy,
+            })
+
+    return bundles
+
+
+def _to_inference_bundle(model):
+    """Reduce un modelo top a la estructura esperada por HierarchicalBCIPredictor."""
+    if "fixed_label" in model:
+        return {
+            "fixed_label": model["fixed_label"],
+            "feature_columns": [],
+            "feature_set": "N/A",
+            "clasificador": "Salida fija",
+            "f1_macro_cv": None,
+        }
+    return {
+        "pipeline": model["pipeline"],
+        "label_encoder": model["label_encoder"],
+        "feature_columns": model["feature_columns"],
+        "feature_set": model["feature_set"],
+        "clasificador": model["clasificador"],
+        "f1_macro_cv": model["f1_macro_cv"],
+    }
+
+
+def save_top_model_artifacts(
+    usuario_models_dir, top_models_by_category, progress_callback=None
+):
+    """Guarda cada modelo completo y cada paso ajustado del pipeline por separado."""
+    artifacts_dir = os.path.join(usuario_models_dir, "top_modelos")
+    os.makedirs(artifacts_dir, exist_ok=True)
+
+    for category, models in top_models_by_category.items():
+        if category.startswith("_cascada_"):
+            continue
+        category_dir = os.path.join(artifacts_dir, category)
+        os.makedirs(category_dir, exist_ok=True)
+
+        for model in models:
+            report_progress(
+                progress_callback,
+                f"Guardando artefactos: {category}, modelo "
+                f"{model['rank']}/{len(models)}...",
+            )
+            color = model["color"] or "todos"
+            parts = (
+                f"top_{model['rank']:02d}",
+                model["nivel"],
+                color,
+                model["grupo"],
+                model["feature_set"],
+                model["clasificador"],
+            )
+            filename = "_".join(
+                "".join(
+                    char if char.isalnum() or char in "-_" else "_"
+                    for char in str(part)
+                )
+                for part in parts
+            )
+            model_path = os.path.join(category_dir, f"{filename}.joblib")
+            layers_dir = os.path.join(category_dir, f"{filename}_capas")
+            os.makedirs(layers_dir, exist_ok=True)
+
+            artifact = dict(model)
+            artifact["archivo_capas"] = {}
+            for step_name, fitted_step in model["pipeline"].named_steps.items():
+                layer_path = os.path.join(layers_dir, f"{step_name}.joblib")
+                joblib.dump(fitted_step, layer_path)
+                artifact["archivo_capas"][step_name] = os.path.relpath(
+                    layer_path, category_dir
+                )
+
+            joblib.dump(artifact, model_path)
+            confusion_path = os.path.join(category_dir, f"{filename}_matriz.png")
+            labels = [
+                str(label) for label in model["label_encoder_cv"].classes_
+            ]
+            plot_confusion_matrix(
+                model["y_true"],
+                model["y_pred"],
+                labels,
+                (
+                    f"{category} top {model['rank']} | {color} | {model['grupo']}\n"
+                    f"F1 macro CV={model['f1_macro_cv']:.3f}"
+                ),
+                confusion_path,
+            )
+            print(
+                f"   OK {category} #{model['rank']}: {model_path} "
+                f"({len(artifact['archivo_capas'])} capas, matriz: "
+                f"{confusion_path})"
+            )
+
+    return artifacts_dir
+
+
+# ===========================================================================================
+# PASO 6: MAIN
+# ===========================================================================================
+def save_confusion_matrices_per_user(usuario, best_per_group, figures_dir):
+    """Guarda una matriz de confusión por cada nivel ganador del usuario."""
+    os.makedirs(figures_dir, exist_ok=True)
+    for nivel, info in best_per_group.items():
+        if info.get("y_true") is None or info.get("y_pred") is None:
+            continue
+        labels = [str(lbl) for lbl in info["label_encoder"].classes_]
+        out_path = os.path.join(figures_dir, f"cm_{nivel}.png")
+        title = (
+            f"{usuario} | {nivel}\n"
+            f"acc={info.get('accuracy_mean', 0.0):.3f}, "
+            f"f1_macro={info.get('f1_macro', 0.0):.3f}"
+        )
+        plot_confusion_matrix(info["y_true"], info["y_pred"], labels, title, out_path)
+        print(f"   ✓ Matriz guardada en: {out_path}")
+
+
+def train_optimized_hierarchical(
+    output_dir=None,
+    channels=None,
+    fs=None,
+    use_p300window=None,
+    apply_baseline_correction=None,
+    use_win_size=None,
+    window_size=None,
+    window_overlap=None,
+    max_recordings_per_class=None,
+    verbose=True,
+    semilla=None,
+    progress_callback: Optional[Callable[[str], None]] = None,
+):
+    output_dir = output_dir or config.OUTPUT_DIR
+    FEATURES_CSV = os.path.join(output_dir, "features_dataset.csv")
+    RESULTS_CSV = os.path.join(output_dir, "resultados_modelos.csv")
+    FIGURES_DIR = os.path.join(output_dir, "figures")
+    MODELS_DIR = os.path.join(output_dir, "models")
+    fs= fs if fs is not None else config.FS
+    channels = channels if channels is not None else config.CHANNEL_NAMES
+    use_p300window = (
+        config.USE_P300_WINDOW_ONLY
+        if use_p300window is None
+        else use_p300window
+    )
+    apply_baseline_correction = apply_baseline_correction if apply_baseline_correction is not None else config.APPLY_BASELINE_CORRECTION
+    use_win_size = (
+        config.USE_WIN_SIZE if use_win_size is None else use_win_size
+    )
+    window_size = (
+        config.WINDOW_SIZE if window_size is None else window_size
+    )
+    window_overlap = (
+        config.WINDOW_OVERLAP
+        if window_overlap is None
+        else window_overlap
+    )
+    semilla = semilla if semilla is not None else config.RANDOM_STATE
+    print("\n" + "="*100)
+    print("ENTRENAMIENTO JERÁRQUICO: COLOR → SUPER-GRUPO → COMANDO FINO")
+    print("POR USUARIO")
+    print("="*100)
+    
+    # Cargar y preparar datos
+    print("\n1) Cargando dataset...")
+    report_progress(progress_callback, "Cargando el dataset de características...")
+    df = pd.read_csv(FEATURES_CSV)
+    df = normalize_string_columns(df, ["usuario", "tpComando", "letra", "label", "color"])
+    validate_color_labels(df)
+    meta_cols = ["usuario", "tpComando", "letra", "trial", "label", "color"]
+    feature_cols = [c for c in df.columns if c not in meta_cols]
+    df[feature_cols] = log_transform_power_columns(df[feature_cols], feature_cols)
+    print(f"   ✓ Dataset cargado: {df.shape[0]} trials, {len(feature_cols)} features")
+    
+    usuarios = sorted(df["usuario"].unique())
+    print(f"   ✓ Usuarios detectados: {usuarios}\n")
+    
+    resumen_global = []
+    
+    # Entrenar un modelo POR USUARIO
+    for usuario in usuarios:
+        print("\n" + "="*100)
+        print(f"USUARIO: {usuario}")
+        print("="*100)
+        
+        df_usuario = df[df["usuario"] == usuario].reset_index(drop=True)
+        print(f"Trials para {usuario}: {len(df_usuario)}")
+        
+        # Paso 1-4: Evaluación exhaustiva (solo para este usuario)
+        print(f"\n2) Evaluando TODAS las combinaciones para {usuario}...")
+        report_progress(
+            progress_callback,
+            f"Evaluando combinaciones de modelos para {usuario}...",
+        )
+        print("   Esto puede tomar 30-40 minutos por usuario, dependiendo del hardware y la cantidad de datos.")
+        ini=datetime.now()  
+        print("Incio de evaluacion exhaustiva",ini)
+        results_df, best_per_group = evaluate_all_hierarchical(
+            df_usuario,
+            verbose=False,
+            seed=semilla,
+            progress_callback=progress_callback,
+        )
+        fin=datetime.now()
+        print("Fin de evaluacion exhaustiva",fin)
+        print("Tiempo de evaluacion exhaustiva",fin-ini)
+        # Guardar tabla por usuario
+        usuario_dir = os.path.join(output_dir, usuario)
+        os.makedirs(usuario_dir, exist_ok=True)
+        
+        out_csv = os.path.join(usuario_dir, "evaluacion_jerarquica_completa.csv")
+        results_df.to_csv(out_csv, index=False)
+        print(f"   ✓ Tabla guardada en: {out_csv}")
+        report_progress(
+            progress_callback,
+            "Evaluación completa. Guardando matrices de confusión...",
+        )
+
+        # Guardar matrices de confusión del mejor modelo por nivel
+        usuario_figures_dir = os.path.join(FIGURES_DIR, usuario)
+        save_confusion_matrices_per_user(usuario, best_per_group, usuario_figures_dir)
+        
+        # Resumen ganadores por grupo
+        print(f"\n   GANADOR POR CADA GRUPO ({usuario}):")
+        print("   " + "-" * 96)
+        for grupo, info in best_per_group.items():
+            if info.get("fixed_label") is not None:
+                print(f"   {grupo:20s} | salida fija={ascii(info['fixed_label'])}")
+                continue
+            print(f"   {grupo:20s} | feature_set={info['feature_set']:18s} | "
+                  f"clf={info['clasificador']:22s} | f1_cv={info['f1_macro']:.3f}")
+        
+        # Paso 5: Entrenar modelos finales para este usuario
+        print(f"\n3) Entrenando modelos finales por color para {usuario}...")
+        report_progress(
+            progress_callback,
+            f"Ajustando modelos finales para {usuario}...",
+        )
+        final_bundles = train_final_models(
+            df_usuario, best_per_group, progress_callback=progress_callback
+        )
+        top_models_by_category = train_top_models_by_category(
+            df_usuario,
+            results_df,
+            seed=semilla,
+            progress_callback=progress_callback,
+        )
+        
+        # Guardar bundle final POR USUARIO
+        usuario_models_dir = os.path.join(MODELS_DIR, usuario)
+        os.makedirs(usuario_models_dir, exist_ok=True)
+        
+        hierarchy_bundle = {
+            "usuario": usuario,
+            "color": final_bundles["color"],
+            "por_color": final_bundles["por_color"],
+            "channel_names": channels,
+            "fs": fs,
+            "use_p300_window_only": use_p300window,
+            "p300_window_s": config.P300_WINDOW_S,
+            "apply_baseline_correction": apply_baseline_correction,
+            "baseline_window_s": config.BASELINE_WINDOW_S,
+            "use_win_size": use_win_size,
+            "window_size": window_size,
+            "window_overlap": window_overlap,
+            "max_recordings_per_class": max_recordings_per_class,
+            "log_transform_power": True,
+            "use_flash_segmentation": True,
+            "n_flashes": 2,  # 2 flashes por grupo en protocolo real
+            # Umbral mínimo de confianza para la Etapa 1 (super-clase).
+            # 0.0 = nunca rechazar (default). Configurable en inferencia con set_min_group_confidence().
+            "min_group_confidence": 0.0,
+        }
+        
+        out_bundle = os.path.join(usuario_models_dir, "hierarchical_bundle_optimizado.joblib")
+        report_progress(progress_callback, "Guardando el modelo jerárquico...")
+        joblib.dump(hierarchy_bundle, out_bundle)
+        print(f"   ✓ Bundle guardado en: {out_bundle}")
+
+        cascade_metadata = {
+            key: value for key, value in hierarchy_bundle.items()
+            if key not in ("color", "por_color")
+        }
+        top_cascades_by_category = build_top_hierarchical_bundles(
+            top_models_by_category, cascade_metadata
+        )
+        cascades_dir = os.path.join(usuario_models_dir, "top_cascadas")
+        os.makedirs(cascades_dir, exist_ok=True)
+        for category, category_bundles in top_cascades_by_category.items():
+            category_dir = (
+                cascades_dir
+                if category == "completas"
+                else os.path.join(cascades_dir, category)
+            )
+            os.makedirs(category_dir, exist_ok=True)
+            for rank, cascade_bundle in enumerate(category_bundles, 1):
+                filename = (
+                    f"hierarchical_bundle_optimizado_top_{rank}.joblib"
+                    if category == "completas"
+                    else f"hierarchical_bundle_{category}_top_{rank}.joblib"
+                )
+                cascade_path = os.path.join(category_dir, filename)
+                joblib.dump(cascade_bundle, cascade_path)
+                print(
+                    f"   ✓ Cascada {category} top {rank} guardada: "
+                    f"{cascade_path}"
+                )
+
+        top_models_dir = save_top_model_artifacts(
+            usuario_models_dir,
+            top_models_by_category,
+            progress_callback=progress_callback,
+        )
+        print(f"   ✓ Modelos individuales y sus capas guardados en: {top_models_dir}")
+        for category, models in top_models_by_category.items():
+            if not category.startswith("_cascada_"):
+                print(f"      {category}: {len(models)} modelos")
+
+        # Resumen para este usuario
+        best_row = results_df.iloc[0]
+        resumen_global.append({
+            "usuario": usuario,
+            "n_trials": len(df_usuario),
+            "mejor_nivel": best_row["nivel"],
+            "mejor_grupo": best_row["grupo"],
+            "mejor_feature_set": best_row["feature_set"],
+            "mejor_clasificador": best_row["clasificador"],
+            "accuracy_mean": float(best_row["accuracy_mean"]),
+            "f1_macro_mean": float(best_row["f1_macro_mean"]),
+        })
+    
+    # Resumen final global
+    print("\n" + "="*100)
+    print("RESUMEN FINAL: MEJOR COMBINACIÓN POR USUARIO")
+    print("="*100)
+    resumen_df = pd.DataFrame(resumen_global)
+    print(resumen_df.to_string(index=False))
+    
+    # Guardar resumen
+    resumen_path = os.path.join(config.OUTPUT_DIR, "resumen_entrenamiento_por_usuario.csv")
+    resumen_df.to_csv(resumen_path, index=False)
+    print(f"\n✓ Resumen guardado en: {resumen_path}")
+    
+    print("\n" + "="*100)
+    print("ENTRENAMIENTO COMPLETADO PARA TODOS LOS USUARIOS")
+    print("="*100)
+    report_progress(progress_callback, "Entrenamiento completado.")
+    print(f"\nEstructura generada:")
+    for usuario in usuarios:
+        print(f"\n{usuario}:")
+        print(f"  - outputs/{usuario}/evaluacion_jerarquica_completa.csv")
+        print(f"  - outputs/figures/{usuario}/cm_super_clase.png")
+        print(f"  - outputs/figures/{usuario}/cm_Letters.png")
+        print(f"  - outputs/figures/{usuario}/cm_Numbers.png")
+        print(f"  - outputs/figures/{usuario}/cm_Controls.png")
+        print(f"  - outputs/models/{usuario}/hierarchical_bundle_optimizado.joblib")
+        print(f"  - outputs/models/{usuario}/top_cascadas/hierarchical_bundle_optimizado_top_1..5.joblib")
+        print(f"  - outputs/models/{usuario}/top_cascadas/letras|numeros|comandos/")
+        print(f"  - outputs/models/{usuario}/top_modelos/")
+    
+    print(f"\nPara usar en tiempo real (POR USUARIO):")
+    print(f"  from hierarchical_infer import HierarchicalBCIPredictor")
+    print(f"  predictor = HierarchicalBCIPredictor(usuario='UserCMSM')  # o el usuario que quieras")
+    print(f"  comando, detalle = predictor.predict_from_csv('archivo.csv')")
+
+
+if __name__ == "__main__":
+    train_optimized_hierarchical()

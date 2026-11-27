@@ -1,0 +1,776 @@
+# -*- coding: utf-8 -*-
+"""
+Inferencia en tiempo real con clasificación jerárquica:
+    1) color predice Green/Blue
+    2) super-clase del color predice Letters/Numbers/Controls
+    3) el modelo fino del color y grupo predice el comando final.
+
+Uso por linea de comandos:
+    python hierarchical_infer.py ruta/a/grabacion.csv
+
+Uso programatico:
+    from hierarchical_infer import HierarchicalBCIPredictor
+    predictor = HierarchicalBCIPredictor()
+    comando, detalle = predictor.predict_from_signals(signals)  # signals: (n_channels, n_samples)
+"""
+
+import os
+import sys
+import joblib
+import numpy as np
+import pandas as pd
+
+import models.newTraining.config as config
+from models.newTraining.eeg_features import (
+    EEGFeatureExtractor,
+    apply_notch_filter,
+    apply_bandpass_filter,
+    apply_baseline_correction,
+    apply_zscore_normalization,
+    log_transform_power_columns
+)
+from models.newTraining.p300_segmentation import extract_with_flash_segmentation
+from utils.chequeo_calidad import quality_filter
+from models.newTraining.lda_utils import SafeLDA,ZeroThresholdClassifier, ZeroThresholdLDA  # noqa: F401 — necesario para que joblib deserialice SafeLDA correctamente
+
+
+class RecordingQualityError(ValueError):
+    """La grabación no supera los controles de calidad EEG."""
+
+
+class HierarchicalBCIPredictor:
+    def __init__(self, usuario=None, model_path=None, use_flash_segmentation=False):
+        """
+        usuario: nombre del usuario cuyo modelo monousuario se debe cargar
+        model_path: ruta explicita al .joblib
+        use_flash_segmentation: si True, segmenta en flashes P300. Si False (default),
+                                procesa la señal completa con las mismas ventanas y filtros
+                                que data_loader.py.
+        """
+        if model_path is None:
+            if usuario is None:
+                raise ValueError(
+                    "Debes indicar 'usuario' (modelo monousuario) o 'model_path' explicito."
+                )
+            model_path = os.path.join(config.MODELS_DIR, usuario, "hierarchical_bundle_optimizado.joblib")
+
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(
+                f"No se encontro el modelo en: {model_path}\n"
+                f"Verifica que ya corriste 'python hierarchical_train.py' para ese usuario."
+            )
+
+        self.bundle = joblib.load(model_path)
+        self.usuario = self.bundle.get("usuario", usuario)
+        self.use_flash_segmentation = use_flash_segmentation
+
+        self.channel_names = self.bundle.get("channel_names", config.CHANNEL_NAMES)
+        self.fs = self.bundle.get("fs", config.FS)
+        self.use_p300_window_only = self.bundle.get("use_p300_window_only", getattr(config, "USE_P300_WINDOW_ONLY", False))
+        self.p300_window_s = self.bundle.get("p300_window_s", getattr(config, "P300_WINDOW_S", (0.5, 1.2)))
+        self.apply_baseline = self.bundle.get("apply_baseline_correction", getattr(config, "APPLY_BASELINE_CORRECTION", True))
+        self.baseline_window_s = self.bundle.get("baseline_window_s", getattr(config, "BASELINE_WINDOW_S", (0.0, 0.5)))
+        self.log_transform_power = self.bundle.get("log_transform_power", True)
+
+        # Filtros y normalización idénticos a data_loader.py
+        self.apply_notch = getattr(config, "APPLY_NOTCH_FILTER", True)
+        self.notch_freq = getattr(config, "NOTCH_FREQ", 60.0)
+        self.apply_bandpass = getattr(config, "APPLY_BANDPASS_FILTER", True)
+        self.lowcut = getattr(config, "BANDPASS_LOWCUT", 0.5)
+        self.highcut = getattr(config, "BANDPASS_HIGHCUT", 40.0)
+        self.apply_zscore = getattr(config, "APPLY_ZSCORE_NORMALIZATION", True)
+        self.max_peak_threshold = getattr(config, "MAX_PEAK_THRESHOLD", 150.0)
+
+        # Configuración de ventaneo idéntica a data_loader.py
+        self.use_win_size = self.bundle.get(
+            "use_win_size", getattr(config, "USE_WIN_SIZE", True)
+        )
+        self.window_size = self.bundle.get(
+            "window_size", getattr(config, "WINDOW_SIZE", 192)
+        )
+        self.window_overlap = self.bundle.get(
+            "window_overlap", getattr(config, "WINDOW_OVERLAP", 0.89)
+        )
+
+        self.last_artifact_info = {}
+        self.last_quality_filter_info = {}
+
+        if "color" not in self.bundle or "por_color" not in self.bundle:
+            raise ValueError(
+                "El bundle cargado no tiene los modelos jerárquicos separados por color. "
+                "Vuelve a entrenarlo con train_hierarchical_optimized.py."
+            )
+        self.color_bundle = self.bundle["color"]
+        self.color_hierarchies = self.bundle["por_color"]
+        self.cascade_type = self.bundle.get("cascade_type", "completa")
+        self.cascade_group = self.bundle.get("cascade_group")
+        if self.cascade_type not in {
+            "completa", "letras", "numeros", "comandos"
+        }:
+            raise ValueError(
+                f"Tipo de cascada no reconocido: {self.cascade_type!r}."
+            )
+        if self.cascade_type != "completa" and self.cascade_group not in {
+            "Letters", "Numbers", "Controls"
+        }:
+            raise ValueError(
+                "La cascada especializada no especifica un grupo válido."
+            )
+        expected_group = {
+            "letras": "Letters",
+            "numeros": "Numbers",
+            "comandos": "Controls",
+        }.get(self.cascade_type)
+        if expected_group is not None and self.cascade_group != expected_group:
+            raise ValueError(
+                f"La cascada '{self.cascade_type}' debe usar el grupo "
+                f"'{expected_group}'."
+            )
+
+        # feature_columns por nivel: cada modelo usa SOLO sus mejores features
+        # Guardadas en el bundle durante entrenamiento como "feature_columns"
+        self.color_feature_cols = list(self.color_bundle["feature_columns"])
+        self.super_feature_cols = {
+            color: list(hierarchy["super_clase"]["feature_columns"])
+            for color, hierarchy in self.color_hierarchies.items()
+            if "super_clase" in hierarchy
+        }
+        self.group_feature_cols = {
+            color: {
+                group: list(bundle["feature_columns"])
+                for group, bundle in hierarchy["por_grupo"].items()
+            }
+            for color, hierarchy in self.color_hierarchies.items()
+        }
+
+        # feature_columns global: UNIÓN de todos los sets (para extracción única de señal)
+        all_cols = list(self.color_feature_cols)
+        for color, cols in self.super_feature_cols.items():
+            for c in cols:
+                if c not in all_cols:
+                    all_cols.append(c)
+        for color, hierarchy in self.color_hierarchies.items():
+            for group_cols in self.group_feature_cols[color].values():
+                for c in group_cols:
+                    if c not in all_cols:
+                        all_cols.append(c)
+        self.feature_columns = all_cols
+
+        # Umbral de confianza mínima para la Etapa 1 (super-clase)
+        # Si el grupo predicho tiene confianza < este valor, se retorna RECHAZO
+        self.min_group_confidence = self.bundle.get("min_group_confidence", 0.0)
+
+        self.extractor = EEGFeatureExtractor(fs=self.fs)
+
+        print(f"Modelo jerarquico monousuario cargado: usuario='{self.usuario}'")
+        print(f"  Color: f1_cv={self.color_bundle.get('f1_macro_cv', 0.0):.3f} "
+              f"| feature_set='{self.color_bundle.get('feature_set', 'N/A')}' "
+              f"({len(self.color_feature_cols)} features)")
+        for color, hierarchy in self.color_hierarchies.items():
+            super_bundle = hierarchy.get("super_clase")
+            if super_bundle is not None:
+                print(f"  Super-clase {color}: f1_cv={super_bundle.get('f1_macro_cv', 0.0):.3f} "
+                      f"| feature_set='{super_bundle.get('feature_set', 'N/A')}'")
+            for grupo, bundle in hierarchy["por_grupo"].items():
+                if "fixed_label" in bundle:
+                    print(f"    {grupo:10s}: salida fija {ascii(bundle['fixed_label'])}")
+                    continue
+                n_clases = len(bundle["label_encoder"].classes_)
+                print(f"    {grupo:10s}: f1_cv={bundle.get('f1_macro_cv', 0.0):.3f} "
+                      f"| feature_set='{bundle.get('feature_set', 'N/A')}' "
+                      f"({n_clases} clases)")
+
+
+    # -----------------------------------------------------------------
+    def _crop_p300(self, signals):
+        start = int(self.p300_window_s[0] * self.fs)
+        end = int(self.p300_window_s[1] * self.fs)
+        end = min(end, signals.shape[1])
+        if start >= end:
+            return signals
+        return signals[:, start:end]
+
+    def _apply_quality_filter(self, signals):
+        """Corrige una grabación en memoria usando el filtro de calidad del proyecto."""
+        signals = np.asarray(signals, dtype=float)
+        if signals.ndim != 2 or signals.shape[0] != len(self.channel_names):
+            raise ValueError(
+                f"Se esperaba una señal con forma ("
+                f"{len(self.channel_names)} canales, muestras), recibido {signals.shape}."
+            )
+
+        quality_config = quality_filter.Config(
+            fs=float(self.fs),
+            n_muestras_min=256,
+            canales=list(self.channel_names),
+        )
+        if signals.shape[1] < quality_config.n_muestras_min:
+            raise ValueError(
+                "La grabación es demasiado corta para el filtro de calidad: "
+                f"{signals.shape[1]} muestras; se requieren al menos "
+                f"{quality_config.n_muestras_min}."
+            )
+
+        quality_ordered = signals.T
+        analysis = quality_filter.analizar_registro(quality_ordered, quality_config)
+        if analysis.estado == quality_filter.ESTADO_C or analysis.Y is None:
+            codes = ", ".join(analysis.codigos_C) or "sin código"
+            reasons = "; ".join(analysis.motivos) or "sin detalle"
+            raise RecordingQualityError(
+                "El filtro de calidad marcó la grabación como no utilizable "
+                f"(C; {codes}): {reasons}"
+            )
+
+        self.last_quality_filter_info = {
+            "estado": analysis.estado,
+            "canales_corregidos": list(analysis.canales_corregidos),
+            "n_muestras_modificadas": analysis.metricas.get(
+                "n_muestras_modificadas", 0
+            ),
+        }
+        return analysis.Y.T
+
+    def preprocess_signals(self, signals):
+        """
+        Aplica primero el filtro de calidad y después la cadena de data_loader.py:
+        filtros, corrección de línea base, normalización Z-score y recorte P300.
+        """
+        signals = np.array(signals, dtype=float, copy=True)
+        signals = self._apply_quality_filter(signals)
+
+        # 0) Filtro Notch (60 Hz)
+        if self.apply_notch:
+            signals = apply_notch_filter(signals, self.fs, notch_freq=self.notch_freq)
+
+        # 1) Filtro Paso de Banda (0.5 a 40 Hz)
+        if self.apply_bandpass:
+            signals = apply_bandpass_filter(signals, self.fs, lowcut=self.lowcut, highcut=self.highcut)
+
+        # 2) Correccion de linea base
+        if self.apply_baseline:
+            signals = apply_baseline_correction(signals, self.fs, self.baseline_window_s)
+
+        # 3) Deteccion de picos (> 150 uV)
+        pico_maximo = float(np.max(np.abs(signals)))
+        es_artefacto = pico_maximo > self.max_peak_threshold
+
+        # 4) Normalizacion y Escalamiento (Z-score)
+        if self.apply_zscore:
+            signals = apply_zscore_normalization(signals)
+
+        # 5) Recorte opcional a la ventana P300
+        if self.use_p300_window_only:
+            signals = self._crop_p300(signals)
+
+        return signals, es_artefacto, pico_maximo
+
+    def _signals_to_features(self, signals, return_artifact_info=False):
+        """
+        signals: (n_channels, n_samples) -> DataFrame con 1 fila por ventana (ej. 4 ventanas de 192 muestras).
+        Aplica el mismo preprocesamiento y extracción que data_loader.py para que cada
+        ventana se pase individualmente al clasificador tal como se entrenó.
+        """
+        signals, es_artefacto, pico_maximo = self.preprocess_signals(signals)
+
+        if self.use_flash_segmentation:
+            # Segmentación de flashes P300 (experimental)
+            feat_df = extract_with_flash_segmentation(
+                signals, self.feature_columns, self.extractor,
+                apply_baseline=False,
+                use_p300_window=False,
+                p300_window_s=self.p300_window_s,
+                log_transform_power=self.log_transform_power,
+                fs=self.fs,
+                verbose=False
+            )
+        else:
+            n_samples = signals.shape[1]
+            if self.use_win_size:
+                window_size = min(self.window_size, n_samples)
+                overlap = self.window_overlap
+            else:
+                window_size = n_samples
+                overlap = 0.0
+
+            feat_df = self.extractor.extract_features(
+                signals,
+                channel_names=self.channel_names,
+                available_channel_names=self.channel_names,
+                window_size=window_size,
+                overlap=overlap,
+            )
+
+            if self.log_transform_power:
+                feat_df = log_transform_power_columns(feat_df, feat_df.columns)
+
+        if self.use_p300_window_only:
+            t_p300_start = 0.0
+            t_p300_end = float(signals.shape[1] / self.fs)
+        else:
+            t_p300_start, t_p300_end = 0.5, 1.2
+
+        erp_df = self.extractor.extract_erp_features(
+            signals,
+            channel_names=self.channel_names,
+            available_channel_names=self.channel_names,
+            t_pre_stim=float(self.baseline_window_s[1]),
+            t_p300_start=t_p300_start,
+            t_p300_end=t_p300_end,
+        )
+        erp_row = erp_df.iloc[0].to_dict()
+        if self.use_p300_window_only:
+            for name in erp_row:
+                if name.endswith("_latency_ms"):
+                    erp_row[name] += 500.0
+        erp_features = pd.DataFrame(
+            [erp_row] * len(feat_df), columns=erp_row.keys(), index=feat_df.index
+        )
+        feat_df = pd.concat([feat_df, erp_features], axis=1)
+
+        self.last_artifact_info = {
+            "es_artefacto": es_artefacto,
+            "pico_maximo_uV": pico_maximo,
+        }
+
+        if return_artifact_info:
+            return feat_df, es_artefacto, pico_maximo
+        return feat_df
+
+    def _signals_to_feature_row(self, signals, return_artifact_info=False):
+        """Método de compatibilidad: promedia las ventanas en una sola fila."""
+        feat_df, es_art, pico = self._signals_to_features(signals, return_artifact_info=True)
+        feat_row = feat_df.mean(axis=0, numeric_only=True).to_frame().T
+        if return_artifact_info:
+            return feat_row, es_art, pico
+        return feat_row
+
+    def _predict_with_bundle(self, bundle, feat_df):
+        """
+        Pasa todas las ventanas (filas de feat_df) al clasificador.
+        Evalúa cada ventana y combina las predicciones mediante soft voting (promedio de probabilidades).
+        
+        Retorna:
+            pred_label: clase ganadora global
+            proba_dict: diccionario de probabilidades promedio
+            window_details: lista con predicción y probabilidades de cada ventana individual
+        """
+        if "fixed_label" in bundle:
+            pred_label = bundle["fixed_label"]
+            proba_dict = {pred_label: 1.0}
+            window_details = [
+                {
+                    "ventana": i + 1,
+                    "prediccion": pred_label,
+                    "probabilidades": proba_dict,
+                }
+                for i in range(len(feat_df))
+            ]
+            return pred_label, proba_dict, window_details
+
+        X = feat_df.reindex(columns=bundle["feature_columns"]).to_numpy(dtype=float)
+        X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+
+        pipeline = bundle["pipeline"]
+        le = bundle["label_encoder"]
+        clases = le.classes_
+
+        window_preds_idx = pipeline.predict(X)
+        window_preds = le.inverse_transform(window_preds_idx)
+
+        window_details = []        
+        if hasattr(pipeline, "predict_proba"):
+            all_probas = pipeline.predict_proba(X)  # shape: (n_ventanas, n_clases)
+            if (
+                isinstance(pipeline.named_steps.get("clf"), ZeroThresholdClassifier)
+                or isinstance(pipeline.named_steps.get("lda_clf"), ZeroThresholdLDA)
+            ):
+                avg_score = float(np.mean(pipeline.decision_function(X)))
+                positive_probability = float(
+                    np.exp(-np.logaddexp(0.0, -avg_score))
+                )
+                avg_probas = np.array(
+                    [1.0 - positive_probability, positive_probability]
+                )
+                pred_idx = int(avg_score > 0)
+            else:
+                avg_probas = np.mean(all_probas, axis=0)
+                pred_idx = np.argmax(avg_probas)
+            pred_label = clases[pred_idx]
+            proba_dict = dict(sorted(zip(clases, avg_probas), key=lambda kv: -kv[1]))
+
+            for i in range(len(X)):
+                w_dict = dict(sorted(zip(clases, all_probas[i]), key=lambda kv: -kv[1]))
+                window_details.append({
+                    "ventana": i + 1,
+                    "prediccion": window_preds[i],
+                    "probabilidades": w_dict
+                })
+        else:
+            vals, counts = np.unique(window_preds, return_counts=True)
+            pred_label = vals[np.argmax(counts)]
+            proba_dict = {pred_label: 1.0}
+            for i in range(len(X)):
+                window_details.append({
+                    "ventana": i + 1,
+                    "prediccion": window_preds[i],
+                    "probabilidades": {}
+                })
+
+        return pred_label, proba_dict, window_details
+
+
+    # -----------------------------------------------------------------
+    def predict_from_signals(self, signals):
+        """
+        Predice a partir de un arreglo (n_channels, n_samples).
+        Extrae y pasa las 4 ventanas directamente al clasificador jerárquico.
+        """
+        return self.predict_from_repetitions([signals])
+
+    def predict_from_repetitions(self, lista_signals):
+        """
+        Cascada jerárquica con enrutamiento probabilístico conjunto (Soft Routing):
+          - En cascada completa: evalúa todas las ramas y calcula la probabilidad conjunta
+            P(color) * P(grupo | color) * P(comando | color, grupo) para los 40 comandos.
+          - En cascada especializada: evalúa solo el grupo configurado.
+        """
+        feat_dfs = []
+        artefactos = []
+        picos = []
+        quality_filter_results = []
+        for s in lista_signals:
+            f_df, es_art, pico = self._signals_to_features(s, return_artifact_info=True)
+            feat_dfs.append(f_df)
+            artefactos.append(es_art)
+            picos.append(pico)
+            quality_filter_results.append(self.last_quality_filter_info)
+
+        # DataFrame con TODAS las features extraídas
+        all_feats = pd.concat(feat_dfs, ignore_index=True)
+
+        # Etapa 1: Probabilidades de Color (Green / Blue)
+        color_feats = all_feats.reindex(columns=self.color_feature_cols)
+        color_pred, color_probas, color_ventanas = self._predict_with_bundle(
+            self.color_bundle, color_feats
+        )
+
+        # =====================================================================
+        # MODO A: CASCADA COMPLETA CON SOFT ROUTING CONJUNTO (40 COMANDOS)
+        # =====================================================================
+        if self.cascade_group is None:
+            probabilidades_conjuntas = {}
+            mejor_ruta = None
+            mejor_prob_conjunta = -1.0
+            super_ventanas_por_color = {}
+
+            for color_cand, p_color in color_probas.items():
+                hier_cand = self.color_hierarchies.get(str(color_cand))
+                if hier_cand is None:
+                    continue
+
+                # Evaluar super-clase (Letters / Numbers / Controls) para este color
+                s_bundle = hier_cand["super_clase"]
+                s_feats = all_feats.reindex(columns=self.super_feature_cols[color_cand])
+                _, g_probas, g_ventanas = self._predict_with_bundle(s_bundle, s_feats)
+                super_ventanas_por_color[color_cand] = (s_bundle, g_probas, g_ventanas)
+
+                for grupo_cand, p_grupo in g_probas.items():
+                    g_bundle = hier_cand["por_grupo"].get(grupo_cand)
+                    if g_bundle is None:
+                        continue
+
+                    f_cols = self.group_feature_cols[color_cand][grupo_cand]
+                    f_feats = all_feats.reindex(columns=f_cols)
+                    _, c_probas, c_ventanas = self._predict_with_bundle(g_bundle, f_feats)
+
+                    for cmd, p_cmd in c_probas.items():
+                        # Evitar que una salida fija (1 sola clase, p=1.0) domine injustamente
+                        peso_fino = 0.65 if "fixed_label" in g_bundle else float(p_cmd)
+                        p_total = float(p_color) * float(p_grupo) * peso_fino
+                        probabilidades_conjuntas[cmd] = p_total
+
+                        if p_total > mejor_prob_conjunta:
+                            mejor_prob_conjunta = p_total
+                            mejor_ruta = (
+                                color_cand,
+                                grupo_cand,
+                                cmd,
+                                s_bundle,
+                                g_probas,
+                                g_ventanas,
+                                g_bundle,
+                                c_ventanas,
+                            )
+
+            if mejor_ruta is None:
+                raise ValueError("No se pudo evaluar ninguna ruta válida en la cascada.")
+
+            (
+                color_pred,
+                grupo_pred,
+                comando_final,
+                super_bundle,
+                grupo_probas,
+                grupo_ventanas,
+                group_bundle,
+                comando_ventanas,
+            ) = mejor_ruta
+
+            # Normalizar las 40 probabilidades conjuntas para que sumen 1.0
+            suma_total = sum(probabilidades_conjuntas.values()) + 1e-12
+            comando_probas = dict(
+                sorted(
+                    ((k, v / suma_total) for k, v in probabilidades_conjuntas.items()),
+                    key=lambda kv: -kv[1],
+                )
+            )
+
+        # =====================================================================
+        # MODO B: CASCADA ESPECIALIZADA (GRUPO YA FIJADO POR MODO DE INTERFAZ)
+        # =====================================================================
+        else:
+            hierarchy = self.color_hierarchies.get(str(color_pred))
+            if hierarchy is None:
+                raise ValueError(
+                    f"El color predicho '{color_pred}' no tiene modelos asociados."
+                )
+            group_bundles = hierarchy["por_grupo"]
+            group_feature_cols = self.group_feature_cols[color_pred]
+
+            super_bundle = {}
+            grupo_pred = self.cascade_group
+            grupo_probas = {grupo_pred: 1.0}
+            grupo_ventanas = [
+                {
+                    "ventana": i + 1,
+                    "prediccion": grupo_pred,
+                    "probabilidades": grupo_probas,
+                }
+                for i in range(len(all_feats))
+            ]
+
+            if grupo_pred not in group_bundles:
+                raise ValueError(
+                    f"El grupo '{grupo_pred}' no tiene un modelo para el color '{color_pred}'."
+                )
+            group_bundle = group_bundles[grupo_pred]
+            group_feats = all_feats.reindex(columns=group_feature_cols[grupo_pred])
+            comando_final, comando_probas, comando_ventanas = self._predict_with_bundle(
+                group_bundle, group_feats
+            )
+
+        # Verificar confianza mínima del grupo (umbral configurable)
+        confianza_grupo_final = float(grupo_probas.get(grupo_pred, 0.0))
+        rechazado = confianza_grupo_final < self.min_group_confidence
+
+        if rechazado:
+            detalle = {
+                "color_predicho": color_pred,
+                "color_probabilidades": color_probas,
+                "grupo_predicho": grupo_pred,
+                "grupo_probabilidades": grupo_probas,
+                "comando_probabilidades": {},
+                "n_repeticiones_usadas": len(lista_signals),
+                "n_ventanas": len(all_feats),
+                "rechazado": True,
+                "razon_rechazo": f"Confianza de grupo {confianza_grupo_final:.3f} < umbral {self.min_group_confidence:.3f}",
+                "ventanas": [
+                    {
+                        "ventana": i + 1,
+                        "color": color_ventanas[i]["prediccion"],
+                        "grupo": grupo_ventanas[i]["prediccion"],
+                        "comando": "RECHAZO",
+                        "confianza_grupo": float(grupo_ventanas[i]["probabilidades"].get(grupo_ventanas[i]["prediccion"], 1.0)),
+                        "confianza_comando": 0.0,
+                    }
+                    for i in range(len(all_feats))
+                ],
+                "detalle_ventanas_color": color_ventanas,
+                "detalle_ventanas_grupo": grupo_ventanas,
+                "detalle_ventanas_comando": [],
+                "artefactos_detectados": artefactos,
+                "picos_maximos_uV": picos,
+                "filtro_calidad": quality_filter_results,
+                "es_artefacto": any(artefactos) if artefactos else False,
+                "pico_maximo_uV": max(picos) if picos else 0.0,
+                "super_feature_set": super_bundle.get("feature_set", "N/A"),
+                "grupo_feature_set": "N/A",
+                "cascade_type": self.cascade_type,
+            }
+            return "RECHAZO", detalle
+
+        detalle = {
+            "color_predicho": color_pred,
+            "color_probabilidades": color_probas,
+            "grupo_predicho": grupo_pred,
+            "grupo_probabilidades": grupo_probas,
+            "comando_probabilidades": comando_probas,
+            "n_repeticiones_usadas": len(lista_signals),
+            "n_ventanas": len(all_feats),
+            "rechazado": False,
+            "ventanas": [
+                {
+                    "ventana": i + 1,
+                    "color": color_ventanas[i]["prediccion"],
+                    "grupo_voto": grupo_ventanas[i]["prediccion"],
+                    "grupo_final": grupo_pred,
+                    "comando": comando_ventanas[i]["prediccion"],
+                    "confianza_grupo": float(grupo_ventanas[i]["probabilidades"].get(grupo_ventanas[i]["prediccion"], 1.0)),
+                    "confianza_comando": float(comando_ventanas[i]["probabilidades"].get(comando_ventanas[i]["prediccion"], 1.0)),
+                }
+                for i in range(len(all_feats))
+            ],
+            "detalle_ventanas_color": color_ventanas,
+            "detalle_ventanas_grupo": grupo_ventanas,
+            "detalle_ventanas_comando": comando_ventanas,
+            "artefactos_detectados": artefactos,
+            "picos_maximos_uV": picos,
+            "filtro_calidad": quality_filter_results,
+            "es_artefacto": any(artefactos) if artefactos else False,
+            "pico_maximo_uV": max(picos) if picos else 0.0,
+            "super_feature_set": super_bundle.get("feature_set", "N/A"),
+            "grupo_feature_set": group_bundle.get("feature_set", "N/A"),
+            "cascade_type": self.cascade_type,
+        }
+        return comando_final, detalle
+
+
+    def predict_from_csv_list(self, paths):
+        """Version de predict_from_repetitions() que recibe una lista de rutas CSV
+        (una por repeticion del mismo estimulo candidato)."""
+        signals_list = [self._load_csv_as_signals(p) for p in paths]
+        return self.predict_from_repetitions(signals_list)
+
+    def _load_csv_as_signals(self, path):
+        df = pd.read_csv(path)
+        cols_presentes = [c for c in self.channel_names if c in df.columns]
+        if len(cols_presentes) == len(self.channel_names):
+            return df[self.channel_names].to_numpy().T
+        elif df.shape[1] >= len(self.channel_names):
+            return df.iloc[:, :len(self.channel_names)].to_numpy().T
+        raise ValueError(f"El CSV {path} no tiene las columnas de canal esperadas.")
+
+    def predict_from_csv(self, path):
+        """Atajo de 1 sola repeticion (ver advertencia en predict_from_signals)."""
+        signals = self._load_csv_as_signals(path)
+        return self.predict_from_signals(signals)
+
+    def predict_with_model_artifact_from_csv(self, path, model_artifact):
+        """Prueba un modelo individual del ranking usando el preprocesamiento EEG actual."""
+        required_keys = {"pipeline", "label_encoder", "feature_columns", "categoria"}
+        missing_keys = required_keys - model_artifact.keys()
+        if missing_keys:
+            raise ValueError(
+                "El archivo seleccionado no es un modelo individual de top_modelos; "
+                f"faltan campos: {sorted(missing_keys)}."
+            )
+
+        previous_feature_columns = self.feature_columns
+        self.feature_columns = list(model_artifact["feature_columns"])
+        try:
+            signals = self._load_csv_as_signals(path)
+            feat_df = self._signals_to_features(signals)
+        finally:
+            self.feature_columns = previous_feature_columns
+
+        model_bundle = {
+            "pipeline": model_artifact["pipeline"],
+            "label_encoder": model_artifact["label_encoder"],
+            "feature_columns": model_artifact["feature_columns"],
+        }
+        prediction, probabilities, windows = self._predict_with_bundle(
+            model_bundle, feat_df
+        )
+        details = {
+            "categoria": model_artifact["categoria"],
+            "rank": model_artifact["rank"],
+            "nivel": model_artifact["nivel"],
+            "color": model_artifact["color"],
+            "grupo": model_artifact["grupo"],
+            "feature_set": model_artifact["feature_set"],
+            "clasificador": model_artifact["clasificador"],
+            "f1_macro_cv": model_artifact["f1_macro_cv"],
+            "prediccion": str(prediction),
+            "probabilidades": {
+                str(label): float(probability)
+                for label, probability in probabilities.items()
+            },
+            "ventanas": windows,
+        }
+        return prediction, details
+    
+    def set_min_group_confidence(self, threshold: float):
+        """
+        Configura el umbral mínimo de confianza para aceptar la predicción de grupo (Etapa 1).
+        Si la confianza del grupo predicho es menor que 'threshold', se retorna 'RECHAZO'.
+
+        Args:
+            threshold: float en [0.0, 1.0]. 
+                       0.0 = nunca rechazar (comportamiento por defecto).
+                       0.5 = rechazar si el modelo no supera el 50% de confianza en el grupo.
+        """
+        if not 0.0 <= threshold <= 1.0:
+            raise ValueError(f"El umbral debe estar en [0.0, 1.0], recibido: {threshold}")
+        self.min_group_confidence = threshold
+        print(f"[Umbral de confianza] min_group_confidence = {threshold:.3f}")
+
+    def set_min_group_confidence(self, threshold: float):
+        """
+        Configura el umbral mínimo de confianza para aceptar la predicción de grupo (Etapa 1).
+        Si la confianza del grupo predicho es menor que 'threshold', se retorna 'RECHAZO'.
+
+        Args:
+            threshold: float en [0.0, 1.0]. 
+                       0.0 = nunca rechazar (comportamiento por defecto).
+                       0.5 = rechazar si el modelo no supera el 50% de confianza en el grupo.
+        """
+        if not 0.0 <= threshold <= 1.0:
+            raise ValueError(f"El umbral debe estar en [0.0, 1.0], recibido: {threshold}")
+        self.min_group_confidence = threshold
+        print(f"[Umbral de confianza] min_group_confidence = {threshold:.3f}")
+
+
+def main():
+    if len(sys.argv) < 3:
+        print("Uso: python hierarchical_infer.py <usuario> ruta/a/grabacion.csv [umbral_confianza]")
+        print("Uso: python hierarchical_infer.py <usuario> ruta/a/grabacion.csv [umbral_confianza]")
+        sys.exit(1)
+
+    usuario = sys.argv[1]
+    csv_path = sys.argv[2]
+    umbral = float(sys.argv[3]) if len(sys.argv) > 3 else 0.0
+
+    umbral = float(sys.argv[3]) if len(sys.argv) > 3 else 0.0
+
+    predictor = HierarchicalBCIPredictor(usuario=usuario)
+    if umbral > 0.0:
+        predictor.set_min_group_confidence(umbral)
+
+    if umbral > 0.0:
+        predictor.set_min_group_confidence(umbral)
+
+    comando, detalle = predictor.predict_from_csv(csv_path)
+
+    print(f"\n>>> Color predicho  : {detalle['color_predicho']}")
+    print(f">>> Grupo predicho  : {detalle['grupo_predicho']}")
+    print(f">>> Rechazado       : {detalle.get('rechazado', False)}")
+    if detalle.get('rechazado'):
+        print(f">>> Razón           : {detalle.get('razon_rechazo', '')}")
+    else:
+        print(f">>> Comando final   : {comando}")
+    print(f">>> Super feat. set : {detalle.get('super_feature_set', 'N/A')}")
+    print(f">>> Grupo feat. set : {detalle.get('grupo_feature_set', 'N/A')}")
+    print("\nProbabilidades de color:")
+    for color, p in detalle["color_probabilidades"].items():
+        print(f"  {color}: {p:.3f}")
+    print("\nTop 3 probabilidades de grupo:")
+    for g, p in list(detalle["grupo_probabilidades"].items())[:3]:
+        print(f"  {g}: {p:.3f}")
+    if not detalle.get('rechazado'):
+        print("\nTop 5 probabilidades de comando (dentro del grupo elegido):")
+        for cmd, p in list(detalle["comando_probabilidades"].items())[:5]:
+            print(f"  {cmd}: {p:.3f}")
+    if not detalle.get('rechazado'):
+        print("\nTop 5 probabilidades de comando (dentro del grupo elegido):")
+        for cmd, p in list(detalle["comando_probabilidades"].items())[:5]:
+            print(f"  {cmd}: {p:.3f}")

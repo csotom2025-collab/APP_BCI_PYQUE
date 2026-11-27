@@ -240,8 +240,44 @@ class SpellerConfigurationWindow(QWidget):
                 QMessageBox.warning(self, "No se pudo predecir", str(exc))
                 return
             print("Caracter predicho:", caracter_predicho)
-            if self.keyboard_window:
-                self.keyboard_window.add_character(caracter_predicho)
+            details = self.predict_controller.last_prediction_details
+            if "categoria" in details:
+                probabilities = details.get("probabilidades", {})
+                probability_text = "\n".join(
+                    f"{label}: {probability:.1%}"
+                    for label, probability in probabilities.items()
+                )
+                QMessageBox.information(
+                    self,
+                    "Resultado de prueba del modelo",
+                    (
+                        f"Modelo: {details['categoria']} #{details['rank']}\n"
+                        f"Etapa: {details['nivel']} | Grupo: {details['grupo']}\n"
+                        f"Clasificador: {details['clasificador']}\n"
+                        f"F1 macro CV: {details['f1_macro_cv']:.3f}\n"
+                        f"Predicción: {caracter_predicho}\n\n"
+                        f"Probabilidades:\n{probability_text}"
+                    ),
+                )
+                return
+            if "color_predicho" in details:
+                selected_model = self.predict_controller.model
+                cascade_rank = (
+                    selected_model.get("modelo_top_rank")
+                    if isinstance(selected_model, dict) else None
+                )
+                QMessageBox.information(
+                    self,
+                    "Resultado de prueba de la cascada",
+                    (
+                        f"Modelo: cascada completa top {cascade_rank or '?'}\n"
+                        f"Color: {details['color_predicho']}\n"
+                        f"Supergrupo: {details['grupo_predicho']}\n"
+                        f"Comando: {caracter_predicho}"
+                    ),
+                )
+        if self.keyboard_window:
+            self.keyboard_window.add_character(caracter_predicho)
     def start_chess_flashes(self):
         self.keyboard_window.start_paradigm(
             times=1, category=self.stimulus_category.currentData()

@@ -1,0 +1,21 @@
+usuario,clase,grabaciones_validas,minimo,faltantes,accion
+UserHoracio,A,20,30,10,REGRABAR 10
+UserHoracio,B,17,30,13,REGRABAR 13
+UserHoracio,C,21,30,9,REGRABAR 9
+UserHoracio,D,14,30,16,REGRABAR 16
+UserHoracio,E,23,30,7,REGRABAR 7
+UserHoracio,G,23,30,7,REGRABAR 7
+UserHoracio,H,24,30,6,REGRABAR 6
+UserHoracio,I,22,30,8,REGRABAR 8
+UserHoracio,L,9,30,21,REGRABAR 21
+UserHoracio,M,20,30,10,REGRABAR 10
+UserHoracio,N,15,30,15,REGRABAR 15
+UserHoracio,O,20,30,10,REGRABAR 10
+UserHoracio,P,12,30,18,REGRABAR 18
+UserHoracio,Q,19,30,11,REGRABAR 11
+UserHoracio,R,19,30,11,REGRABAR 11
+UserHoracio,S,12,30,18,REGRABAR 18
+UserHoracio,T,20,30,10,REGRABAR 10
+UserHoracio,U,16,30,14,REGRABAR 14
+UserHoracio,V,24,30,6,REGRABAR 6
+UserHoracio,Y,21,30,9,REGRABAR 9

@@ -1,1 +1,3 @@
 usuario,clase,trial,archivo,clasificacion,estado,detalle
+UserCMSM,UNKNOWN,0,UserCMSM/recordings/UserCMSM_UNKNOWN_0.csv,C,CLASE_UNKNOWN_IGNORADA,UNKNOWN es una etiqueta inválida/sentinel en el reporte; no se trata como clase esperada.
+UserCMSM,UNKNOWN,1,UserCMSM/recordings/UserCMSM_UNKNOWN_1.csv,C,CLASE_UNKNOWN_IGNORADA,UNKNOWN es una etiqueta inválida/sentinel en el reporte; no se trata como clase esperada.

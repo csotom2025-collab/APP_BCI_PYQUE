@@ -1,25 +1,26 @@
 {
   "version": "2.3.0",
-  "fecha_utc": "2026-11-27T02:43:17.234183+00:00",
+  "fecha_utc": "2026-11-27T16:54:15.487112+00:00",
   "captures": "C:\\Users\\usuario\\Desktop\\APP_BCI_PYQUE\\captures",
   "salida": "C:\\Users\\usuario\\Desktop\\APP_BCI_PYQUE\\utils\\chequeo_calidad\\UserCMSM",
   "usuario": "UserCMSM",
-  "archivos": 1228,
-  "A": 1113,
+  "archivos": 2323,
+  "A": 2201,
   "B": 8,
-  "C": 107,
+  "C": 114,
   "codigos_C": {
     "ANOMALIA_EXTENSA": 48,
     "REFERENCIA_INESTABLE": 37,
     "REFERENCIA_CONTAMINADA": 28,
-    "ESTRUCTURA": 6,
+    "ESTRUCTURA": 11,
     "CANAL_INVALIDO": 1,
     "NO_UTILIZABLES_EXCESO": 1,
-    "DUPLICADO": 1
+    "DUPLICADO": 1,
+    "ETIQUETA": 2
   },
   "segmentos_corregidos": 11,
   "muestras_modificadas": 822,
   "archivos_con_amplificacion": 0,
-  "archivos_con_canales_no_utilizables": 337,
-  "rescatados_A_B_con_canales_no_utilizables": 309
+  "archivos_con_canales_no_utilizables": 490,
+  "rescatados_A_B_con_canales_no_utilizables": 462
 }

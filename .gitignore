@@ -12,8 +12,6 @@ venv/
 # Datos, logs y resultados pesados
 datosLectura.csv
 features_dataset.csv
-*.edf
-*.csv
 RealTimeLOG.log
 /results/
 /onlineCaptures/

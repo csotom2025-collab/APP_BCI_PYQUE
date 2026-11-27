@@ -1,0 +1,2 @@
+usuario,n_trials,mejor_nivel,mejor_grupo,mejor_feature_set,mejor_clasificador,accuracy_mean,f1_macro_mean
+UserCMSM,1228,super_clase,Letters/Numbers/Controls,Frecuencias_Todas,SVM_RBF,0.857511199601792,0.764256629834347

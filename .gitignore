@@ -22,7 +22,6 @@ resultsALL/
 trainingOutputs/
 
 # Modelos pesados (descomentado y con asterisco)
-/models/
 *.joblib
 *.pkl
 *.h5
